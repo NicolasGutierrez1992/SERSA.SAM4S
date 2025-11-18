@@ -1,0 +1,2 @@
+# Favicon placeholder - Necesita ser un archivo .ico real
+# Por ahora, cualquier archivo .ico pequeño funcionará
