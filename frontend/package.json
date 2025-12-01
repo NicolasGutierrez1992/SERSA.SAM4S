@@ -14,7 +14,11 @@
     "next": "13.4.19",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "autoprefixer": "10.4.15",
+    "postcss": "8.4.29",
+    "tailwindcss": "3.3.3",
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@types/js-cookie": "^3.0.6",
@@ -23,12 +27,8 @@
     "@types/react-dom": "18.2.7",
     "@typescript-eslint/eslint-plugin": "^8.47.0",
     "@typescript-eslint/parser": "^8.47.0",
-    "autoprefixer": "10.4.15",
     "eslint": "^8.57.1",
     "eslint-config-next": "13.4.19",
-    "postcss": "8.4.29",
-    "tailwindcss": "3.3.3",
-    "tailwindcss-animate": "^1.0.7",
     "typescript": "5.2.2"
   }
 }
