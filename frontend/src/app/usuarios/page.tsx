@@ -315,7 +315,7 @@ export default function UsuariosPage() {
               <Search
                 placeholder="Buscar por nombre, email o CUIT"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)}
                 style={{ maxWidth: 300 }}
               />
             </div>
@@ -361,44 +361,49 @@ export default function UsuariosPage() {
                       <Input type="tel" disabled={isMayorista} />
                     </Form.Item>
                     <Form.Item name="rol" label="Rol" rules={[{ required: true }]}>
-                      <Select disabled={isMayorista}>
-                        {isMayorista ? (
-                          <Select.Option value={3}>Distribuidor</Select.Option>
-                        ) : (
-                          <>
-                            <Select.Option value={1}>Admin</Select.Option>
-                            <Select.Option value={2}>Mayorista</Select.Option>
-                            <Select.Option value={3}>Distribuidor</Select.Option>
-                            <Select.Option value={4}>Facturación</Select.Option>
-                          </>
-                        )}
-                      </Select>
+                      <Select 
+                        disabled={isMayorista}
+                        options={isMayorista 
+                          ? [{ value: 3, label: 'Distribuidor' }]
+                          : [
+                              { value: 1, label: 'Admin' },
+                              { value: 2, label: 'Mayorista' },
+                              { value: 3, label: 'Distribuidor' },
+                              { value: 4, label: 'Facturación' }
+                            ]
+                        }
+                      />
                     </Form.Item>
                     <Form.Item name="status" label="Estado" rules={[{ required: true }]}>
-                      <Select disabled={isMayorista}>
-                        <Select.Option value={1}>Activo</Select.Option>
-                        <Select.Option value={2}>Suspendido</Select.Option>
-                        <Select.Option value={3}>Inactivo</Select.Option>
-                      </Select>
+                      <Select 
+                        disabled={isMayorista}
+                        options={[
+                          { value: 1, label: 'Activo' },
+                          { value: 2, label: 'Suspendido' },
+                          { value: 3, label: 'Inactivo' }
+                        ]}
+                      />
                     </Form.Item>
                     <Form.Item name="limiteDescargas" label="Límite de Descargas" rules={[{ required: true }]}> 
                       <Input type="number" min={1} />
                     </Form.Item>
                     
                     <Form.Item name="id_mayorista" label="Mayorista">
-                      <Select disabled={isMayorista} allowClear placeholder="Seleccionar mayorista">
-                        {isMayorista ? (
-                          <Select.Option value={currentUser.id_mayorista}> {currentUser.nombre_mayorista} </Select.Option>
-                        ) : (
-                          <>
-                            <Select.Option value={1}>SERSA</Select.Option>
-                            <Select.Option value={2}>OLICART</Select.Option>
-                            <Select.Option value={3}>MARINUCCI</Select.Option>
-                            <Select.Option value={4}>COLOMA</Select.Option>
-                            <Select.Option value={5}>SANTICH</Select.Option>
-                          </>
-                        )}
-                      </Select>
+                      <Select 
+                        disabled={isMayorista} 
+                        allowClear 
+                        placeholder="Seleccionar mayorista"
+                        options={isMayorista 
+                          ? [{ value: currentUser.id_mayorista, label: currentUser.nombre_mayorista }]
+                          : [
+                              { value: 1, label: 'SERSA' },
+                              { value: 2, label: 'OLICART' },
+                              { value: 3, label: 'MARINUCCI' },
+                              { value: 4, label: 'COLOMA' },
+                              { value: 5, label: 'SANTICH' }
+                            ]
+                        }
+                      />
                     </Form.Item>
                     
                     {/* Solo mostrar password al crear */}
