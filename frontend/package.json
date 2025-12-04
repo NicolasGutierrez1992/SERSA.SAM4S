@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "next lint",
+    "export": "next export"
   },
   "engines": {
     "node": "20.x"
@@ -15,9 +17,9 @@
     "@types/node": "20.5.7",
     "@types/react": "18.2.21",
     "@types/react-dom": "18.2.7",
-    "antd": "^5.28.0",
+    "@typescript-eslint/eslint-plugin": "^8.47.0",
+    "@typescript-eslint/parser": "^8.47.0",
     "autoprefixer": "10.4.15",
-    "axios": "^1.6.2",
     "eslint": "^8.57.1",
     "eslint-config-next": "13.4.19",
     "js-cookie": "^3.0.5",

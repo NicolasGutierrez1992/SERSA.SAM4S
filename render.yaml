@@ -1,0 +1,18 @@
+# Render Frontend Deploy Configuration
+
+services:
+  # Frontend Service
+  - type: web
+    name: sersa-frontend
+    env: node
+    buildCommand: cd frontend && npm ci && npm run build
+    startCommand: cd frontend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: https://sersa-sam4s.onrender.com
+    rootDir: .
+    plan: free
+    region: oregon
+    branch: main
