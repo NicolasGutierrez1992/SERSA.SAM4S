@@ -11,7 +11,8 @@
   },
   "engines": {
     "node": "20.x"
-  },  "dependencies": {
+  },
+  "dependencies": {
     "@ant-design/icons": "^5.2.6",
     "@types/js-cookie": "^3.0.6",
     "@types/node": "20.5.7",
@@ -19,6 +20,7 @@
     "@types/react-dom": "18.2.7",
     "antd": "^5.11.2",
     "autoprefixer": "10.4.15",
+    "axios": "^1.13.2",
     "eslint-config-next": "13.4.19",
     "js-cookie": "^3.0.5",
     "next": "13.4.19",
