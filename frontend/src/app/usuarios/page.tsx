@@ -283,8 +283,7 @@ export default function UsuariosPage() {
                 <p className="text-sm text-gray-600">Gestión y descarga de certificados</p>
               </div>
             </div>
-            
-            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-4">
               <div className="text-right">
                 {mounted && (
                   <>
@@ -298,12 +297,14 @@ export default function UsuariosPage() {
                 )}
                 
               </div>
-              <Button
+              {!isMayorista && (
+                <Button
                   className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                   onClick={openAddUser}
                 >
                   Agregar Usuario
                 </Button>
+              )}
             </div>
           </div>
         </div>
@@ -327,7 +328,7 @@ export default function UsuariosPage() {
                   columns={columns}
                   dataSource={filtered}
                   rowKey="id_usuario"
-                  pagination={{ pageSize: 10 }}
+                  pagination={{ pageSize: 50 }}
                   className="mb-8"
                   scroll={{ x: 'max-content' }}
                 />
