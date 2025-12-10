@@ -5,16 +5,25 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  // Configurar CORS
+
+  // Configurar CORS - Usar variable de entorno o defaults
+  const corsOrigins = process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map(url => url.trim())
+    : [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'https://sersa-certs-frontend.vercel.app',
+        process.env.FRONTEND_URL || 'http://localhost:3000'
+      ];
+
+  console.log('🔐 CORS origins configured:', corsOrigins);
+
   app.enableCors({
-    origin: [
-      'http://localhost:3000',
-      'http://127.0.0.1:3000',
-      process.env.FRONTEND_URL || 'http://localhost:3000'
-    ],
+    origin: corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     credentials: true,
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    optionsSuccessStatus: 200,
   });
 
   // Configurar prefijo global para todas las rutas
