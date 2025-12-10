@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as soap from 'soap';
 import * as forge from 'node-forge';
 import { LoggerService } from '../common/logger.service';
+import { CertificadoMaestroService } from '../certificados/certificado-maestro.service';
 
 export interface CertificadoRequest {
   //controladorId: string;
@@ -35,18 +36,23 @@ export class AfipService {
   private readonly certPath: string;
   private readonly keyPassword: string;
   private readonly rootPath: string;
-
   // Cache para tokens
   private tokenCache: { token?: string; sign?: string; expirationTime?: Date } = {};
+  // Flag para saber si se intenta leer desde archivo o BD
+  private readonly usarBdParaCertificado: boolean;
+
   constructor(
     private configService: ConfigService,
-    private loggerService: LoggerService
+    private loggerService: LoggerService,
+    private certificadoMaestroService: CertificadoMaestroService,
   ) {
     // Configuraciones desde .env
     this.wsaaUrl = this.configService.get('AFIP_WSAA_URL');
     this.wscertUrl = this.configService.get('AFIP_WSCERT_WSDL');
     this.cuit = this.configService.get('AFIP_CUIT');
     this.fabricante = this.configService.get('AFIP_FABRICANTE');
+    this.usarBdParaCertificado = this.configService.get('USAR_BD_PARA_CERTIFICADO', true) === 'true' ||
+                                  this.configService.get('USAR_BD_PARA_CERTIFICADO', true) === true;
     
     // Resolver rutas relativas correctamente
     const certPathRaw = this.configService.get('AFIP_CERT_PATH');
@@ -56,9 +62,10 @@ export class AfipService {
     // o desde src (en desarrollo)
     this.certPath = this.resolvePath(certPathRaw);
     this.rootPath = this.resolvePath(rootPathRaw);
-      this.keyPassword = this.configService.get('AFIP_KEY_PASSWORD');
-    
-    this.loggerService.info('AFIP', 'AFIP Service initialized - PRODUCTION MODE');
+      this.keyPassword = this.configService.get('AFIP_KEY_PASSWORD');    
+    this.loggerService.info('AFIP', 'AFIP Service initialized - PRODUCTION MODE', {
+      usarBdParaCertificado: this.usarBdParaCertificado,
+    });
     this.loggerService.info('AFIP', 'Rutas resueltas', { 
       certPathRaw: certPathRaw,
       certPath: this.certPath, 
@@ -220,16 +227,14 @@ export class AfipService {
       throw new BadRequestException(`Error AFIP: ${error.message}`);
     }
   }
-
   /**
    * Login WSAA - Obtener token y sign de AFIP
    */
   private async loginWsaa(): Promise<{ token: string; sign: string; expirationTime: Date }> {
     this.loggerService.debug('AFIP-loginWsaa', 'Inicio loginWsaa()', {
-      certPath: this.certPath,
-      keyPassword: this.keyPassword,
-      wsaaUrl: this.wsaaUrl
+      usarBdParaCertificado: this.usarBdParaCertificado,
     });
+    
     // Verificar cache de token
     this.loggerService.debug('AFIP-loginWsaa', 'Verificando cache de token', this.tokenCache);
     if (this.tokenCache.token && this.tokenCache.expirationTime &&
@@ -244,24 +249,42 @@ export class AfipService {
         sign: this.tokenCache.sign,
         expirationTime: this.tokenCache.expirationTime
       };
-    }    try {
-      this.loggerService.debug('AFIP-loginWsaa', 'Leyendo archivo PFX', { 
-        certPath: this.certPath,
-        exists: fs.existsSync(this.certPath),
-        cwd: process.cwd()
-      });
-      if (!fs.existsSync(this.certPath)) {
-        this.loggerService.error('AFIP-loginWsaa', 'Certificado PFX no encontrado', { 
+    }
+    
+    try {
+      let pfxBuffer: Buffer;
+      let keyPassword: string;      // Obtener certificado de BD o archivo
+      if (this.usarBdParaCertificado) {
+        this.loggerService.debug('AFIP-loginWsaa', 'Leyendo certificado desde BD');
+        try {
+          const certData = await this.certificadoMaestroService.obtenerCertificadoMaestro();
+          pfxBuffer = certData.pfx;
+          keyPassword = certData.password;
+          this.loggerService.debug('AFIP-loginWsaa', 'Certificado obtenido de BD correctamente');
+        } catch (error) {
+          this.loggerService.error('AFIP-loginWsaa', 'Error obteniendo certificado de BD, intentando desde archivo', error);
+          // Fallback a archivo si falla BD
+          pfxBuffer = fs.readFileSync(this.certPath);
+          keyPassword = this.keyPassword;
+        }
+      } else {
+        this.loggerService.debug('AFIP-loginWsaa', 'Leyendo certificado desde archivo', { 
           certPath: this.certPath,
-          exists: false,
-          cwd: process.cwd()
+          exists: fs.existsSync(this.certPath),
         });
-        throw new Error(`Certificado PFX no encontrado: ${this.certPath}`);
+        if (!fs.existsSync(this.certPath)) {
+          this.loggerService.error('AFIP-loginWsaa', 'Certificado PFX no encontrado', { 
+            certPath: this.certPath,
+          });
+          throw new Error(`Certificado PFX no encontrado: ${this.certPath}`);
+        }
+        pfxBuffer = fs.readFileSync(this.certPath);
+        keyPassword = this.keyPassword;
       }
-      const pfxBuffer = fs.readFileSync(this.certPath);
+
       this.loggerService.debug('AFIP-loginWsaa', 'Archivo PFX leído correctamente', { size: pfxBuffer.length });
       const p12Asn1 = forge.asn1.fromDer(pfxBuffer.toString('binary'));
-      const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, this.keyPassword);
+      const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, keyPassword);
       this.loggerService.debug('AFIP-loginWsaa', 'PFX parseado correctamente');
 
       // Extraer certificado y clave privada
@@ -413,8 +436,7 @@ ${certificadoData.certificado || ''}`;
    */
   private calcularChecksum(contenido: string): string {
     return 'sha256:' + crypto.createHash('sha256').update(contenido).digest('hex');
-  }
-  /**
+  }  /**
    * Validar configuración AFIP
    */
   validateConfiguration(): { valid: boolean; errors: string[] } {
@@ -424,23 +446,27 @@ ${certificadoData.certificado || ''}`;
     if (!this.fabricante) errors.push('AFIP_FABRICANTE no configurado');
     if (!this.wsaaUrl) errors.push('AFIP_WSAA_URL no configurado');
     if (!this.wscertUrl) errors.push('AFIP_WSCERT_WSDL no configurado');
-    if (!this.certPath) errors.push('AFIP_CERT_PATH no configurado');
-    if (!this.keyPassword) errors.push('AFIP_KEY_PASSWORD no configurado');
-    if (!this.rootPath) errors.push('AFIP_ROOT_PATH no configurado');
 
-    // Verificar existencia de archivos
-    if (this.certPath && !fs.existsSync(this.certPath)) {
-      errors.push(`Certificado PFX no encontrado: ${this.certPath}`);
+    // Validar certificado: puede ser desde BD o desde archivo
+    if (!this.usarBdParaCertificado) {
+      if (!this.certPath) errors.push('AFIP_CERT_PATH no configurado');
+      if (!this.keyPassword) errors.push('AFIP_KEY_PASSWORD no configurado');
+      
+      // Verificar existencia de archivos
+      if (this.certPath && !fs.existsSync(this.certPath)) {
+        errors.push(`Certificado PFX no encontrado: ${this.certPath}`);
+      }
     }
+
+    if (!this.rootPath) errors.push('AFIP_ROOT_PATH no configurado');
     if (this.rootPath && !fs.existsSync(this.rootPath)) {
       errors.push(`Certificado Root RTI no encontrado: ${this.rootPath}`);
     }
 
-    this.logger.log(`Configuración AFIP validada - ${errors.length === 0 ? 'OK' : 'Errores encontrados'}`);
-    
-    if (errors.length > 0) {
-      this.logger.warn(`Errores de configuración AFIP: ${errors.join(', ')}`);
-    }
+    this.loggerService.info('AFIP', `Configuración AFIP validada - ${errors.length === 0 ? 'OK' : 'Errores encontrados'}`, {
+      usarBdParaCertificado: this.usarBdParaCertificado,
+      errores: errors
+    });
 
     return {
       valid: errors.length === 0,

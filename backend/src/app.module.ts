@@ -14,6 +14,7 @@ import { UsersModule } from './users/users.module';
 import { CertificadosModule } from './certificados/certificados.module';
 import { AuditoriaModule } from './auditoria/auditoria.module';
 import { AfipModule } from './afip/afip.module';
+import { AppInitializerService } from './common/app-initializer.service';
 
 @Module({
   imports: [
@@ -72,8 +73,7 @@ import { AfipModule } from './afip/afip.module';
         },
       ],
       inject: [ConfigService],
-    }),
-      // Módulos funcionales
+    }),      // Módulos funcionales
     AuthModule,
     UsersModule,
     CertificadosModule,
@@ -81,6 +81,6 @@ import { AfipModule } from './afip/afip.module';
     AfipModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, AppInitializerService],
 })
 export class AppModule {}
