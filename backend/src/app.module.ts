@@ -20,10 +20,10 @@ import { AfipModule } from './afip/afip.module';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
-    }),
-    // Módulo de autenticación global PRIMERO
+    }),    // Módulo de autenticación global PRIMERO
     SharedAuthModule,
-      // Configuración de TypeORM con PostgreSQL    TypeOrmModule.forRootAsync({
+    // Configuración de TypeORM con PostgreSQL
+    TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
