@@ -1,2 +1,25 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# ===== CERTIFICADOS Y ARCHIVOS BINARIOS =====
+# Tratar estos archivos como binarios para evitar corrupción
+*.pfx binary
+*.p12 binary
+*.key binary
+*.pem binary
+*.crt binary
+*.der binary
+
+# Imágenes
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+
+# Documentos
+*.pdf binary
+*.zip binary
+*.tar binary
+*.gz binary
