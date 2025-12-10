@@ -86,3 +86,4 @@ config/secrets.json
 logs/auditoria/
 logs/downloads/
 TECHNICAL-DOCUMENTATION.md
+backend/certs/_certificado.pfxf
