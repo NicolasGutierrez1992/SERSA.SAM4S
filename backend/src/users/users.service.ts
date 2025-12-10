@@ -153,11 +153,16 @@ export class UsersService {
     console.log('[UsersService][findOne] Salida:', user);
     return user;
   }
-
   async findByCuit(cuit: string): Promise<User | null> {
     console.log('[UsersService][findByCuit] Entrada:', cuit);
+    console.log('[UsersService][findByCuit] Tipo:', typeof cuit, 'Longitud:', cuit.length);
+    
+    // Buscar con trim y conversión a string
+    const trimmedCuit = String(cuit).trim();
+    console.log('[UsersService][findByCuit] CUIT trimmed:', trimmedCuit);
+    
     const user = await this.userRepository.findOne({
-      where: { cuit },
+      where: { cuit: trimmedCuit },
       select: {
         id_usuario: true,
         cuit: true,
@@ -174,6 +179,17 @@ export class UsersService {
         password: true,
       },
     });
+    
+    if (!user) {
+      console.log('[UsersService][findByCuit] Usuario NO encontrado. Buscando en BD...');
+      // Debug: obtener todos los CUITs para ver qué hay
+      const allUsers = await this.userRepository.find({
+        select: ['id_usuario', 'cuit', 'nombre'],
+      });
+      console.log('[UsersService][findByCuit] Todos los usuarios:', allUsers);
+      console.log('[UsersService][findByCuit] CUITs en BD:', allUsers.map(u => `"${u.cuit}"`));
+    }
+    
     console.log('[UsersService][findByCuit] Salida:', user);
     return user;
   }
