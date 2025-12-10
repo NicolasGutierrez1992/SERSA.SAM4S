@@ -23,8 +23,7 @@ import { AfipModule } from './afip/afip.module';
     }),
     // Módulo de autenticación global PRIMERO
     SharedAuthModule,
-      // Configuración de TypeORM con PostgreSQL
-    TypeOrmModule.forRootAsync({
+      // Configuración de TypeORM con PostgreSQL    TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
@@ -34,7 +33,7 @@ import { AfipModule } from './afip/afip.module';
         password: configService.get('DB_PASSWORD'),
         database: configService.get('DB_NAME'),
         entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: false, // Deshabilitado para evitar conflictos con BD existente
+        synchronize: true, // Habilitado para crear tablas automáticamente
         migrationsRun: false, // No ejecutar migraciones automáticamente
         dropSchema: false, // Nunca eliminar el esquema
         ssl: configService.get('DB_SSL') === 'true' ? { rejectUnauthorized: false } : false,
