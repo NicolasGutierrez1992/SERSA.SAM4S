@@ -38,7 +38,6 @@ export class AfipService {
 
   // Cache para tokens
   private tokenCache: { token?: string; sign?: string; expirationTime?: Date } = {};
-
   constructor(
     private configService: ConfigService,
     private loggerService: LoggerService
@@ -48,12 +47,46 @@ export class AfipService {
     this.wscertUrl = this.configService.get('AFIP_WSCERT_WSDL');
     this.cuit = this.configService.get('AFIP_CUIT');
     this.fabricante = this.configService.get('AFIP_FABRICANTE');
-    this.certPath = this.configService.get('AFIP_CERT_PATH');
+    
+    // Resolver rutas relativas correctamente
+    const certPathRaw = this.configService.get('AFIP_CERT_PATH');
+    const rootPathRaw = this.configService.get('AFIP_ROOT_PATH');
+    
+    // Si la ruta es relativa, resolverla desde el directorio dist (en producción)
+    // o desde src (en desarrollo)
+    this.certPath = this.resolvePath(certPathRaw);
+    this.rootPath = this.resolvePath(rootPathRaw);
+    
     this.keyPassword = this.configService.get('AFIP_KEY_PASSWORD');
-    this.rootPath = this.configService.get('AFIP_ROOT_PATH');
     
     this.loggerService.info('AFIP', 'AFIP Service initialized - PRODUCTION MODE');
+    this.loggerService.info('AFIP', 'Rutas resueltas', { 
+      certPath: this.certPath, 
+      rootPath: this.rootPath,
+      certExists: fs.existsSync(this.certPath),
+      rootExists: fs.existsSync(this.rootPath)
+    });
     this.validateConfiguration();
+  }
+
+  /**
+   * Resuelve rutas relativas correctamente en producción y desarrollo
+   */
+  private resolvePath(filePath: string): string {
+    if (!filePath) return '';
+    
+    // Si es ruta absoluta, devolverla tal cual
+    if (path.isAbsolute(filePath)) {
+      return filePath;
+    }
+    
+    // Si es ruta relativa, resolverla desde:
+    // - En producción (con dist): /app/dist/../../certs/file
+    // - En desarrollo (con src): src/../../certs/file
+    const baseDir = process.cwd();
+    const resolvedPath = path.resolve(baseDir, filePath);
+    
+    return resolvedPath;
   }
   /**
    * Generar certificado CRS - Versión PRODUCCIÓN
@@ -97,13 +130,18 @@ export class AfipService {
       this.loggerService.info('AFIP-generarCertificado', 'Resultado de renovarCertificadoResponse', result);
       logs.push({ timestamp: new Date().toISOString(), step: 'wscert_result', message: 'Resultado de renovarCertificadoResponse', result });
 
-      let buffer = '';
-      if (result && result.return) {
+      let buffer = '';      if (result && result.return) {
         const rta = result.return;
         this.loggerService.info('AFIP-generarCertificado', 'Procesando respuesta del WS', rta);
         logs.push({ timestamp: new Date().toISOString(), step: 'wscert_response', message: 'Procesando respuesta del WS', rta });
         // Leer root RTI
-        const rootFileRTI = this.rootPath && fs.existsSync(this.rootPath) ? fs.readFileSync(this.rootPath, 'utf8').replace(/\r?\n/g, '') : '';
+        const rootExists = this.rootPath && fs.existsSync(this.rootPath);
+        this.loggerService.debug('AFIP-generarCertificado', 'Verificando Root RTI', { 
+          rootPath: this.rootPath, 
+          exists: rootExists,
+          cwd: process.cwd()
+        });
+        const rootFileRTI = rootExists ? fs.readFileSync(this.rootPath, 'utf8').replace(/\r?\n/g, '') : '';
         buffer = '-----BEGIN CMS-----\n';
         if (rootFileRTI) {
           let cadena = rootFileRTI;
@@ -183,12 +221,18 @@ export class AfipService {
         sign: this.tokenCache.sign,
         expirationTime: this.tokenCache.expirationTime
       };
-    }
-
-    try {
-      this.loggerService.debug('AFIP-loginWsaa', 'Leyendo archivo PFX', { certPath: this.certPath });
+    }    try {
+      this.loggerService.debug('AFIP-loginWsaa', 'Leyendo archivo PFX', { 
+        certPath: this.certPath,
+        exists: fs.existsSync(this.certPath),
+        cwd: process.cwd()
+      });
       if (!fs.existsSync(this.certPath)) {
-        this.loggerService.error('AFIP-loginWsaa', 'Certificado PFX no encontrado', { certPath: this.certPath });
+        this.loggerService.error('AFIP-loginWsaa', 'Certificado PFX no encontrado', { 
+          certPath: this.certPath,
+          exists: false,
+          cwd: process.cwd()
+        });
         throw new Error(`Certificado PFX no encontrado: ${this.certPath}`);
       }
       const pfxBuffer = fs.readFileSync(this.certPath);
