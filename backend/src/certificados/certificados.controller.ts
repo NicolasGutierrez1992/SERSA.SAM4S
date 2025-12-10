@@ -32,10 +32,10 @@ import { RequireAdmin, RequireAuthenticated } from '../auth/decorators/roles.dec
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { 
   CreateDescargaDto, 
-  QueryDescargasDto, 
   UpdateEstadoDescargaDto,
   DownloadResponseDto 
 } from '../descargas/dto/descarga.dto';
+import { QueryDescargasDto } from '../descargas/dto/query-descargas.dto';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/dto/user.dto';
 import { EstadoDescarga, IDescarga } from '../shared/types';
@@ -80,17 +80,21 @@ export class CertificadosController {
       userId,
       createDescargaDto,
       ip
-    );
-  }
+    );  }
 
   /**
+   * Descargar archivo PEM del certificado
+   */
+  @Get('descargar/:downloadId/archivo')
+  @ApiOperation({ 
+    summary: 'Descargar archivo PEM',
     description: 'Descarga el archivo .pem del certificado generado'
   })
   @ApiParam({ name: 'downloadId', description: 'ID de la descarga' })  
   @ApiResponse({ status: 200, description: 'Archivo PEM', content: { 'application/x-pem-file': {} } })
   @RequireAuthenticated()
   async descargarArchivoPem(
-    @Param('downloadId') downloadId: number,
+    @Param('downloadId') downloadId: string,
     @CurrentUser() user: User,
     @CurrentUser('id') userId: number,
     @Res() res: Response
@@ -135,8 +139,7 @@ export class CertificadosController {
         totalPages: { type: 'number' }
       }
     }  
-  })
-  @RequireAuthenticated()
+  })  @RequireAuthenticated()
   async getDescargas(
     @Query() queryDto: QueryDescargasDto,
     @CurrentUser('id') userId: number,
@@ -145,17 +148,24 @@ export class CertificadosController {
     total: number;
     totalPages: number;
   }> {    // Convertir queryDto para usar con DescargasService
+    const page = queryDto.page || 1;
+    const limit = queryDto.limit || 50;
+    
     const params = {
       ...queryDto,
+      page,
+      limit,
       usuarioId: user.id_rol === 3 ? userId : undefined // Solo distribuidores filtran por su ID
     };
     
+    console.log('GET /certificados/descargas - params:', params);
     const result = await this.descargasService.getDescargas(params);
+    console.log('GET /certificados/descargas - result:', result);
     
     return {
       descargas: result.descargas || [],
       total: result.total || 0,
-      totalPages: Math.ceil((result.total || 0) / (queryDto.limit || 20))
+      totalPages: Math.ceil((result.total || 0) / limit)
     };
   }
 
@@ -165,8 +175,7 @@ export class CertificadosController {
   @Get('descargas/usuario/:usuarioId')
   @ApiOperation({ summary: 'Descargas de un usuario', description: 'Lista todas las descargas de un usuario específico' })
   @ApiParam({ name: 'usuarioId', description: 'ID del usuario' })
-  @ApiResponse({ status: 200, description: 'Lista de descargas del usuario' })
-  @RequireAuthenticated()
+  @ApiResponse({ status: 200, description: 'Lista de descargas del usuario' })  @RequireAuthenticated()
   async getDescargasPorUsuario(
     @Param('usuarioId') usuarioId: number,
     @CurrentUser() user: User,
@@ -179,7 +188,11 @@ export class CertificadosController {
     if (user.id_rol === 3 && user.id_usuario !== usuarioId) {
       throw new ForbiddenException('No tiene permiso para ver descargas de otros usuarios');
     }
+    
+    console.log(`GET /certificados/descargas/usuario/${usuarioId} - params:`, { usuarioId, page: pageNum, limit: limitNum });
     const result = await this.descargasService.getDescargas({ usuarioId, page: pageNum, limit: limitNum });
+    console.log(`GET /certificados/descargas/usuario/${usuarioId} - result:`, result);
+    
     return {
       descargas: result.descargas || [],
       total: result.total || 0,
@@ -258,16 +271,15 @@ export class CertificadosController {
   @ApiResponse({ 
     status: 200, 
     description: 'Lista de certificados disponibles'  
-  })
-  @RequireAuthenticated()
+  })  @RequireAuthenticated()
   async getCertificados(
-    @Query('page') page: number = 1,
+    @Query('page') page: number = 10,
     @Query('limit') limit: number = 20,
     @Query('controladorId') controladorId?: string
   ) {
     // Por ahora retorna estructura básica
     // En el futuro puede conectar con catálogo AFIP
-    return {
+    const result = {
       certificados: [
         {
           id: 'cert-001',
@@ -280,6 +292,8 @@ export class CertificadosController {
       total: 1,
       totalPages: 1
     };
+    console.log('GET /certificados retornando:', result);
+    return result;
   }
 
   /**

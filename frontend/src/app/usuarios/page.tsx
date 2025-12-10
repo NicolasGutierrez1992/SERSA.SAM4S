@@ -272,7 +272,7 @@ export default function UsuariosPage() {
                 </svg>
               </button>
               <Image
-                src="/assets/images/LOGOSersa.png"
+                src="/assets/images/logo.SERSA.jpg"
                 alt="SERSA Logo"
                 width={80}
                 height={40}

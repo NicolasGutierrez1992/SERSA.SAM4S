@@ -210,7 +210,6 @@ export const certificadosApi = {
     });
     return response.data;
   },
-
   // Obtener historial de descargas
   getHistorialDescargas: async (params?: {
     page?: number;
@@ -220,19 +219,44 @@ export const certificadosApi = {
     controladorId?: string;
     estadoMayorista?: string;
     marca?: string;
-  }): Promise<{
+    cuit?: string;
+    idMayorista?: string;
+    mes?: number;
+    anio?: number;  }): Promise<{
     descargas: DescargaHistorial[];
     total: number;
     totalPages?: number;
   }> => {
-    const response = await api.get('/certificados/descargas', { params });
-    // Si el backend no envía totalPages, lo calculamos
-    const { descargas, total, totalPages } = response.data;
-    return {
-      descargas,
-      total,
-      totalPages: totalPages ?? (params?.limit ? Math.ceil(total / params.limit) : undefined)
-    };
+    // Filtrar parámetros undefined y vacíos para evitar errores de validación
+    const filteredParams: any = {};
+    
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        // Solo incluir si no es undefined, null, o string vacío
+        if (value !== undefined && value !== null && value !== '') {
+          filteredParams[key] = value;
+        }
+      });
+    }
+    
+    console.log('🔍 getHistorialDescargas - params enviados:', filteredParams);
+    
+    try {
+      const response = await api.get('/certificados/descargas', { params: filteredParams });
+      console.log('✅ getHistorialDescargas - respuesta:', response.data);
+      
+      // Si el backend no envía totalPages, lo calculamos
+      const { descargas, total, totalPages } = response.data;
+      const limit = filteredParams.limit || 50;
+      return {
+        descargas,
+        total,
+        totalPages: totalPages ?? Math.ceil(total / limit)
+      };
+    } catch (error: any) {
+      console.error('❌ getHistorialDescargas error:', error.response?.status, error.response?.data);
+      throw error;
+    }
   },
 
   // Cambiar estado de descarga

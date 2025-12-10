@@ -176,11 +176,10 @@ export class DescargasService {
       this.logger.error('Error registrando error de descarga:', error.message);
     }
   }
-
   /**
    * Obtener certificado PEM por ID de descarga
    */
-  async getCertificadoPem(descargaId: number, userId: number, userRole: number): Promise<{
+  async getCertificadoPem(descargaId: string | number, userId: number, userRole: number): Promise<{
     content: string;
     filename: string;
     contentType: string;
@@ -279,14 +278,13 @@ export class DescargasService {
 
     return this.convertToIDescarga(updatedDescarga);
   }
-
   /**
    * Obtener historial de descargas con filtros
    */
   async getDescargas(params: any): Promise<{ descargas: IDescarga[]; total: number }> {
     const {
       page = 1,
-      limit = 20,
+      limit = 50,
       usuarioId,
       cuit,
       idMayorista,
@@ -299,18 +297,27 @@ export class DescargasService {
       marca
     } = params;
 
+    this.logger.log(`[getDescargas] Parámetros recibidos:`, params);
+    this.logger.log(`[getDescargas] usuarioId: ${usuarioId} (tipo: ${typeof usuarioId})`);
+    this.logger.log(`[getDescargas] idMayorista: ${idMayorista} (tipo: ${typeof idMayorista})`);
+
     const query = this.descargaRepository.createQueryBuilder('descarga')
       .leftJoinAndSelect('descarga.usuario', 'usuario')
       .where('1=1');
 
     if (usuarioId) {
-      query.andWhere('descarga.id_usuario = :usuarioId', { usuarioId });
+      const usuarioIdNum = typeof usuarioId === 'string' ? parseInt(usuarioId, 10) : usuarioId;
+      this.logger.log(`[getDescargas] Filtrando por usuarioId: ${usuarioIdNum}`);
+      query.andWhere('descarga.id_usuario = :usuarioId', { usuarioId: usuarioIdNum });
     }
     if (cuit) {
+      this.logger.log(`[getDescargas] Filtrando por cuit: ${cuit}`);
       query.andWhere('usuario.cuit LIKE :cuit', { cuit: `${cuit}%` });
     }
     if (idMayorista) {
-      query.andWhere('usuario.id_mayorista = :idMayorista', { idMayorista });
+      const idMayoristaNum = typeof idMayorista === 'string' ? parseInt(idMayorista, 10) : idMayorista;
+      this.logger.log(`[getDescargas] Filtrando por idMayorista: ${idMayoristaNum}`);
+      query.andWhere('usuario.id_mayorista = :idMayorista', { idMayorista: idMayoristaNum });
     }
     if (fechaDesde) {
       query.andWhere('descarga.created_at >= :fechaDesde', { fechaDesde });
@@ -319,10 +326,12 @@ export class DescargasService {
       query.andWhere('descarga.created_at <= :fechaHasta', { fechaHasta });
     }
     if (mes) {
-      query.andWhere('EXTRACT(MONTH FROM descarga.created_at) = :mes', { mes });
+      const mesNum = typeof mes === 'string' ? parseInt(mes, 10) : mes;
+      query.andWhere('EXTRACT(MONTH FROM descarga.created_at) = :mes', { mes: mesNum });
     } 
     if(anio) {
-      query.andWhere('EXTRACT(YEAR FROM descarga.created_at) = :anio', { anio });
+      const anioNum = typeof anio === 'string' ? parseInt(anio, 10) : anio;
+      query.andWhere('EXTRACT(YEAR FROM descarga.created_at) = :anio', { anio: anioNum });
     }
     if (controladorId) {
       query.andWhere('descarga.id_certificado LIKE :controladorId', { controladorId: `${controladorId}%` });
@@ -334,11 +343,18 @@ export class DescargasService {
       query.andWhere('descarga.marca = :marca', { marca });
     }
 
+    this.logger.log(`[getDescargas] Query construida, ejecutando... page: ${page}, limit: ${limit}`);
+    
     const [descargas, total] = await query
       .skip((page - 1) * limit)
       .take(limit)
       .orderBy('descarga.created_at', 'DESC')
       .getManyAndCount();
+
+    this.logger.log(`[getDescargas] Resultado: ${total} descargas encontradas, retornando ${descargas.length}`);
+    if (descargas.length > 0) {
+      this.logger.log(`[getDescargas] Primera descarga:`, descargas[0]);
+    }
 
     return { descargas: descargas.map(d => this.convertToIDescarga(d)), total };
   }

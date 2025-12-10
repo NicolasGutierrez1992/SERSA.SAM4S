@@ -77,13 +77,12 @@ export default function CertificadosPage() {
     } catch (error) {
       console.error('Error cargando métricas:', error);
     }
-  };
-
-  // Función para cargar historial según rol
+  };  // Función para cargar historial según rol
   const loadHistorial = async () => {
     setHistorialLoading(true);
     // Construir filtrosFinal con tipos correctos
     let filtrosFinal: any = { ...filtros, page: 1, limit: 50 };
+    
     if (user?.rol === 3) {
       filtrosFinal.cuit = user.cuit;
       filtrosFinal.idMayorista = String(user.id_mayorista);
@@ -91,26 +90,38 @@ export default function CertificadosPage() {
     if (user?.rol === 2) {
       filtrosFinal.idMayorista = String(user.id_mayorista);
     }
+    
     // Validar CUIT antes de hacer la petición
     if (filtrosFinal.cuit && !/^\d{8,}$/.test(filtrosFinal.cuit)) {
       setHistorial([]);
       setHistorialLoading(false);
       return;
     }
-    // Limpiar filtros vacíos
+    
+    // Limpiar filtros vacíos y undefined
     filtrosFinal = Object.fromEntries(
-      Object.entries(filtrosFinal).filter(([_, v]) => v !== '' && v !== undefined)
+      Object.entries(filtrosFinal).filter(([_, v]) => v !== '' && v !== undefined && v !== null)
     );
-    // Convertir mes y anio a número solo si no son string vacío
-    if (filtrosFinal.mes) filtrosFinal.mes = Number(filtrosFinal.mes);
-    if (filtrosFinal.anio) filtrosFinal.anio = Number(filtrosFinal.anio);
-    // Validar mes y anio antes de enviar
-    if (filtrosFinal.mes && (isNaN(filtrosFinal.mes) || filtrosFinal.mes < 1 || filtrosFinal.mes > 12)) {
-      filtrosFinal.mes = undefined;
+    
+    // Convertir mes y anio a número
+    if (filtrosFinal.mes) {
+      const mesNum = Number(filtrosFinal.mes);
+      if (isNaN(mesNum) || mesNum < 1 || mesNum > 12) {
+        delete filtrosFinal.mes;
+      } else {
+        filtrosFinal.mes = mesNum;
+      }
     }
-    if (filtrosFinal.anio && (isNaN(filtrosFinal.anio) || filtrosFinal.anio < 2025 || filtrosFinal.anio > 2100)) {
-      filtrosFinal.anio = undefined;
+    
+    if (filtrosFinal.anio) {
+      const anioNum = Number(filtrosFinal.anio);
+      if (isNaN(anioNum) || anioNum < 2025 || anioNum > 2100) {
+        delete filtrosFinal.anio;
+      } else {
+        filtrosFinal.anio = anioNum;
+      }
     }
+    
     // Siempre usar getHistorialDescargas con los filtros
     const response = await certificadosApi.getHistorialDescargas(filtrosFinal);
     setHistorial(response.descargas || []);
@@ -236,16 +247,19 @@ export default function CertificadosPage() {
   };
   const handleLogout = () => {
       authApi.logout();
-    };
-
-  // Función auxiliar para obtener descargas pendientes
+    };  // Función auxiliar para obtener descargas pendientes
   async function getDescargasPendientes(userCuit: string, limite: number) {
-    const response = await certificadosApi.getHistorialDescargas({
+    const params: any = {
       estadoMayorista: 'Pendiente de Facturar',
-      controladorId: undefined,
       page: 1,
-      limit: 100
-    });
+      limit: 1000
+    };
+    // Solo incluir parámetros que tengan valores
+    const filteredParams = Object.fromEntries(
+      Object.entries(params).filter(([_, v]) => v !== undefined && v !== '')
+    );
+    
+    const response = await certificadosApi.getHistorialDescargas(filteredParams);
     // Filtrar solo las descargas del usuario actual por cuit
     return response.descargas.filter(d => d.usuario && d.usuario.cuit === userCuit).length;
   }
@@ -292,7 +306,7 @@ export default function CertificadosPage() {
                 </svg>
               </button>
               <Image
-                src="/assets/images/LOGOSersa.png"
+                src="/assets/images/logo.SERSA.jpg"
                 alt="SERSA Logo"
                 width={80}
                 height={40}

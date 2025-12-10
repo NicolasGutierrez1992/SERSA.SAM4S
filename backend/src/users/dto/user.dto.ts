@@ -221,7 +221,7 @@ export class QueryUsersDto {
   @Min(0, { message: 'El límite mínimo es 0' })
   @Max(1000, { message: 'El límite máximo es 1000' })
   @Type(() => Number)
-  limit?: number = 10;
+  limit?: number = 100;
 
   @ApiPropertyOptional({
     example: 2,

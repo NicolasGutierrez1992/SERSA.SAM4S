@@ -63,6 +63,24 @@ export class UpdateEstadoDescargaDto {
 
 export class QueryDescargasDto {
   @ApiPropertyOptional({ 
+    description: 'Página',
+    example: 1
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  page?: number;
+
+  @ApiPropertyOptional({ 
+    description: 'Límite de resultados',
+    example: 50
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  limit?: number;
+
+  @ApiPropertyOptional({ 
     description: 'Fecha desde (YYYY-MM-DD)',
     example: '2024-01-01'
   })
@@ -83,18 +101,18 @@ export class QueryDescargasDto {
     example: 1
   })
   @IsOptional()
-  @Type(() => Number) // <-- Fuerza conversión a number
+  @Type(() => Number)
   @IsNumber({}, { message: 'El mes debe ser un número' })
   @Min(1)
   @Max(12)
   mes?: number;
 
   @ApiPropertyOptional({ 
-    description: 'año de descarga',
-    example: '2024'
+    description: 'Año de descarga',
+    example: 2025
   })
   @IsOptional()
-  @Type(() => Number) // <-- Esto fuerza la conversión a number
+  @Type(() => Number)
   @IsNumber({}, { message: 'El año debe ser un número' })
   @Min(2025)
   @Max(2100)
@@ -107,81 +125,39 @@ export class QueryDescargasDto {
   @IsOptional()
   @IsString()
   controladorId?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'CUIT del usuario',
+    example: '20366299913'
+  })
+  @IsOptional()
+  @IsString()
+  cuit?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'ID del mayorista',
+    example: 1
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  idMayorista?: number;
   
   @ApiPropertyOptional({ 
     description: 'Estado de facturación mayorista',
-    enum: EstadoDescarga
+    example: 'Pendiente de Facturar'
   })
   @IsOptional()
-  @IsEnum(EstadoDescarga)
-  estadoMayorista?: EstadoDescarga;
+  @IsString()
+  estadoMayorista?: string;
 
   @ApiPropertyOptional({
-    example: 'Pendiente de Facturar',
-    enum: EstadoDescarga,
-    description: 'Filtrar por estado distribuidor',
-  })
-  @IsOptional()
-  @IsEnum(EstadoDescarga, { message: 'El estado debe ser válido' })
-  estadoDistribuidor?: EstadoDescarga;
-
-  @ApiPropertyOptional({
-    example: 1,
-    description: 'Filtrar por usuario',
-  })
-  @IsOptional()
-  @IsNumber({}, { message: 'El ID del usuario debe ser un número' })
-  @Type(() => Number)
-  usuarioId?: number;
-
-  @ApiPropertyOptional({
-    example: 'SESHIA',
-    description: 'Filtrar por marca',
+    example: 'SH',
+    description: 'Marca del controlador'
   })
   @IsOptional()
   @IsString()
   marca?: string;
-
-  @ApiPropertyOptional({
-    example: '2036629913',
-    description: 'Filtrar por CUIT del usuario',
-  })
-  @IsOptional()
-  @IsString()
-  @Matches(/^\d{8,}$/)
-  cuit?: string;
-  
-  @ApiPropertyOptional({
-    example: '2036629913',
-    description: 'Filtrar por CUIT del usuario',
-  })
-  @IsOptional()
-  @IsString()
-  idMayorista?: string;
-
-  @ApiPropertyOptional({ 
-    description: 'Número de página',
-    example: 1,
-    minimum: 1
-  })
-  @IsOptional()
-  @Transform(({ value }) => parseInt(value))
-  @IsNumber()
-  @Min(1)
-  page?: number = 1;
-
-  @ApiPropertyOptional({ 
-    description: 'Elementos por página',
-    example: 20,
-    minimum: 1,
-    maximum: 100
-  })
-  @IsOptional()
-  @Transform(({ value }) => parseInt(value))
-  @IsNumber()
-  @Min(1)
-  @Max(100)
-  limit?: number = 20;
 }
 
 export class DownloadResponseDto {

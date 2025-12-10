@@ -94,8 +94,8 @@ export class NotificacionesService {
       user_id, 
       tipo, 
       estado_envio, 
-      page = 1, 
-      limit = 10 
+      page = 10, 
+      limit = 100 
     } = queryDto;
 
     const queryBuilder = this.notificacionRepository

@@ -82,7 +82,7 @@ export class UsersService {
 
   async findAll(queryDto: QueryUsersDto = {}, currentUser?: any) {
     console.log('[UsersService][findAll] Entrada:', queryDto, currentUser);
-    const { page = 1, limit = 10, rol, status, id_mayorista } = queryDto;
+    const { page = 10, limit = 100, rol, status, id_mayorista } = queryDto;
 
     // Obtener todos los usuarios para armar jerarquía y nombreMayorista
     const allUsers = await this.userRepository.find({

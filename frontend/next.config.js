@@ -2,10 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  output: 'standalone',
-  // Configuración para variables de entorno
+  output: 'standalone',  // Configuración para variables de entorno
   env: {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001',
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api',
   },
 }
 
