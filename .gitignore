@@ -85,3 +85,4 @@ config/secrets.json
 # Logs de auditoría local
 logs/auditoria/
 logs/downloads/
+TECHNICAL-DOCUMENTATION.md
