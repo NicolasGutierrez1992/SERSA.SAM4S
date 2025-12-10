@@ -152,14 +152,17 @@ export class UsersService {
 
     console.log('[UsersService][findOne] Salida:', user);
     return user;
-  }
-  async findByCuit(cuit: string): Promise<User | null> {
-    console.log('[UsersService][findByCuit] Entrada:', cuit);
-    console.log('[UsersService][findByCuit] Tipo:', typeof cuit, 'Longitud:', cuit.length);
+  }  async findByCuit(cuit: string): Promise<User | null> {
+    console.log('\n========================================');
+    console.log('[UsersService][findByCuit] INICIANDO BÚSQUEDA');
+    console.log('========================================');
+    console.log('Entrada CUIT:', cuit);
+    console.log('Tipo:', typeof cuit, '| Longitud:', cuit.length);
     
     // Buscar con trim y conversión a string
     const trimmedCuit = String(cuit).trim();
-    console.log('[UsersService][findByCuit] CUIT trimmed:', trimmedCuit);
+    console.log('CUIT trimmed:', trimmedCuit);
+    console.log('Buscando en tabla "users" con condición: cuit = "' + trimmedCuit + '"');
     
     const user = await this.userRepository.findOne({
       where: { cuit: trimmedCuit },
@@ -181,16 +184,26 @@ export class UsersService {
     });
     
     if (!user) {
-      console.log('[UsersService][findByCuit] Usuario NO encontrado. Buscando en BD...');
-      // Debug: obtener todos los CUITs para ver qué hay
+      console.log('\n⚠️  USUARIO NO ENCONTRADO - Listando todos los usuarios en la BD:');
       const allUsers = await this.userRepository.find({
-        select: ['id_usuario', 'cuit', 'nombre'],
+        select: ['id_usuario', 'cuit', 'nombre', 'mail', 'id_rol', 'status'],
       });
-      console.log('[UsersService][findByCuit] Todos los usuarios:', allUsers);
-      console.log('[UsersService][findByCuit] CUITs en BD:', allUsers.map(u => `"${u.cuit}"`));
+      console.log('Total de usuarios en BD:', allUsers.length);
+      console.log('Usuarios registrados:');
+      allUsers.forEach(u => {
+        console.log(`  - ID: ${u.id_usuario}, CUIT: "${u.cuit}", Nombre: ${u.nombre}, Email: ${u.mail}, Rol: ${u.id_rol}, Status: ${u.status}`);
+      });
+    } else {
+      console.log('\n✅ USUARIO ENCONTRADO');
+      console.log(`ID: ${user.id_usuario}`);
+      console.log(`CUIT: ${user.cuit}`);
+      console.log(`Nombre: ${user.nombre}`);
+      console.log(`Email: ${user.mail}`);
+      console.log(`Rol: ${user.id_rol}`);
+      console.log(`Status: ${user.status}`);
     }
     
-    console.log('[UsersService][findByCuit] Salida:', user);
+    console.log('========================================\n');
     return user;
   }
 
