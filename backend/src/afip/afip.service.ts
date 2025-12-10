@@ -56,19 +56,21 @@ export class AfipService {
     // o desde src (en desarrollo)
     this.certPath = this.resolvePath(certPathRaw);
     this.rootPath = this.resolvePath(rootPathRaw);
-    
-    this.keyPassword = this.configService.get('AFIP_KEY_PASSWORD');
+      this.keyPassword = this.configService.get('AFIP_KEY_PASSWORD');
     
     this.loggerService.info('AFIP', 'AFIP Service initialized - PRODUCTION MODE');
     this.loggerService.info('AFIP', 'Rutas resueltas', { 
+      certPathRaw: certPathRaw,
       certPath: this.certPath, 
-      rootPath: this.rootPath,
       certExists: fs.existsSync(this.certPath),
-      rootExists: fs.existsSync(this.rootPath)
+      rootPathRaw: rootPathRaw,
+      rootPath: this.rootPath,
+      rootExists: fs.existsSync(this.rootPath),
+      cwd: process.cwd(),
+      env: process.env.NODE_ENV
     });
     this.validateConfiguration();
   }
-
   /**
    * Resuelve rutas relativas correctamente en producción y desarrollo
    */
@@ -80,13 +82,32 @@ export class AfipService {
       return filePath;
     }
     
-    // Si es ruta relativa, resolverla desde:
-    // - En producción (con dist): /app/dist/../../certs/file
-    // - En desarrollo (con src): src/../../certs/file
+    // En producción (Railway), los archivos se copian a /app
+    // En desarrollo, están en backend/certs
+    // Intentar buscar en múltiples ubicaciones
     const baseDir = process.cwd();
-    const resolvedPath = path.resolve(baseDir, filePath);
+    const possiblePaths = [
+      // Opción 1: Ruta relativa desde cwd actual
+      path.resolve(baseDir, filePath),
+      // Opción 2: Si la ruta incluye 'backend/', buscar sin 'backend/'
+      filePath.includes('backend/') 
+        ? path.resolve(baseDir, filePath.replace('backend/', ''))
+        : null,
+      // Opción 3: En /app (Railway)
+      path.resolve('/app', filePath.replace('backend/', '')),
+      // Opción 4: Desde /app/backend (si está ahí)
+      path.resolve('/app/backend', filePath.replace('backend/', '')),
+    ].filter(Boolean);
     
-    return resolvedPath;
+    // Buscar el primer archivo que exista
+    for (const possiblePath of possiblePaths) {
+      if (fs.existsSync(possiblePath)) {
+        return possiblePath;
+      }
+    }
+    
+    // Si no encuentra ninguno, devolver el primero (para que se vea el error)
+    return possiblePaths[0] || filePath;
   }
   /**
    * Generar certificado CRS - Versión PRODUCCIÓN
