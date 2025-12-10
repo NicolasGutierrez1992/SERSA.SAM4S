@@ -70,8 +70,7 @@ export class AfipService {
       env: process.env.NODE_ENV
     });
     this.validateConfiguration();
-  }
-  /**
+  }  /**
    * Resuelve rutas relativas correctamente en producción y desarrollo
    */
   private resolvePath(filePath: string): string {
@@ -82,22 +81,24 @@ export class AfipService {
       return filePath;
     }
     
-    // En producción (Railway), los archivos se copian a /app
+    // En producción (Railway), los archivos se copian a /app/certs
     // En desarrollo, están en backend/certs
     // Intentar buscar en múltiples ubicaciones
     const baseDir = process.cwd();
+    const cleanPath = filePath.replace('backend/', '');
+    
     const possiblePaths = [
       // Opción 1: Ruta relativa desde cwd actual
       path.resolve(baseDir, filePath),
       // Opción 2: Si la ruta incluye 'backend/', buscar sin 'backend/'
       filePath.includes('backend/') 
-        ? path.resolve(baseDir, filePath.replace('backend/', ''))
+        ? path.resolve(baseDir, cleanPath)
         : null,
-      // Opción 3: En /app (Railway)
-      path.resolve('/app', filePath.replace('backend/', '')),
+      // Opción 3: En /app/certs (Railway - sin backend/)
+      path.resolve('/app', cleanPath),
       // Opción 4: Desde /app/backend (si está ahí)
-      path.resolve('/app/backend', filePath.replace('backend/', '')),
-    ].filter(Boolean);
+      path.resolve('/app/backend', cleanPath),
+    ].filter((p): p is string => Boolean(p));
     
     // Buscar el primer archivo que exista
     for (const possiblePath of possiblePaths) {
@@ -106,8 +107,9 @@ export class AfipService {
       }
     }
     
-    // Si no encuentra ninguno, devolver el primero (para que se vea el error)
-    return possiblePaths[0] || filePath;
+    // Si no encuentra ninguno, devolver el que tiene mejor probabilidad
+    // Preferir /app/certs en producción
+    return possiblePaths.find(p => p.includes('/app/')) || possiblePaths[0] || filePath;
   }
   /**
    * Generar certificado CRS - Versión PRODUCCIÓN
