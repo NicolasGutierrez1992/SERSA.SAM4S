@@ -59,7 +59,7 @@ temp/
 # ============================================
 
 # Certificados AFIP (¡CRÍTICO para seguridad!)
-backend/certs/*.pfx
+#backend/certs/*.pfx
 backend/certs/*.p12
 backend/certs/*.key
 backend/certs/*.pem
