@@ -21,24 +21,44 @@ import { AfipModule } from './afip/afip.module';
       isGlobal: true,
       envFilePath: '.env',
     }),    // Módulo de autenticación global PRIMERO
-    SharedAuthModule,
-    // Configuración de TypeORM con PostgreSQL
+    SharedAuthModule,    // Configuración de TypeORM con PostgreSQL
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get('DB_HOST'),
-        port: parseInt(configService.get('DB_PORT')) || 5432,
-        username: configService.get('DB_USERNAME'),
-        password: configService.get('DB_PASSWORD'),
-        database: configService.get('DB_NAME'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: true, // Habilitado para crear tablas automáticamente
-        migrationsRun: false, // No ejecutar migraciones automáticamente
-        dropSchema: false, // Nunca eliminar el esquema
-        ssl: configService.get('DB_SSL') === 'true' ? { rejectUnauthorized: false } : false,
-        logging: configService.get('NODE_ENV') === 'development',
-      }),
+      useFactory: (configService: ConfigService) => {
+        const dbHost = configService.get('DB_HOST');
+        const dbPort = parseInt(configService.get('DB_PORT')) || 5432;
+        const dbUsername = configService.get('DB_USERNAME');
+        const dbName = configService.get('DB_NAME');
+        const dbSSL = configService.get('DB_SSL') === 'true';
+        const nodeEnv = configService.get('NODE_ENV');
+
+        console.log('\n🔌 DATABASE CONNECTION CONFIGURATION');
+        console.log('=====================================');
+        console.log(`Host: ${dbHost}`);
+        console.log(`Port: ${dbPort}`);
+        console.log(`Username: ${dbUsername}`);
+        console.log(`Database: ${dbName}`);
+        console.log(`SSL Enabled: ${dbSSL}`);
+        console.log(`Environment: ${nodeEnv}`);
+        console.log(`Synchronize: true (auto-create tables)`);
+        console.log('=====================================\n');
+
+        return {
+          type: 'postgres',
+          host: dbHost,
+          port: dbPort,
+          username: dbUsername,
+          password: configService.get('DB_PASSWORD'),
+          database: dbName,
+          entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          synchronize: true, // Habilitado para crear tablas automáticamente
+          migrationsRun: false, // No ejecutar migraciones automáticamente
+          dropSchema: false, // Nunca eliminar el esquema
+          ssl: dbSSL ? { rejectUnauthorized: false } : false,
+          logging: nodeEnv === 'development' || nodeEnv === 'production', // Habilitar logs en ambos
+          logger: 'advanced-console', // Mejor logging de queries
+        };
+      },
       inject: [ConfigService],
     }),
     

@@ -46,8 +46,7 @@ async function bootstrap() {
     .addTag('Usuarios', 'Gestión de usuarios y roles')
     .addTag('Auditoría', 'Logs y trazabilidad del sistema')
     .build();
-  
-  const document = SwaggerModule.createDocument(app, config);
+    const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api/docs', app, document, {
     customSiteTitle: 'SERSA API Documentation',
     explorer: true,
@@ -55,10 +54,19 @@ async function bootstrap() {
 
   const port = process.env.PORT || 3001;
   await app.listen(port);
+  
   console.log(`🚀 SERSA Backend running on: http://localhost:${port}/api`);
   console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
   console.log(`💡 Health Check: http://localhost:${port}/api/health`);
   console.log(`✅ Running in PRODUCTION mode with real AFIP integration`);
+  
+  // Verificar conexión a BD
+  console.log('\n📊 DATABASE STATUS');
+  console.log('=====================================');
+  console.log(`✓ TypeORM synchronize is ENABLED`);
+  console.log(`✓ Tablas se crearán automáticamente en la BD`);
+  console.log(`✓ Esquema NO será eliminado (dropSchema: false)`);
+  console.log('=====================================\n');
 }
 
 bootstrap();
