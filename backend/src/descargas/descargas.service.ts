@@ -87,15 +87,12 @@ export class DescargasService {
    */
   async registrarDescarga(data: RegistrarDescargaData): Promise<IDescarga> {
     try {
-      this.logger.log(`Registrando descarga para usuario ${data.usuarioId}`);
-
-      const descarga = this.descargaRepository.create({
+      this.logger.log(`Registrando descarga para usuario ${data.usuarioId}`);      const descarga = this.descargaRepository.create({
         id_usuario: data.usuarioId,
         id_certificado: data.controladorId,        
         certificado_nombre: data.certificadoNombre,
         estadoMayorista: EstadoDescarga.PENDIENTE_FACTURAR,
         estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR,
-        fecha_facturacion: null,
         tamaño: data.tamaño,
         updated_at: new Date().toISOString(),
         created_at: new Date().toISOString()
