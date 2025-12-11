@@ -19,22 +19,17 @@ export interface User {
   cuit: string;
   nombre: string;
   email: string;
-  telefono?: string;
-  rol: UserRole;
-  estado: boolean;
-  mayorista?: User;
-  limiteDescargas: number;
-  primerAcceso: boolean;
-  ultimoAcceso?: string;
-  createdAt: string;
-  updatedAt: string;
+  rol: number;
+  must_change_password: boolean;
+  last_login: Date;
+  id_mayorista: number;
+  limite_descargas: number;
 }
 
 // Respuesta de login
 export interface LoginResponse {
   access_token: string;
   user: User;
-  expires_in: number;
 }
 
 // DTO de login

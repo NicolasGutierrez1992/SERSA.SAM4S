@@ -17,19 +17,25 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-
   useEffect(() => {
     // Verificar si hay token almacenado al cargar la página
     const token = apiService.getToken();
     if (token) {
-      // Aquí podrías verificar el token con el backend
-      // Por ahora solo marcamos como no loading
-      setIsLoading(false);
-    } else {
-      setIsLoading(false);
+      // Intentar recuperar el usuario desde localStorage
+      if (typeof window !== 'undefined') {
+        const storedUser = localStorage.getItem('user');
+        if (storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            setUser(parsedUser);
+          } catch (error) {
+            console.error('Error parsing stored user:', error);
+          }
+        }
+      }
     }
+    setIsLoading(false);
   }, []);
-
   const login = async (credentials: LoginDto): Promise<ApiResponse<LoginResponse>> => {
     setIsLoading(true);
     try {
@@ -37,6 +43,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (result.success && result.data) {
         setUser(result.data.user);
+        // Guardar usuario en localStorage para persistencia
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('user', JSON.stringify(result.data.user));
+        }
       }
       
       return result;
@@ -44,10 +54,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setIsLoading(false);
     }
   };
-
   const logout = () => {
     apiService.logout();
     setUser(null);
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('user');
+    }
   };
 
   const value = {

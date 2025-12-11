@@ -57,9 +57,7 @@ class ApiService {
         error: 'Error de conexión con el servidor',
       };
     }
-  }
-
-  // Métodos de autenticación
+  }  // Métodos de autenticación
   async login(credentials: LoginDto): Promise<ApiResponse<LoginResponse>> {
     const result = await this.request<LoginResponse>('/auth/login', {
       method: 'POST',
@@ -68,6 +66,10 @@ class ApiService {
 
     if (result.success && result.data?.access_token) {
       this.setToken(result.data.access_token);
+      // Guardar usuario completo en localStorage
+      if (result.data.user && typeof window !== 'undefined') {
+        localStorage.setItem('user', JSON.stringify(result.data.user));
+      }
     }
 
     return result;
@@ -84,11 +86,11 @@ class ApiService {
       document.cookie = `auth_token=${token}; path=/; max-age=${24 * 60 * 60}`; // 24 horas
     }
   }
-
   clearToken(): void {
     this.token = null;
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
       // Limpiar cookie también
       document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:01 GMT';
     }

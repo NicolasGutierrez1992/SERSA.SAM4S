@@ -162,9 +162,7 @@ export class UsersService {
     // Buscar con trim y conversión a string
     const trimmedCuit = String(cuit).trim();
     console.log('CUIT trimmed:', trimmedCuit);
-    console.log('Buscando en tabla "users" con condición: cuit = "' + trimmedCuit + '"');
-    
-    const user = await this.userRepository.findOne({
+    console.log('Buscando en tabla "users" con condición: cuit = "' + trimmedCuit + '"');    const user = await this.userRepository.findOne({
       where: { cuit: trimmedCuit },
       select: {
         id_usuario: true,

@@ -17,10 +17,10 @@ export interface LoginResponse {
     nombre: string;
     email: string;
     rol: number;
-    rolNombre: string;
-    activo: boolean;
-    primerAcceso: boolean;
-    id_mayorista?: number; // <-- Agrego id_mayorista en la interfaz
+    must_change_password: boolean;
+    last_login: Date;
+    id_mayorista: number;
+    limite_descargas: number;
   };
 }
 

@@ -38,15 +38,13 @@ export class AuthService {
     
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
-    }
-
-    // Actualizar último login
+    }    // Actualizar último login
     await this.usersService.updateLastLogin(user.id_usuario);    // Crear payload JWT
     const payload: JwtPayload = {
       id: user.id_usuario,
       cuit: user.cuit,
       nombre: user.nombre,
-      rol: user.id_rol,
+      rol: user.rol,
       mustChangePassword: user.must_change_password,
       id_mayorista: user.id_mayorista // <-- Asegurarse de incluirlo en el payload
     };
@@ -59,7 +57,7 @@ export class AuthService {
         cuit: user.cuit,
         nombre: user.nombre,
         email: user.mail,
-        rol: user.id_rol,
+        rol: user.rol,
         must_change_password: user.must_change_password,
         last_login: user.ultimo_login,
         id_mayorista: user.id_mayorista, // <-- Agregado para el frontend
