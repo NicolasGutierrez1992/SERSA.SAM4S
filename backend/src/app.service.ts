@@ -1,8 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { TimezoneService } from './common/timezone.service';
 
 @Injectable()
 export class AppService {
   private readonly logger = new Logger(AppService.name);
+  private readonly timezoneService = new TimezoneService();
 
   constructor() {
     this.logger.log('SERSA Backend Service initialized');
@@ -13,9 +15,11 @@ export class AppService {
   }
 
   getHealthStatus(): object {
+    // Usar fecha actual en zona horaria de Argentina
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
+      timestamp_argentina: this.timezoneService.formatDateTimeFull(new Date()),
       version: '1.0.0',
       message: 'SERSA Backend running in development mode',      services: {
         database: 'connected', // PostgreSQL active with TypeORM

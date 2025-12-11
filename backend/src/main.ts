@@ -2,9 +2,13 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { TimezoneService } from './common/timezone.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  
+  // Inicializar TimezoneService para logs
+  const timezoneService = new TimezoneService();
 
   // Configurar CORS - Usar variable de entorno o defaults
   const corsOrigins = process.env.CORS_ORIGINS
@@ -51,14 +55,17 @@ async function bootstrap() {
     customSiteTitle: 'SERSA API Documentation',
     explorer: true,
   });
-
   const port = process.env.PORT || 3001;
   await app.listen(port);
   
-  console.log(`🚀 SERSA Backend running on: http://localhost:${port}/api`);
+  // Obtener hora en zona horaria de Argentina para los logs
+  const horaArgentina = timezoneService.formatDateTimeFull(new Date());
+  
+  console.log(`\n🚀 SERSA Backend running on: http://localhost:${port}/api`);
   console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
   console.log(`💡 Health Check: http://localhost:${port}/api/health`);
   console.log(`✅ Running in PRODUCTION mode with real AFIP integration`);
+  console.log(`🕐 Hora del servidor (Argentina): ${horaArgentina}`);
   
   // Verificar conexión a BD
   console.log('\n📊 DATABASE STATUS');

@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { CertificadoMigrationService } from './certificado-migration.service';
+import { TimezoneService } from './timezone.service';
 
 /**
  * Inicializador de aplicación
@@ -9,14 +10,16 @@ import { CertificadoMigrationService } from './certificado-migration.service';
 @Injectable()
 export class AppInitializerService implements OnModuleInit {
   private readonly logger = new Logger(AppInitializerService.name);
+  private readonly timezoneService = new TimezoneService();
 
   constructor(
     private configService: ConfigService,
     private certificadoMigrationService: CertificadoMigrationService,
   ) {}
-
   async onModuleInit(): Promise<void> {
-    this.logger.log('Inicializando servicios de aplicación...');
+    // Registrar hora de inicialización en zona horaria de Argentina
+    const horaArgentina = this.timezoneService.formatDateTimeFull(new Date());
+    this.logger.log(`Inicializando servicios de aplicación... [${horaArgentina}]`);
 
     // Ejecutar migración de certificado si es necesaria
     try {
