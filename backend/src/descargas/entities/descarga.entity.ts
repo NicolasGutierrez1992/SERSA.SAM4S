@@ -20,11 +20,10 @@ export class Descarga {
   @ManyToOne(() => User, user => user.descargas)
   @JoinColumn({ name: 'id_usuario' })
   usuario: User;
-
   @ApiPropertyOptional({ 
-    description: 'UUID del certificado de referencia'
+    description: 'ID del certificado de referencia (ej: SESHIA-0000001234)'
   })
-  @Column({ type: 'uuid', nullable: true })
+  @Column({ type: 'varchar', length: 50, nullable: true })
   id_certificado: string;
 
   @ApiProperty({ 
