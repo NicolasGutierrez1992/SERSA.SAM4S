@@ -780,34 +780,38 @@ export default function CertificadosPage() {
                                     {expandedRows.has(descarga.id) && (
                                       <div className="pl-6 space-y-2 border-l-2 border-gray-300">                                        {/* Estado change dropdown */}                                        {(user?.rol === 1 || user?.rol === 4) && (
                                           <div>
-                                            <label className="block text-xs font-semibold text-gray-700 mb-2">
-                                              Cambiar Estado:
-                                              {descarga.tipoDescarga === 'PREPAGO' && (
-                                                <span className="ml-2 text-red-600 font-bold">(PREPAGO - Inmutable)</span>
-                                              )}
-                                            </label>
-                                            <select
-                                              onChange={(e) => {
-                                                if (descarga.tipoDescarga === 'PREPAGO') {
-                                                  alert('No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo e inmutable.');
-                                                  return;
-                                                }
-                                                handleEstadoChange(descarga.id, e.target.value, 'mayorista', descarga.usuarioId, descarga.tipoDescarga || undefined);
-                                              }}
-                                              className={`mt-1 text-xs border rounded px-2 py-1 w-full ${descarga.tipoDescarga === 'PREPAGO' ? 'bg-red-50 cursor-not-allowed opacity-60' : ''}`}
-                                              defaultValue={descarga.estadoMayorista}
-                                              disabled={descarga.tipoDescarga === 'PREPAGO'}
-                                              title={descarga.tipoDescarga === 'PREPAGO' ? 'Estado PREPAGO es inmutable' : ''}
-                                            >
-                                              <option value={descarga.estadoMayorista}>{descarga.estadoMayorista}</option>
-                                              {descarga.tipoDescarga !== 'PREPAGO' && (
-                                                <>
+                                            {descarga.tipoDescarga === 'PREPAGO' ? (
+                                              <div className="p-3 bg-red-50 border border-red-200 rounded">
+                                                <p className="text-xs font-semibold text-red-700">
+                                                  ⚠️ Estado PREPAGO - Inmutable
+                                                </p>
+                                                <p className="text-xs text-red-600 mt-1">
+                                                  No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo.
+                                                </p>
+                                              </div>                                            ) : (
+                                              <>
+                                                <label className="block text-xs font-semibold text-gray-700 mb-2">
+                                                  Cambiar Estado:
+                                                </label>
+                                                <select
+                                                  onChange={(e) => {
+                                                    const nuevoEstado = e.target.value;
+                                                    if (nuevoEstado !== descarga.estadoMayorista) {
+                                                      handleEstadoChange(descarga.id, nuevoEstado, 'mayorista', descarga.usuarioId, descarga.tipoDescarga || undefined);
+                                                      // Reset al valor actual para evitar que se quede seleccionado el otro estado
+                                                      e.target.value = descarga.estadoMayorista;
+                                                    }
+                                                  }}
+                                                  className="mt-1 text-xs border border-gray-300 rounded px-2 py-1 w-full hover:border-indigo-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                                  value={descarga.estadoMayorista}
+                                                >
+                                                  <option value={descarga.estadoMayorista}>{descarga.estadoMayorista}</option>
                                                   <option value="Pendiente de Facturar">Pendiente de Facturar</option>
                                                   <option value="Facturado">Facturado</option>
                                                   <option value="Cobrado">Cobrado</option>
-                                                </>
-                                              )}
-                                            </select>
+                                                </select>
+                                              </>
+                                            )}
                                           </div>
                                         )}
                                         
@@ -851,16 +855,25 @@ export default function CertificadosPage() {
                                 }</td>)}                                <td className="px-3 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                   {/* Cambiar estado distribuidor (Mayorista) */}
                                   {user?.rol === 2 && (
-                                    <select
-                                      onChange={(e) => handleEstadoChange(descarga.id, e.target.value, 'distribuidor', descarga?.usuarioId, descarga.tipoDescarga || undefined)}
-                                      className="text-xs border rounded px-2 py-1"
-                                      defaultValue={descarga.estadoDistribuidor}
-                                      disabled={descarga.tipoDescarga === 'PREPAGO'}
-                                      title={descarga.tipoDescarga === 'PREPAGO' ? 'Estado PREPAGO es inmutable' : ''}
-                                    >
-                                      <option value="Pendiente de Facturar">Pendiente de Facturar</option>
-                                      <option value="Facturado">Facturado</option>
-                                    </select>
+                                    descarga.tipoDescarga === 'PREPAGO' ? (
+                                      <span className="text-xs text-red-600 font-semibold">PREPAGO - Inmutable</span>                                    ) : (
+                                      <select
+                                        onChange={(e) => {
+                                          const nuevoEstado = e.target.value;
+                                          if (nuevoEstado !== descarga.estadoDistribuidor) {
+                                            handleEstadoChange(descarga.id, nuevoEstado, 'distribuidor', descarga?.usuarioId, descarga.tipoDescarga || undefined);
+                                            // Reset al valor actual para evitar que se quede seleccionado el otro estado
+                                            e.target.value = descarga.estadoDistribuidor;
+                                          }
+                                        }}
+                                        className="text-xs border border-gray-300 rounded px-2 py-1 hover:border-indigo-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                        value={descarga.estadoDistribuidor}
+                                      >
+                                        <option value={descarga.estadoDistribuidor}>{descarga.estadoDistribuidor}</option>
+                                        <option value="Pendiente de Facturar">Pendiente de Facturar</option>
+                                        <option value="Facturado">Facturado</option>
+                                      </select>
+                                    )
                                   )}
                                   {/* Descargar archivo: oculto para mayorista y facturación */}
                                   {user?.rol !== 2 && user?.rol !== 4 && (
