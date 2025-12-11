@@ -155,28 +155,12 @@ export class UsersService {
     console.log('========================================');
     console.log('Entrada CUIT:', cuit);
     console.log('Tipo:', typeof cuit, '| Longitud:', cuit.length);
-    
-    // Buscar con trim y conversión a string
+      // Buscar con trim y conversión a string
     const trimmedCuit = String(cuit).trim();
     console.log('CUIT trimmed:', trimmedCuit);
-    console.log('Buscando en tabla "users" con condición: cuit = "' + trimmedCuit + '"');    const user = await this.userRepository.findOne({
+    console.log('Buscando en tabla "users" con condición: cuit = "' + trimmedCuit + '"');    
+    const user = await this.userRepository.findOne({
       where: { cuit: trimmedCuit },
-      select: {
-        id_usuario: true,
-        cuit: true,
-        nombre: true,
-        mail: true,
-        rol: true,
-        status: true,
-        limite_descargas: true,
-        must_change_password: true,
-        ultimo_login: true,
-        id_mayorista: true,
-        created_at: true,
-        updated_at: true,
-        password: true,
-        tipo_descarga: true,
-      },
     });
     
     if (!user) {
@@ -201,27 +185,10 @@ export class UsersService {
     
     console.log('========================================\n');
     return user;
-  }
-  async findByMail(mail: string): Promise<User | null> {
+  }  async findByMail(mail: string): Promise<User | null> {
     console.log('[UsersService][findByMail] Entrada:', mail);
     const user = await this.userRepository.findOne({
       where: { mail },
-      select: {
-        id_usuario: true,
-        cuit: true,
-        nombre: true,
-        mail: true,
-        rol: true,
-        status: true,
-        limite_descargas: true,
-        must_change_password: true,
-        ultimo_login: true,
-        id_mayorista: true,
-        created_at: true,
-        updated_at: true,
-        password: true,
-        tipo_descarga: true,
-      },
     });
     console.log('[UsersService][findByMail] Salida:', user);
     return user;

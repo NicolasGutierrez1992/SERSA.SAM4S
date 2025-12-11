@@ -778,21 +778,35 @@ export default function CertificadosPage() {
                                     
                                     {/* Expanded content */}
                                     {expandedRows.has(descarga.id) && (
-                                      <div className="pl-6 space-y-2 border-l-2 border-gray-300">                                        {/* Estado change dropdown */}
-                                        {(user?.rol === 1 || user?.rol === 4) && (
+                                      <div className="pl-6 space-y-2 border-l-2 border-gray-300">                                        {/* Estado change dropdown */}                                        {(user?.rol === 1 || user?.rol === 4) && (
                                           <div>
-                                            <label className="block text-xs font-semibold text-gray-700 mb-2">Cambiar Estado:</label>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-2">
+                                              Cambiar Estado:
+                                              {descarga.tipoDescarga === 'PREPAGO' && (
+                                                <span className="ml-2 text-red-600 font-bold">(PREPAGO - Inmutable)</span>
+                                              )}
+                                            </label>
                                             <select
-                                              onChange={(e) => handleEstadoChange(descarga.id, e.target.value, 'mayorista', descarga.usuarioId, descarga.tipoDescarga || undefined)}
-                                              className="mt-1 text-xs border rounded px-2 py-1 w-full"
+                                              onChange={(e) => {
+                                                if (descarga.tipoDescarga === 'PREPAGO') {
+                                                  alert('No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo e inmutable.');
+                                                  return;
+                                                }
+                                                handleEstadoChange(descarga.id, e.target.value, 'mayorista', descarga.usuarioId, descarga.tipoDescarga || undefined);
+                                              }}
+                                              className={`mt-1 text-xs border rounded px-2 py-1 w-full ${descarga.tipoDescarga === 'PREPAGO' ? 'bg-red-50 cursor-not-allowed opacity-60' : ''}`}
                                               defaultValue={descarga.estadoMayorista}
                                               disabled={descarga.tipoDescarga === 'PREPAGO'}
                                               title={descarga.tipoDescarga === 'PREPAGO' ? 'Estado PREPAGO es inmutable' : ''}
                                             >
                                               <option value={descarga.estadoMayorista}>{descarga.estadoMayorista}</option>
-                                              <option value="Pendiente de Facturar">Pendiente de Facturar</option>
-                                              <option value="Facturado">Facturado</option>
-                                              <option value="Cobrado">Cobrado</option>
+                                              {descarga.tipoDescarga !== 'PREPAGO' && (
+                                                <>
+                                                  <option value="Pendiente de Facturar">Pendiente de Facturar</option>
+                                                  <option value="Facturado">Facturado</option>
+                                                  <option value="Cobrado">Cobrado</option>
+                                                </>
+                                              )}
                                             </select>
                                           </div>
                                         )}
