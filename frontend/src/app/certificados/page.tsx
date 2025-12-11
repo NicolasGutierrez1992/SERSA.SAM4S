@@ -54,9 +54,23 @@ export default function CertificadosPage() {
     userid: number;
   } | null>(null);
   const [facturaLoading, setFacturaLoading] = useState(false);
-
   // Estado para columnas colapsables
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  
+  // Estados para cambio masivo de estado
+  const [selectedDownloadIds, setSelectedDownloadIds] = useState<Set<string>>(new Set());
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkNuevoEstado, setBulkNuevoEstado] = useState('');
+  const [bulkFacturaData, setBulkFacturaData] = useState({
+    numero_factura: '',
+    referencia_pago: ''
+  });
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkResults, setBulkResults] = useState<{
+    success: number;
+    failed: number;
+    errors: string[];
+  } | null>(null);
   
   const toggleRowExpanded = (downloadId: string) => {
     setExpandedRows(prev => {
@@ -66,8 +80,100 @@ export default function CertificadosPage() {
       } else {
         newSet.add(downloadId);
       }
+      return newSet;    });
+  };
+
+  // Funciones para selección de descargas
+  const toggleSelectDownload = (downloadId: string) => {
+    setSelectedDownloadIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(downloadId)) {
+        newSet.delete(downloadId);
+      } else {
+        newSet.add(downloadId);
+      }
       return newSet;
     });
+  };
+
+  const toggleSelectAll = () => {
+    // Filtrar descargas que no sean PREPAGO
+    const selectableIds = new Set(
+      historial
+        .filter(d => d.tipoDescarga !== 'PREPAGO')
+        .map(d => d.id)
+    );
+
+    if (selectedDownloadIds.size === selectableIds.size) {
+      // Si todos están seleccionados, desseleccionar todos
+      setSelectedDownloadIds(new Set());
+    } else {
+      // Seleccionar todos los no-PREPAGO
+      setSelectedDownloadIds(selectableIds);
+    }
+  };
+
+  const handleBulkStatusChange = () => {
+    // Reset form y abrir modal
+    setBulkNuevoEstado('');
+    setBulkFacturaData({ numero_factura: '', referencia_pago: '' });
+    setBulkResults(null);
+    setShowBulkModal(true);
+  };
+
+  const handleConfirmarCambioMasivo = async () => {
+    if (!bulkNuevoEstado || bulkLoading) return;
+
+    setBulkLoading(true);
+    const selectedIds = Array.from(selectedDownloadIds);
+    let successCount = 0;
+    let failedCount = 0;
+    const errors: string[] = [];
+
+    for (const downloadId of selectedIds) {
+      try {
+        const descarga = historial.find(d => d.id === downloadId);
+        if (!descarga) continue;
+
+        // Bloquear si es PREPAGO
+        if (descarga.tipoDescarga === 'PREPAGO') {
+          failedCount++;
+          errors.push(`${descarga.controladorId}: PREPAGO - Inmutable`);
+          continue;
+        }
+
+        // Construir datos de actualización
+        const updateData: any = { estadoMayorista: bulkNuevoEstado };
+
+        if (bulkNuevoEstado === 'Facturado' && bulkFacturaData.numero_factura) {
+          updateData.numero_factura = bulkFacturaData.numero_factura;
+        }
+
+        if (bulkNuevoEstado === 'Cobrado' && bulkFacturaData.referencia_pago) {
+          updateData.referencia_pago = bulkFacturaData.referencia_pago;
+        }
+
+        await certificadosApi.cambiarEstado(downloadId, updateData);
+        successCount++;
+      } catch (error: any) {
+        failedCount++;
+        const descarga = historial.find(d => d.id === downloadId);
+        const controlador = descarga?.controladorId || downloadId;
+        errors.push(`${controlador}: ${error.response?.data?.message || 'Error desconocido'}`);
+      }
+    }
+
+    setBulkResults({ success: successCount, failed: failedCount, errors });
+    setBulkLoading(false);
+
+    // Si todo fue exitoso, cerrar modal y recargar
+    if (failedCount === 0) {
+      setTimeout(() => {
+        setShowBulkModal(false);
+        setSelectedDownloadIds(new Set());
+        loadHistorial();
+      }, 2000);
+    }
   };
   
   const router = useRouter();
@@ -91,9 +197,12 @@ export default function CertificadosPage() {
   useEffect(() => {
     if (activeTab === 'historial') {
       loadHistorial();
-    }
-  }, [activeTab, user, filtros]);
+    }  }, [activeTab, user, filtros]);
 
+  // Limpiar selección cuando cambian los filtros
+  useEffect(() => {
+    setSelectedDownloadIds(new Set());
+  }, [filtros]);
 
   const loadMetricas = async () => {
     try {
@@ -320,8 +429,7 @@ export default function CertificadosPage() {
       case 4: return 'Facturación';
       default: return 'Usuario';
     }
-  };
-  const getEstadoColor = (estado: string) => {
+  };  const getEstadoColor = (estado: string) => {
     switch (estado) {
       case 'PREPAGO': return 'bg-red-100 text-red-800';
       case 'Pendiente de Facturar': return 'bg-yellow-100 text-yellow-800';
@@ -330,6 +438,12 @@ export default function CertificadosPage() {
       default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  // Calcular descargas seleccionadas válidas (no PREPAGO)
+  const validSelectedCount = Array.from(selectedDownloadIds).filter(id =>
+    historial.find(d => d.id === id && d.tipoDescarga !== 'PREPAGO')
+  ).length;
+
   const handleLogout = () => {
       authApi.logout();
     };  // Función auxiliar para obtener descargas pendientes
@@ -645,9 +759,18 @@ export default function CertificadosPage() {
                     XLSX.writeFile(wb, 'historial_certificados.xlsx');
                   }}
                   className="mb-4 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded shadow"
-                >
-                  Exportar a Excel
+                >                  Exportar a Excel
                 </button>
+                {/* Botón de cambio masivo de estado - solo para Admin y Facturación */}
+                {(user?.rol === 1 || user?.rol === 4) && (
+                  <button
+                    onClick={handleBulkStatusChange}
+                    disabled={validSelectedCount === 0}
+                    className="ml-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold px-4 py-2 rounded shadow transition-colors"
+                  >
+                    Cambio de Estado Masivo ({validSelectedCount})
+                  </button>
+                )}
                 {/* Filtros */}
                 <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-4">
                   {user?.rol !== 3 && (
@@ -736,8 +859,18 @@ export default function CertificadosPage() {
                   </div>
                 ) : (
                   <div>
-                    <div className="overflow-x-auto">
-                      <table>                        <thead className="bg-gray-50">                          <tr>
+                    <div className="overflow-x-auto">                      <table>                        <thead className="bg-gray-50">                          <tr>
+                            {(user?.rol === 1 || user?.rol === 4) && (
+                              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedDownloadIds.size > 0 && selectedDownloadIds.size === historial.filter(d => d.tipoDescarga !== 'PREPAGO').length}
+                                  onChange={toggleSelectAll}
+                                  className="rounded"
+                                  title="Seleccionar todos (excepto PREPAGO)"
+                                />
+                              </th>
+                            )}
                             <th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Controlador</th>
                             <th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
                             {user?.rol == 4   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>)}                            {user?.rol !== 3   && (<th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>)}
@@ -748,10 +881,21 @@ export default function CertificadosPage() {
                             <th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Acciones</th>
                           </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">
-                          {historial.map((descarga) => {
+                        <tbody className="bg-white divide-y divide-gray-200">                          {historial.map((descarga) => {
                             const esUltimo = descarga.controladorId && ultimosPorControlador[descarga.controladorId] === descarga.id;
                             return (                              <tr key={descarga.id}>
+                                {(user?.rol === 1 || user?.rol === 4) && (
+                                  <td className="px-3 py-4 whitespace-nowrap text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedDownloadIds.has(descarga.id) && descarga.tipoDescarga !== 'PREPAGO'}
+                                      onChange={() => descarga.tipoDescarga !== 'PREPAGO' && toggleSelectDownload(descarga.id)}
+                                      disabled={descarga.tipoDescarga === 'PREPAGO'}
+                                      className="rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                                      title={descarga.tipoDescarga === 'PREPAGO' ? 'PREPAGO no puede ser seleccionado' : 'Seleccionar para cambio masivo'}
+                                    />
+                                  </td>
+                                )}
                                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.controladorId || descarga.certificadoNombre}</td>
                                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.usuario ? descarga.usuario.nombre : descarga.usuarioId}</td>
                                 {user?.rol == 4   && (<td className="px-3 py-4  whitespace-nowrap">
@@ -919,8 +1063,154 @@ export default function CertificadosPage() {
               </div>
             )}
           </div>
+        </div>      </div>
+
+      {/* Modal para cambio masivo de estado */}
+      {showBulkModal && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            {!bulkResults ? (
+              <>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Cambio de Estado Masivo
+                </h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  {validSelectedCount} descarga{validSelectedCount !== 1 ? 's' : ''} seleccionada{validSelectedCount !== 1 ? 's' : ''}
+                </p>
+
+                {/* Estado selector */}
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Nuevo Estado *
+                  </label>
+                  <select
+                    value={bulkNuevoEstado}
+                    onChange={(e) => {
+                      setBulkNuevoEstado(e.target.value);
+                      setBulkFacturaData({ numero_factura: '', referencia_pago: '' });
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="">Seleccionar estado...</option>
+                    <option value="Pendiente de Facturar">Pendiente de Facturar</option>
+                    <option value="Facturado">Facturado</option>
+                    <option value="Cobrado">Cobrado</option>
+                  </select>
+                </div>
+
+                {/* Campo de Número de Factura */}
+                {bulkNuevoEstado === 'Facturado' && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Número de Factura (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={bulkFacturaData.numero_factura}
+                      onChange={(e) => setBulkFacturaData({ ...bulkFacturaData, numero_factura: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder="Ej: 2025-001"
+                    />
+                  </div>
+                )}
+
+                {/* Campo de Referencia de Pago */}
+                {bulkNuevoEstado === 'Cobrado' && (
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Referencia de Pago (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={bulkFacturaData.referencia_pago}
+                      onChange={(e) => setBulkFacturaData({ ...bulkFacturaData, referencia_pago: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder="Ej: REF-123456"
+                    />
+                  </div>
+                )}
+
+                {/* Botones */}
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => {
+                      if (bulkLoading) return;
+                      setShowBulkModal(false);
+                      setBulkNuevoEstado('');
+                      setBulkFacturaData({ numero_factura: '', referencia_pago: '' });
+                      setBulkResults(null);
+                    }}
+                    disabled={bulkLoading}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={handleConfirmarCambioMasivo}
+                    disabled={bulkLoading || !bulkNuevoEstado}
+                    className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {bulkLoading ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Procesando ({validSelectedCount})...</span>
+                      </>
+                    ) : (
+                      `Aplicar a ${validSelectedCount} descarga${validSelectedCount !== 1 ? 's' : ''}`
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Resultados del cambio masivo */}
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  Resultado del Cambio Masivo
+                </h3>
+
+                <div className="space-y-3 mb-6">
+                  <div className="p-3 bg-green-50 border border-green-200 rounded">
+                    <p className="text-sm text-green-800">
+                      ✓ <strong>{bulkResults.success}</strong> descarga{bulkResults.success !== 1 ? 's' : ''} actualizada{bulkResults.success !== 1 ? 's' : ''} correctamente
+                    </p>
+                  </div>
+
+                  {bulkResults.failed > 0 && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded">
+                      <p className="text-sm text-red-800 mb-2">
+                        ✗ <strong>{bulkResults.failed}</strong> descarga{bulkResults.failed !== 1 ? 's' : ''} con error{bulkResults.failed !== 1 ? 's' : ''}:
+                      </p>
+                      <ul className="text-xs text-red-700 space-y-1 ml-4">
+                        {bulkResults.errors.map((error, idx) => (
+                          <li key={idx}>• {error}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowBulkModal(false);
+                      setBulkNuevoEstado('');
+                      setBulkFacturaData({ numero_factura: '', referencia_pago: '' });
+                      setBulkResults(null);
+                      setSelectedDownloadIds(new Set());
+                    }}
+                    className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Modal para entrada de número de factura y referencia de pago */}
       {showFacturacionModal && (
