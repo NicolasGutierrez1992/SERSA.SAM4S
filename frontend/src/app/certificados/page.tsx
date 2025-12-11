@@ -40,6 +40,35 @@ export default function CertificadosPage() {
 
   // Estados para métricas
   const [metricas, setMetricas] = useState<MetricasPersonales | null>(null);
+
+  // Estados para modal de facturación
+  const [showFacturacionModal, setShowFacturacionModal] = useState(false);
+  const [facturaData, setFacturaData] = useState({
+    numero_factura: '',
+    referencia_pago: ''
+  });
+  const [pendingEstadoChange, setPendingEstadoChange] = useState<{
+    downloadId: string;
+    nuevoEstado: string;
+    tipo: 'mayorista' | 'distribuidor';
+    userid: number;
+  } | null>(null);
+  const [facturaLoading, setFacturaLoading] = useState(false);
+
+  // Estado para columnas colapsables
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  
+  const toggleRowExpanded = (downloadId: string) => {
+    setExpandedRows(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(downloadId)) {
+        newSet.delete(downloadId);
+      } else {
+        newSet.add(downloadId);
+      }
+      return newSet;
+    });
+  };
   
   const router = useRouter();
 
@@ -127,22 +156,29 @@ export default function CertificadosPage() {
     setHistorial(response.descargas || []);
     setHistorialLoading(false);
   };
- 
-  // Validar límite de descargas (ahora función reutilizable)
+   // Validar límite de descargas (ahora función reutilizable)
   const validarLimiteDescargas = async () => {
     if (!user) return;
-    const limite = user.limite_descargas;
-    const pendientes = await getDescargasPendientes(user.cuit, limite);
-    // Los administradores (rol 1) siempre pueden descargar
-    if (user.rol === 1) {
-      setCanDownload(true);
-      setDownloadMessage('');
-    } else if (pendientes >= limite) {
-      setCanDownload(false);
-      setDownloadMessage(`Has alcanzado el límite de descargas pendientes (${pendientes} de ${limite}). No puedes descargar certificados hasta que se libere el límite.`);
-    } else {
-      setCanDownload(true);
-      setDownloadMessage('');
+    try {
+      // Intentar usar el nuevo endpoint de validación PREPAGO
+      const validacion = await certificadosApi.validarDescarga();
+      setCanDownload(validacion.canDownload);
+      setDownloadMessage(validacion.message);
+    } catch (error) {
+      // Fallback al método anterior si el endpoint no existe aún
+      const limite = user.limite_descargas;
+      const pendientes = await getDescargasPendientes(user.cuit, limite);
+      
+      if (user.rol === 1) {
+        setCanDownload(true);
+        setDownloadMessage('');
+      } else if (pendientes >= limite) {
+        setCanDownload(false);
+        setDownloadMessage(`Has alcanzado el límite de descargas pendientes (${pendientes} de ${limite}). No puedes descargar certificados hasta que se libere el límite.`);
+      } else {
+        setCanDownload(true);
+        setDownloadMessage('');
+      }
     }
   };
 
@@ -203,10 +239,31 @@ export default function CertificadosPage() {
       setDescargaLoading(false);
      
     }
-  };
-  const handleEstadoChange = async (downloadId: string, nuevoEstado: string, tipo: 'mayorista' | 'distribuidor', userid: number) => {
+  };  const handleEstadoChange = async (downloadId: string, nuevoEstado: string, tipo: 'mayorista' | 'distribuidor', userid: number, tipoDescarga?: string) => {
     try {
-      // Usar id_mayorista del usuario logueado (ya está disponible en 'user')
+      // Bloquear cambios si es PREPAGO
+      if (tipoDescarga === 'PREPAGO') {
+        alert('No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo e inmutable.');
+        return;
+      }
+
+      // Si requiere número de factura o referencia, mostrar modal
+      if ((nuevoEstado === 'Facturado' || nuevoEstado === 'Cobrado') && tipo === 'mayorista') {
+        setFacturaData({
+          numero_factura: '',
+          referencia_pago: ''
+        });
+        setPendingEstadoChange({
+          downloadId,
+          nuevoEstado,
+          tipo,
+          userid
+        });
+        setShowFacturacionModal(true);
+        return;
+      }
+      
+      // Si no requiere datos, hacer cambio directo
       if (user?.id_mayorista === 1) {
         await certificadosApi.cambiarEstado(downloadId, { estadoDistribuidor: nuevoEstado, estadoMayorista: nuevoEstado });
       }
@@ -223,6 +280,37 @@ export default function CertificadosPage() {
       alert('Error al cambiar estado');
     }
   };
+  const handleConfirmarFacturacion = async () => {
+    if (!pendingEstadoChange) return;
+    if (facturaLoading) return; // Prevenir múltiples clics
+
+    setFacturaLoading(true);
+    try {
+      const updateData: any = { [pendingEstadoChange.tipo === 'mayorista' ? 'estadoMayorista' : 'estadoDistribuidor']: pendingEstadoChange.nuevoEstado };
+      
+      // Agregar número de factura si se está cambiando a Facturado
+      if (pendingEstadoChange.nuevoEstado === 'Facturado' && facturaData.numero_factura) {
+        updateData.numero_factura = facturaData.numero_factura;
+      }
+
+      // Agregar referencia de pago si se está cambiando a Cobrado
+      if (pendingEstadoChange.nuevoEstado === 'Cobrado' && facturaData.referencia_pago) {
+        updateData.referencia_pago = facturaData.referencia_pago;
+      }
+
+      await certificadosApi.cambiarEstado(pendingEstadoChange.downloadId, updateData);
+      setShowFacturacionModal(false);
+      setPendingEstadoChange(null);
+      setFacturaData({ numero_factura: '', referencia_pago: '' });
+      await loadHistorial();
+      alert('Estado actualizado correctamente');
+    } catch (error) {
+      console.error('Error al confirmar facturación:', error);
+      alert('Error al actualizar estado');
+    } finally {
+      setFacturaLoading(false);
+    }
+  };
 
   const getRoleName = (rol: number) => {
     switch (rol) {
@@ -233,9 +321,9 @@ export default function CertificadosPage() {
       default: return 'Usuario';
     }
   };
-
   const getEstadoColor = (estado: string) => {
     switch (estado) {
+      case 'PREPAGO': return 'bg-red-100 text-red-800';
       case 'Pendiente de Facturar': return 'bg-yellow-100 text-yellow-800';
       case 'Facturado': return 'bg-blue-100 text-blue-800';
       case 'Cobrado': return 'bg-green-100 text-green-800';
@@ -441,10 +529,15 @@ export default function CertificadosPage() {
               <div className="max-w-md mx-auto">
                 <h3 className="text-lg font-medium text-gray-900 mb-6">
                   Descargar Nuevo Certificado
-                </h3>
-                {downloadMessage && (
+                </h3>                {downloadMessage && (
                   <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded mb-6">
                     {downloadMessage}
+                  </div>
+                )}
+                
+                {user?.tipo_descarga === 'PREPAGO' && metricas && (
+                  <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
+                    <strong>Sistema PREPAGO Activo:</strong> Tienes {metricas.limiteDescargas} descargas disponibles.
                   </div>
                 )}
 
@@ -621,8 +714,7 @@ export default function CertificadosPage() {
                         <option key={year} value={year}>{year}</option>
                       ))}
                     </select>
-                  </div>
-                  <div>
+                  </div>                  <div>
                     <label className="block text-sm font-medium text-gray-700">Estado</label>
                     <select
                       value={filtros.estadoMayorista}
@@ -630,19 +722,11 @@ export default function CertificadosPage() {
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     >
                       <option value="">Todos los estados</option>
+                      <option value="PREPAGO">PREPAGO</option>
                       <option value="Pendiente de Facturar">Pendiente de Facturar</option>
                       <option value="Facturado">Facturado</option>
                       <option value="Cobrado">Cobrado</option>
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Controlador</label>
-                    <input
-                      type="text"
-                      value={filtros.controladorId}
-                      onChange={e => setFiltros(f => ({ ...f, controladorId: e.target.value }))}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    />
                   </div>
                 </div>
                 {/* Tabla */}
@@ -653,15 +737,12 @@ export default function CertificadosPage() {
                 ) : (
                   <div>
                     <div className="overflow-x-auto">
-                      <table>
-                        <thead className="bg-gray-50">
-                          <tr>
+                      <table>                        <thead className="bg-gray-50">                          <tr>
                             <th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Controlador</th>
                             <th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
-                            {user?.rol == 4   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>)}
-                            {user?.rol !== 3   && (<th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>)}
+                            {user?.rol == 4   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>)}                            {user?.rol !== 3   && (<th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>)}
                             {user?.rol !== 3   && (<th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Fecha de Facturación</th>)}
-                            {user?.rol !== 4   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Distribuidor</th>)}
+                            {(user?.rol === 2 || user?.rol === 3)   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Distribuidor</th>)}
                             {user?.rol !== 4   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Ultima Creacion</th>)}
                             {user?.rol == 4   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>)}
                             <th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Acciones</th>
@@ -670,24 +751,82 @@ export default function CertificadosPage() {
                         <tbody className="bg-white divide-y divide-gray-200">
                           {historial.map((descarga) => {
                             const esUltimo = descarga.controladorId && ultimosPorControlador[descarga.controladorId] === descarga.id;
-                            return (
-                              <tr key={descarga.id}>
+                            return (                              <tr key={descarga.id}>
                                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.controladorId || descarga.certificadoNombre}</td>
                                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.usuario ? descarga.usuario.nombre : descarga.usuarioId}</td>
                                 {user?.rol == 4   && (<td className="px-3 py-4  whitespace-nowrap">
                                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full `}>{descarga.usuario?.cuit}</span>
-                                </td>)}
-                                {user?.rol !== 3   && (<td className="px-3 py-4  whitespace-nowrap">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>{descarga.estadoMayorista}</span>
-                                </td>)}
-
-                                {user?.rol !== 3   && (<td className="px-3 py-4  whitespace-nowrap text-sm text-gray-900">{
+                                </td>)}{user?.rol !== 3   && (<td className="px-3 py-4 whitespace-nowrap">
+                                  <div className="space-y-2">
+                                    {/* Collapsible row header */}
+                                    <button
+                                      onClick={() => toggleRowExpanded(descarga.id)}
+                                      className="flex items-center gap-2 w-full hover:opacity-80"
+                                    >
+                                      <svg
+                                        className={`h-4 w-4 transition-transform ${expandedRows.has(descarga.id) ? 'rotate-90' : ''}`}
+                                        fill="none"
+                                        viewBox="0 0 24 24"
+                                        stroke="currentColor"
+                                      >
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                      </svg>
+                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>
+                                        Estado: {descarga.estadoMayorista}
+                                      </span>
+                                    </button>
+                                    
+                                    {/* Expanded content */}
+                                    {expandedRows.has(descarga.id) && (
+                                      <div className="pl-6 space-y-2 border-l-2 border-gray-300">                                        {/* Estado change dropdown */}
+                                        {(user?.rol === 1 || user?.rol === 4) && (
+                                          <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-2">Cambiar Estado:</label>
+                                            <select
+                                              onChange={(e) => handleEstadoChange(descarga.id, e.target.value, 'mayorista', descarga.usuarioId, descarga.tipoDescarga || undefined)}
+                                              className="mt-1 text-xs border rounded px-2 py-1 w-full"
+                                              defaultValue={descarga.estadoMayorista}
+                                              disabled={descarga.tipoDescarga === 'PREPAGO'}
+                                              title={descarga.tipoDescarga === 'PREPAGO' ? 'Estado PREPAGO es inmutable' : ''}
+                                            >
+                                              <option value={descarga.estadoMayorista}>{descarga.estadoMayorista}</option>
+                                              <option value="Pendiente de Facturar">Pendiente de Facturar</option>
+                                              <option value="Facturado">Facturado</option>
+                                              <option value="Cobrado">Cobrado</option>
+                                            </select>
+                                          </div>
+                                        )}
+                                        
+                                        {/* Invoice and payment reference fields */}
+                                        <div className="space-y-1 pt-2">
+                                          {descarga.numero_factura && (
+                                            <div className="text-xs">
+                                              <span className="font-semibold text-gray-700">Nro Factura:</span>
+                                              <span className="ml-2 text-gray-600">{descarga.numero_factura}</span>
+                                            </div>
+                                          )}
+                                          {descarga.referencia_pago && (
+                                            <div className="text-xs">
+                                              <span className="font-semibold text-gray-700">Referencia:</span>
+                                              <span className="ml-2 text-gray-600">{descarga.referencia_pago}</span>
+                                            </div>
+                                          )}
+                                          {!descarga.numero_factura && !descarga.referencia_pago && (
+                                            <div className="text-xs text-gray-500">
+                                              Sin datos de facturación
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>)}                                {user?.rol !== 3   && (<td className="px-3 py-4  whitespace-nowrap text-sm text-gray-900">{
                                   !descarga.fechaFacturacion
                                     ? 'Sin facturar'
                                     : new Date(descarga.fechaFacturacion).toLocaleDateString()
                                 }</td>)}
 
-                                {user?.rol !== 4   && (<td className="px-3 py-4  whitespace-nowrap">
+                                {(user?.rol === 2 || user?.rol === 3)   && (<td className="px-3 py-4  whitespace-nowrap">
                                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>{descarga.estadoDistribuidor}</span>
                                 </td>)}
                               
@@ -695,26 +834,15 @@ export default function CertificadosPage() {
                                   isNaN(new Date(descarga.updatedAt).getTime())
                                     ? 'Sin fecha'
                                     : new Date(descarga.updatedAt).toLocaleDateString()
-                                }</td>)}
-                                <td className="px-3 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                  {/* Cambiar estado mayorista (Admin y Facturación) */}
-                                  {(user?.rol === 1 || user?.rol === 4) && (
-                                    <select
-                                      onChange={(e) => handleEstadoChange(descarga.id, e.target.value, 'mayorista',descarga.usuarioId)}
-                                      className="text-xs border rounded px-2 py-1"
-                                      defaultValue={descarga.estadoMayorista}
-                                    >
-                                      <option value="Pendiente de Facturar">Pendiente de Facturar</option>
-                                      <option value="Facturado">Facturado</option>
-                                      <option value="Cobrado">Cobrado</option>
-                                    </select>
-                                  )}
+                                }</td>)}                                <td className="px-3 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                   {/* Cambiar estado distribuidor (Mayorista) */}
                                   {user?.rol === 2 && (
                                     <select
-                                      onChange={(e) => handleEstadoChange(descarga.id, e.target.value, 'distribuidor', descarga?.usuarioId)}
+                                      onChange={(e) => handleEstadoChange(descarga.id, e.target.value, 'distribuidor', descarga?.usuarioId, descarga.tipoDescarga || undefined)}
                                       className="text-xs border rounded px-2 py-1"
                                       defaultValue={descarga.estadoDistribuidor}
+                                      disabled={descarga.tipoDescarga === 'PREPAGO'}
+                                      title={descarga.tipoDescarga === 'PREPAGO' ? 'Estado PREPAGO es inmutable' : ''}
                                     >
                                       <option value="Pendiente de Facturar">Pendiente de Facturar</option>
                                       <option value="Facturado">Facturado</option>
@@ -760,13 +888,85 @@ export default function CertificadosPage() {
                         </div>
                       )}
                     </div>
-                  </div>
-                )}
+                  </div>                )}
               </div>
             )}
           </div>
         </div>
       </div>
+
+      {/* Modal para entrada de número de factura y referencia de pago */}
+      {showFacturacionModal && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              {pendingEstadoChange?.nuevoEstado === 'Facturado' 
+                ? 'Número de Factura' 
+                : 'Referencia de Pago'}
+            </h3>
+
+            {pendingEstadoChange?.nuevoEstado === 'Facturado' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Número de Factura (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={facturaData.numero_factura}
+                  onChange={(e) => setFacturaData({ ...facturaData, numero_factura: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Ej: 2025-001"
+                />
+              </div>
+            )}
+
+            {pendingEstadoChange?.nuevoEstado === 'Cobrado' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Referencia de Pago (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={facturaData.referencia_pago}
+                  onChange={(e) => setFacturaData({ ...facturaData, referencia_pago: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  placeholder="Ej: REF-123456"
+                />
+              </div>
+            )}            <div className="flex space-x-3">
+              <button
+                onClick={() => {
+                  if (facturaLoading) return;
+                  setShowFacturacionModal(false);
+                  setPendingEstadoChange(null);
+                  setFacturaData({ numero_factura: '', referencia_pago: '' });
+                }}
+                disabled={facturaLoading}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmarFacturacion}
+                disabled={facturaLoading}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {facturaLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Procesando...</span>
+                  </>
+                ) : (
+                  'Confirmar'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

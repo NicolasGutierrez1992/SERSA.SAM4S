@@ -11,10 +11,9 @@ export class User {
   @ApiProperty({ description: 'Estado del usuario (0=Inactivo, 1=Activo)' })
   @Column({ type: 'integer', nullable: true })
   status: number;
-
   @ApiProperty({ description: 'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación)' })
-  @Column({ type: 'integer', nullable: true })
-  rol: number;  
+  @Column({ type: 'integer', nullable: true, name: 'id_rol' })
+  rol: number;
   
   @ApiProperty({ description: 'Nombre completo del usuario' })
   @Column({ type: 'text', nullable: true })
@@ -54,9 +53,20 @@ export class User {
 
   @Column({ type: 'text', nullable: true })
   celular: string;
+
+  @Column({
+    type: 'enum',
+    enum: ['CUENTA_CORRIENTE', 'PREPAGO'],
+    default: 'CUENTA_CORRIENTE'
+  })
+  @ApiProperty({
+    description: 'Tipo de descarga del usuario',
+    enum: ['CUENTA_CORRIENTE', 'PREPAGO'],
+    default: 'CUENTA_CORRIENTE',
+    example: 'CUENTA_CORRIENTE'
+  })
+  tipo_descarga: 'CUENTA_CORRIENTE' | 'PREPAGO';
   
   @OneToMany(() => Descarga, descarga => descarga.usuario)
   descargas: Descarga[];
-
-
 }

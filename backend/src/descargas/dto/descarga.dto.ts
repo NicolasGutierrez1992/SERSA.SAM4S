@@ -59,6 +59,22 @@ export class UpdateEstadoDescargaDto {
   @IsOptional()
   @IsEnum(EstadoDescarga)
   estadoDistribuidor?: EstadoDescarga;
+
+  @ApiPropertyOptional({
+    description: 'Número de factura (solo para estado Facturado)',
+    example: '2025-001'
+  })
+  @IsOptional()
+  @IsString()
+  numero_factura?: string;
+
+  @ApiPropertyOptional({
+    description: 'Referencia de pago (solo para estado Cobrado)',
+    example: 'REF-123456'
+  })
+  @IsOptional()
+  @IsString()
+  referencia_pago?: string;
 }
 
 export class QueryDescargasDto {

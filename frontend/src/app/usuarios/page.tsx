@@ -32,8 +32,7 @@ export default function UsuariosPage() {
 
   const { Search } = Input;
 
-  const currentUser = getCurrentUser();
-  const isMayorista = currentUser?.rol === 2 || currentUser?.id_rol === 2;
+  const currentUser = getCurrentUser();  const isMayorista = currentUser?.rol === 2;
   const idMayorista = currentUser?.id_mayorista || null;
 
   useEffect(() => {
@@ -75,18 +74,17 @@ export default function UsuariosPage() {
       form.setFieldsValue({ rol: 3, id_mayorista: idMayorista });
     }
     setModalVisible(true);
-  };
-
-  // Mapea los campos del usuario a los nombres esperados por el formulario
+  };  // Mapea los campos del usuario a los nombres esperados por el formulario
   const mapUserToForm = (user: any) => ({
     nombre: user.nombre,
     email: user.mail,
     cuit: user.cuit,
-    rol: user.id_rol,
+    rol: user.rol,
     status: user.status,
     limiteDescargas: user.limite_descargas,
     id_mayorista: user.id_mayorista,
     celular: user.celular,
+    tipo_descarga: user.tipo_descarga || 'CUENTA_CORRIENTE',
   });
 
   const openEditUser = (user: any) => {
@@ -180,13 +178,12 @@ export default function UsuariosPage() {
     4: 'COLOMA',
     5: 'SANTICH',
   };
-
   const columns = [
     { title: 'ID', dataIndex: 'id_usuario', key: 'id_usuario', sorter: (a: any, b: any) => a.id_usuario - b.id_usuario },
     { title: 'Nombre', dataIndex: 'nombre', key: 'nombre', sorter: (a: any, b: any) => a.nombre.localeCompare(b.nombre) },
     { title: 'Email', dataIndex: 'mail', key: 'mail', sorter: (a: any, b: any) => a.mail.localeCompare(b.mail) },
     { title: 'CUIT', dataIndex: 'cuit', key: 'cuit', sorter: (a: any, b: any) => a.cuit.localeCompare(b.cuit) },
-    { title: 'Rol', dataIndex: 'id_rol', key: 'id_rol', render: (rol: number) => rol === 1 ? 'Admin' : rol === 2 ? 'Mayorista' : rol === 3 ? 'Distribuidor' : 'Otro', sorter: (a: any, b: any) => a.id_rol - b.id_rol },
+    { title: 'Rol', dataIndex: 'rol', key: 'rol', render: (rol: number) => rol === 1 ? 'Admin' : rol === 2 ? 'Mayorista' : rol === 3 ? 'Distribuidor' : rol === 4 ? 'Facturación' : 'Usuario' },
     { title: 'Estado', dataIndex: 'status', key: 'status', render: (s: number) => s === 1 ? 'Activo' : s === 2 ? 'Suspendido' : 'Inactivo', sorter: (a: any, b: any) => a.status - b.status },
     {
       title: 'Mayorista',
@@ -195,6 +192,16 @@ export default function UsuariosPage() {
       render: (id: number) => MAYORISTAS_MAP[id] || '-',
     },
     { title: 'Límite Descargas', dataIndex: 'limite_descargas', key: 'limite_descargas', sorter: (a: any, b: any) => a.limite_descargas - b.limite_descargas },
+    { 
+      title: 'Tipo Descarga', 
+      dataIndex: 'tipo_descarga', 
+      key: 'tipo_descarga', 
+      render: (tipo: string) => {
+        const color = tipo === 'PREPAGO' ? '#ef4444' : '#3b82f6';
+        const label = tipo === 'PREPAGO' ? 'Prepago' : 'Cuenta Corriente';
+        return <span style={{ color, fontWeight: 500 }}>{label}</span>;
+      }
+    },
   //  { title: 'Último Login', dataIndex: 'ultimo_login', key: 'ultimo_login', sorter: (a: any, b: any) => (a.ultimo_login || '').localeCompare(b.ultimo_login || '') },
     {
       title: 'Acciones',
@@ -343,11 +350,10 @@ export default function UsuariosPage() {
                   okButtonProps={{ style: { background: '#6366f1', borderColor: '#6366f1', color: '#fff' }, className: 'hover:bg-indigo-700 hover:border-indigo-700' }}
                   cancelButtonProps={{ style: { background: '#6366f1', borderColor: '#6366f1', color: '#fff' }, className: 'hover:bg-indigo-700 hover:border-indigo-700' }}
                   destroyOnClose
-                >
-                  <Form
+                >                  <Form
                     form={form}
                     layout="vertical"
-                    initialValues={editingUser || { status: 1, id_rol: 3 }}
+                    initialValues={editingUser || { status: 1, id_rol: 3, tipo_descarga: 'CUENTA_CORRIENTE' }}
                   >
                     <Form.Item name="cuit" label="CUIT" rules={[{ required: true, message: 'Ingrese el CUIT' }]}>
                       <Input disabled={isMayorista} />
@@ -384,9 +390,18 @@ export default function UsuariosPage() {
                           { value: 3, label: 'Inactivo' }
                         ]}
                       />
-                    </Form.Item>
-                    <Form.Item name="limiteDescargas" label="Límite de Descargas" rules={[{ required: true }]}> 
+                    </Form.Item>                    <Form.Item name="limiteDescargas" label="Límite de Descargas" rules={[{ required: true }]}> 
                       <Input type="number" min={1} />
+                    </Form.Item>
+                    
+                    <Form.Item name="tipo_descarga" label="Tipo de Descarga" rules={[{ required: true, message: 'Seleccione el tipo de descarga' }]}>
+                      <Select 
+                        disabled={isMayorista}
+                        options={[
+                          { value: 'CUENTA_CORRIENTE', label: 'Cuenta Corriente' },
+                          { value: 'PREPAGO', label: 'Prepago' }
+                        ]}
+                      />
                     </Form.Item>
                     
                     <Form.Item name="id_mayorista" label="Mayorista">

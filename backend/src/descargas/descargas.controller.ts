@@ -1,4 +1,4 @@
-export interface IDescarga {
+﻿export interface IDescarga {
   id_descarga: number;
   id_usuario: number;
   id_certificado: number;
@@ -9,6 +9,7 @@ export interface IDescarga {
   updated_at: Date;
   certificado_nombre: string;
   fecha_facturacion: Date;
+  tipo_descarga?: 'CUENTA_CORRIENTE' | 'PREPAGO' | null;
 }
 
 export class Descarga implements IDescarga {
@@ -22,6 +23,7 @@ export class Descarga implements IDescarga {
   created_at: Date;
   updated_at: Date;
   certificado_nombre: string;
+  tipo_descarga?: 'CUENTA_CORRIENTE' | 'PREPAGO' | null;
 
   constructor(data: IDescarga) {
     this.id_descarga = data.id_descarga;
@@ -34,5 +36,6 @@ export class Descarga implements IDescarga {
     this.created_at = data.created_at;
     this.updated_at = data.updated_at;
     this.certificado_nombre = data.certificado_nombre;
+    this.tipo_descarga = data.tipo_descarga;
   }
 }

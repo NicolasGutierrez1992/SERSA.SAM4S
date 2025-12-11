@@ -58,9 +58,7 @@ export class UsersService {
       if (!mayorista) {
         throw new NotFoundException('El mayorista especificado no existe o no es válido');
       }
-    }
-
-    // Hash de la contraseña
+    }    // Hash de la contraseña
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(createUserDto.password, saltRounds);    
     const user = this.userRepository.create({
@@ -74,6 +72,7 @@ export class UsersService {
       limite_descargas: createUserDto.limiteDescargas || 5,
       must_change_password: true,
       celular: createUserDto.celular,
+      tipo_descarga: createUserDto.tipo_descarga || 'CUENTA_CORRIENTE',
     });
     const savedUser = await this.userRepository.save(user);
     console.log('[UsersService][create] Salida:', savedUser);
@@ -82,13 +81,11 @@ export class UsersService {
 
   async findAll(queryDto: QueryUsersDto = {}, currentUser?: any) {
     console.log('[UsersService][findAll] Entrada:', queryDto, currentUser);
-    const { page = 10, limit = 100, rol, status, id_mayorista } = queryDto;
-
-    // Obtener todos los usuarios para armar jerarquía y nombreMayorista
+    const { page = 10, limit = 100, rol, status, id_mayorista } = queryDto;    // Obtener todos los usuarios para armar jerarquía y nombreMayorista
     const allUsers = await this.userRepository.find({
       select: [
         'id_usuario', 'cuit', 'nombre', 'mail', 'rol', 'status', 'limite_descargas',
-        'must_change_password', 'ultimo_login', 'id_mayorista', 'created_at', 'updated_at', 'celular'
+        'must_change_password', 'ultimo_login', 'id_mayorista', 'created_at', 'updated_at', 'celular', 'tipo_descarga'
       ]
     });
     // Mapeo id_usuario -> nombre para lookup rápido
@@ -124,7 +121,6 @@ export class UsersService {
     console.log('[UsersService][findAll] Salida:', result);
     return result;
   }
-
   async findOne(id: number): Promise<User> {
     console.log('[UsersService][findOne] Entrada:', id);
     const user = await this.userRepository.findOne({
@@ -143,6 +139,7 @@ export class UsersService {
         created_at: true,
         updated_at: true,
         celular: true,
+        tipo_descarga: true,
       },
     });
 
@@ -152,7 +149,7 @@ export class UsersService {
 
     console.log('[UsersService][findOne] Salida:', user);
     return user;
-  }  async findByCuit(cuit: string): Promise<User | null> {
+  }async findByCuit(cuit: string): Promise<User | null> {
     console.log('\n========================================');
     console.log('[UsersService][findByCuit] INICIANDO BÚSQUEDA');
     console.log('========================================');
@@ -178,6 +175,7 @@ export class UsersService {
         created_at: true,
         updated_at: true,
         password: true,
+        tipo_descarga: true,
       },
     });
     
@@ -204,7 +202,6 @@ export class UsersService {
     console.log('========================================\n');
     return user;
   }
-
   async findByMail(mail: string): Promise<User | null> {
     console.log('[UsersService][findByMail] Entrada:', mail);
     const user = await this.userRepository.findOne({
@@ -223,12 +220,12 @@ export class UsersService {
         created_at: true,
         updated_at: true,
         password: true,
+        tipo_descarga: true,
       },
     });
     console.log('[UsersService][findByMail] Salida:', user);
     return user;
   }
-
   async update(id: number, updateUserDto: UpdateUserDto): Promise<User> {
     console.log('[UsersService][update] Entrada:', id, updateUserDto);
     const user = await this.findOne(id);
@@ -264,7 +261,10 @@ export class UsersService {
     if (updateUserDto.id_mayorista !== undefined) updateData.id_mayorista = updateUserDto.id_mayorista;
     if (updateUserDto.limiteDescargas !== undefined) updateData.limite_descargas = updateUserDto.limiteDescargas;
     if (updateUserDto.celular !== undefined) updateData.celular = updateUserDto.celular;
+    if (updateUserDto.tipo_descarga !== undefined) updateData.tipo_descarga = updateUserDto.tipo_descarga;
+    console.log('[UsersService][update] updateData:', updateData);
     Object.assign(user, updateData);
+    console.log('[UsersService][update] user después de assign:', user);
     const updatedUser = await this.userRepository.save(user);
     console.log('[UsersService][update] Salida:', updatedUser);
     return updatedUser;
@@ -371,6 +371,79 @@ export class UsersService {
     
     console.log('[UsersService][exportToCSV] Salida: CSV generado');
     return headers + rows;
+  }
+
+  /**
+   * Incrementar límite de descargas para usuarios PREPAGO
+   * Se usa cuando se realiza un prepago para agregar más descargas disponibles
+   */
+  async incrementarLimiteDescargas(
+    usuarioId: number,
+    cantidad: number
+  ): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id_usuario: usuarioId }
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Solo para usuarios PREPAGO
+    if (user.tipo_descarga !== 'PREPAGO') {
+      throw new BadRequestException(
+        'Solo se pueden incrementar descargas en usuarios con tipo PREPAGO'
+      );
+    }
+
+    const nuevoLimite = user.limite_descargas + cantidad;
+
+    await this.userRepository.update(
+      { id_usuario: usuarioId },
+      { limite_descargas: nuevoLimite }
+    );
+
+    console.log(
+      `[UsersService][incrementarLimiteDescargas] Límite de descarga incrementado: ${user.limite_descargas} → ${nuevoLimite} (Usuario: ${usuarioId})`
+    );
+
+    return this.findOne(usuarioId);
+  }
+
+  /**
+   * Actualizar tipo de descarga de un usuario
+   * Permite cambiar entre CUENTA_CORRIENTE y PREPAGO
+   * No se permite para Admin ni Mayorista
+   */
+  async updateTipoDescarga(
+    usuarioId: number,
+    tipo: 'CUENTA_CORRIENTE' | 'PREPAGO'
+  ): Promise<User> {
+    const user = await this.userRepository.findOne({
+      where: { id_usuario: usuarioId }
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Validar que no sea Admin ni Mayorista
+    if (user.rol === 1 || user.rol === 2) {
+      throw new BadRequestException(
+        'No se puede cambiar tipo_descarga a administradores o mayoristas'
+      );
+    }
+
+    await this.userRepository.update(
+      { id_usuario: usuarioId },
+      { tipo_descarga: tipo }
+    );
+
+    console.log(
+      `[UsersService][updateTipoDescarga] Tipo de descarga actualizado: ${user.tipo_descarga} → ${tipo} (Usuario: ${usuarioId})`
+    );
+
+    return this.findOne(usuarioId);
   }
 
   private getRolText(rol: number): string {

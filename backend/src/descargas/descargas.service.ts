@@ -1,12 +1,21 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
-import { EstadoDescarga, IDescarga } from '../shared/types';
+import { 
+  EstadoDescarga, 
+  IDescarga 
+} from '../shared/types';
 import { User } from '../users/entities/user.entity';
 import { Descarga } from './entities/descarga.entity';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { Certificado } from '../certificados/entities/certificado.entity';
 import { TimezoneService } from '../common/timezone.service';
+import { 
+  ForbiddenException, 
+  NotFoundException, 
+  BadRequestException 
+} from '@nestjs/common';
+
 interface RegistrarDescargaData {
   usuarioId: number;
   controladorId?: string;
@@ -19,6 +28,13 @@ interface RegistrarErrorDescargaData {
   usuarioId: number;
   error: string;
   ipOrigen?: string;
+}
+
+interface ValidacionDescargaDto {
+  canDownload: boolean;
+  message: string;
+  userType: 'CUENTA_CORRIENTE' | 'PREPAGO' | 'SIN_LIMITE';
+  limiteDisponible: number;
 }
 
 @Injectable()
@@ -83,26 +99,98 @@ export class DescargasService {
     //La notificacion sera via mail
     await this.auditoriaService.notificarExcesoDescargas(mayoristaId, totalPendientes);
   }
+
+  /**
+   * Validar si un usuario puede descargar certificados
+   * Admin (1) y Mayorista (2): siempre pueden
+   * Distribuidor (3) y Facturación (4): deben tener límite disponible
+   */
+  async canUserDownload(userId: number): Promise<ValidacionDescargaDto> {
+    const userRepository = this.descargaRepository.manager.getRepository(User);
+    const user = await userRepository.findOne({ 
+      where: { id_usuario: userId } 
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Admin (1) y Mayorista (2) siempre pueden descargar
+    if (user.rol === 1 || user.rol === 2) {
+      return {
+        canDownload: true,
+        message: '',
+        userType: 'SIN_LIMITE',
+        limiteDisponible: -1
+      };
+    }
+
+    // Distribuidor (3) y Facturación (4) - validar límite
+    if (user.limite_descargas <= 0) {
+      const mensaje = user.tipo_descarga === 'PREPAGO'
+        ? 'Debe realizar un prepago para descargar certificados'
+        : 'Ha alcanzado el límite de descargas. Contacte a su proveedor';
+
+      return {
+        canDownload: false,
+        message: mensaje,
+        userType: user.tipo_descarga,
+        limiteDisponible: user.limite_descargas
+      };
+    }
+
+    return {
+      canDownload: true,
+      message: '',
+      userType: user.tipo_descarga,
+      limiteDisponible: user.limite_descargas
+    };
+  }
   /**
    * Registrar una nueva descarga exitosa
+   * Incluye validación de límite y decremento automático para PREPAGO
    */
   async registrarDescarga(data: RegistrarDescargaData): Promise<IDescarga> {
     try {
       this.logger.log(`Registrando descarga para usuario ${data.usuarioId}`);
+      
+      // ⭐ Validar si el usuario puede descargar
+      const validacion = await this.canUserDownload(data.usuarioId);
+      if (!validacion.canDownload) {
+        throw new ForbiddenException(validacion.message);
+      }
+
+      // Obtener usuario para determinar tipo_descarga
+      const userRepository = this.descargaRepository.manager.getRepository(User);
+      const user = await userRepository.findOne({ 
+        where: { id_usuario: data.usuarioId } 
+      });
+
+      // ⭐ Determinar estado inicial según tipo_descarga
+      const estadoInicial = user.tipo_descarga === 'PREPAGO'
+        ? EstadoDescarga.PREPAGO
+        : EstadoDescarga.PENDIENTE_FACTURAR;
+
       // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
       const ahora = new Date();
       const descarga = this.descargaRepository.create({
         id_usuario: data.usuarioId,
         id_certificado: data.controladorId,        
         certificado_nombre: data.certificadoNombre,
-        estadoMayorista: EstadoDescarga.PENDIENTE_FACTURAR,
-        estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR,
+        tipo_descarga: user.tipo_descarga, // ⭐ Guardar tipo de descarga
+        estadoMayorista: estadoInicial,
+        estadoDistribuidor: estadoInicial,
         tamaño: data.tamaño,
         updated_at: ahora.toISOString(),
         created_at: ahora.toISOString()
       });
 
       const savedDescarga = await this.descargaRepository.save(descarga);
+
+      // ⭐ Decrementar límite solo para PREPAGO
+      if (user.tipo_descarga === 'PREPAGO') {
+        await this.decrementarLimiteDescargas(data.usuarioId, 1);
+      }
 
       // Registrar en auditoría
       await this.auditoriaService.log(
@@ -112,7 +200,8 @@ export class DescargasService {
         savedDescarga.id_descarga as any,
         null,
         {
-          certificado: data.certificadoNombre
+          certificado: data.certificadoNombre,
+          tipo_descarga: user.tipo_descarga
         },
         data.ipOrigen
       );
@@ -124,14 +213,12 @@ export class DescargasService {
 
     } catch (error) {
       this.logger.error('Error registrando descarga:', error.message);
-      throw new Error(`Error al registrar descarga: ${error.message}`);
+      throw error;
     }
   }
-
   /**
    * Convertir entidad Descarga a IDescarga
-   */
-  private convertToIDescarga(descarga: Descarga): IDescarga {
+   */  private convertToIDescarga(descarga: Descarga): IDescarga {
     return {
       id: descarga.id_descarga,
       usuarioId: descarga.id_usuario,
@@ -141,7 +228,11 @@ export class DescargasService {
       estadoDistribuidor: descarga.estadoDistribuidor as EstadoDescarga,
       createdAt: descarga.created_at,
       updatedAt: descarga.updated_at,
-      fechaFacturacion: descarga.fecha_facturacion,      tamaño: descarga.tamaño,
+      fechaFacturacion: descarga.fecha_facturacion,
+      tamaño: descarga.tamaño,
+      tipoDescarga: descarga.tipo_descarga,
+      numero_factura: descarga.numero_factura,
+      referencia_pago: descarga.referencia_pago,
       usuario: descarga.usuario
         ? {
             nombre: descarga.usuario.nombre,
@@ -152,6 +243,32 @@ export class DescargasService {
           }
         : undefined
     };
+  }
+
+  /**
+   * Decrementar límite de descargas para usuarios PREPAGO
+   */
+  async decrementarLimiteDescargas(usuarioId: number, cantidad: number): Promise<void> {
+    const userRepository = this.descargaRepository.manager.getRepository(User);
+    const user = await userRepository.findOne({
+      where: { id_usuario: usuarioId }
+    });
+
+    if (!user) {
+      throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // No permitir negativos
+    const nuevoLimite = Math.max(0, user.limite_descargas - cantidad);
+    
+    await userRepository.update(
+      { id_usuario: usuarioId },
+      { limite_descargas: nuevoLimite }
+    );
+
+    this.logger.log(
+      `Límite de descarga actualizado: ${user.limite_descargas} → ${nuevoLimite} (Usuario: ${usuarioId})`
+    );
   }
 
   /**
@@ -217,25 +334,30 @@ export class DescargasService {
   }
   /**
    * Cambiar estado de descarga
-   */
-  async updateEstadoDescarga(
+   */  async updateEstadoDescarga(
     descargaId: string | number,
-    nuevoEstado: { estadoMayorista?: EstadoDescarga; estadoDistribuidor?: EstadoDescarga },
+    nuevoEstado: { estadoMayorista?: EstadoDescarga; estadoDistribuidor?: EstadoDescarga; numero_factura?: string; referencia_pago?: string },
     userId: number,
     userRole: number,
     fechaFacturacion: Date,
     ip?: string
   ): Promise<IDescarga> {
-    
-    const descarga = await this.descargaRepository.findOne({
+      const descarga = await this.descargaRepository.findOne({
       where: { id_descarga: String(descargaId) }
     });
-
-    const idMayorista = await this.obtenerIdMayoristaPorUsuario(descarga.id_usuario);
 
     if (!descarga) {
       throw new Error('Descarga no encontrada');
     }
+
+    // ⭐ NUEVA: Bloquear cambios si es PREPAGO
+    if (descarga.tipo_descarga === 'PREPAGO' || descarga.estadoMayorista === EstadoDescarga.PREPAGO) {
+      throw new ForbiddenException(
+        'No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo e inmutable.'
+      );
+    }
+
+    const idMayorista = await this.obtenerIdMayoristaPorUsuario(descarga.id_usuario);
 
     // Validar permisos
     if (userRole === 3) {
@@ -244,7 +366,9 @@ export class DescargasService {
 
     const estadoAnterior = {
       estadoMayorista: descarga.estadoMayorista,
-      estadoDistribuidor: descarga.estadoDistribuidor
+      estadoDistribuidor: descarga.estadoDistribuidor,
+      numero_factura: descarga.numero_factura,
+      referencia_pago: descarga.referencia_pago
     };
     console.log('Estado anterior:', estadoAnterior);
     console.log('Nuevo estado:', nuevoEstado);
@@ -260,6 +384,23 @@ export class DescargasService {
       descarga.estadoMayorista = nuevoEstado.estadoMayorista;
     }else{
       descarga.estadoDistribuidor = nuevoEstado.estadoDistribuidor;
+    }
+
+    // Manejar número de factura (solo para estado Facturado)
+    if (nuevoEstado.estadoMayorista === EstadoDescarga.FACTURADO) {
+      descarga.numero_factura = nuevoEstado.numero_factura || descarga.numero_factura;
+    } else if (nuevoEstado.estadoMayorista === EstadoDescarga.PENDIENTE_FACTURAR) {
+      // Si retrocede a Pendiente, limpiar ambos
+      descarga.numero_factura = null;
+      descarga.referencia_pago = null;
+    }
+
+    // Manejar referencia de pago (solo para estado Cobrado)
+    if (nuevoEstado.estadoMayorista === EstadoDescarga.COBRADO) {
+      descarga.referencia_pago = nuevoEstado.referencia_pago || descarga.referencia_pago;
+    } else if (nuevoEstado.estadoMayorista === EstadoDescarga.FACTURADO) {
+      // Si retrocede de Cobrado a Facturado, limpiar solo referencia_pago
+      descarga.referencia_pago = null;
     }
 
     // Actualizar fecha de facturación si se proporciona

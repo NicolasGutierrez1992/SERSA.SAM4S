@@ -21,6 +21,7 @@ export interface LoginResponse {
     last_login: Date;
     id_mayorista: number;
     limite_descargas: number;
+    tipo_descarga?: 'CUENTA_CORRIENTE' | 'PREPAGO';
   };
 }
 
@@ -74,6 +75,9 @@ export interface DescargaHistorial {
   createdAt: string;
   updatedAt: string;
   tamaño?: number;
+  tipoDescarga?: 'CUENTA_CORRIENTE' | 'PREPAGO' | null;
+  numero_factura?: string | null;
+  referencia_pago?: string | null;
   usuario?: {
     nombre: string;
     cuit: string;
@@ -90,6 +94,13 @@ export interface MetricasPersonales {
   pendienteFacturar: number;
   limiteDescargas: number;
   porcentajeLimite: number;
+}
+
+export interface ValidacionDescargaDto {
+  canDownload: boolean;
+  message: string;
+  userType: 'CUENTA_CORRIENTE' | 'PREPAGO' | 'SIN_LIMITE';
+  limiteDisponible: number;
 }
 
 // Configurar axios
@@ -283,11 +294,15 @@ export const certificadosApi = {
       throw error;
     }
   },
-
   // Cambiar estado de descarga
   cambiarEstado: async (
     downloadId: string,
-    estado: { estadoMayorista?: string; estadoDistribuidor?: string }
+    estado: { 
+      estadoMayorista?: string; 
+      estadoDistribuidor?: string;
+      numero_factura?: string;
+      referencia_pago?: string;
+    }
   ): Promise<DescargaHistorial> => {
     const response = await api.put(`/certificados/descargas/${downloadId}/estado`, estado);
     return response.data;
@@ -296,6 +311,12 @@ export const certificadosApi = {
   // Obtener métricas personales
   getMetricas: async (): Promise<MetricasPersonales> => {
     const response = await api.get<MetricasPersonales>('/certificados/metricas');
+    return response.data;
+  },
+
+  // Validar si usuario puede descargar (PREPAGO)
+  validarDescarga: async (): Promise<ValidacionDescargaDto> => {
+    const response = await api.get<ValidacionDescargaDto>('/certificados/validar-descarga');
     return response.data;
   },
 

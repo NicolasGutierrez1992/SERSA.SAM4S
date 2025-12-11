@@ -71,6 +71,29 @@ export class Descarga {
   })
   @Column({ type: 'varchar', length: 255, nullable: true })
   certificado_nombre: string;
+  @Column({
+    type: 'enum',
+    enum: ['CUENTA_CORRIENTE', 'PREPAGO'],
+    nullable: true
+  })
+  @ApiPropertyOptional({
+    description: 'Tipo de descarga (referencia histórica)',
+    enum: ['CUENTA_CORRIENTE', 'PREPAGO'],
+    example: 'PREPAGO'
+  })
+  tipo_descarga: 'CUENTA_CORRIENTE' | 'PREPAGO' | null;
 
+  @ApiPropertyOptional({
+    description: 'Número de factura (solo para estado Facturado del mayorista)',
+    example: '2025-001'
+  })
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  numero_factura: string;
 
+  @ApiPropertyOptional({
+    description: 'Referencia de pago (solo para estado Cobrado del mayorista)',
+    example: 'REF-123456'
+  })
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  referencia_pago: string;
 }

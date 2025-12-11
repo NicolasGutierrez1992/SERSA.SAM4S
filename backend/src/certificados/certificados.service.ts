@@ -31,7 +31,6 @@ export class CertificadosService {  private readonly logger = new Logger(Certifi
   ) {
     this.logger.log('CertificadosService initialized - Pure certificate generation');
   }
-
   /**
    * Generar certificado CRS usando AFIP
    * Delega el registro de descarga al DescargasService
@@ -41,6 +40,12 @@ export class CertificadosService {  private readonly logger = new Logger(Certifi
     datos: GenerarCertificadoDto,
     ip?: string
   ): Promise<CertificadoGeneradoResponse> {
+    // ⭐ NUEVA: Validar si el usuario puede descargar
+    const validacion = await this.descargasService.canUserDownload(userId);
+    if (!validacion.canDownload) {
+      throw new BadRequestException(validacion.message);
+    }
+
     // Validar parámetros de entrada
     const { marca, modelo, numeroSerie } = datos;
     

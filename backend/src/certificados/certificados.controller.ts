@@ -81,11 +81,41 @@ export class CertificadosController {
     @Req() req: Request
   ): Promise<DownloadResponseDto> {
     const ip = req.ip || req.connection.remoteAddress;
+    //Validar limites antes de enviar descargas
+    
     return await this.certificadosService.generarCertificado(
       userId,
       createDescargaDto,
       ip
-    );  }
+    );  
+  }
+
+  /**
+   * Validar si usuario puede descargar (PREPAGO)
+   */
+  @Get('validar-descarga')
+  @ApiOperation({ 
+    summary: 'Validar si usuario puede descargar',
+    description: 'Valida si el usuario tiene límite disponible para descargar certificados'
+  })
+  @ApiResponse({ 
+    status: 200, 
+    description: 'Validación completada',
+    schema: {
+      properties: {
+        canDownload: { type: 'boolean' },
+        message: { type: 'string' },
+        userType: { type: 'string', enum: ['CUENTA_CORRIENTE', 'PREPAGO', 'SIN_LIMITE'] },
+        limiteDisponible: { type: 'number' }
+      }
+    }
+  })
+  @RequireAuthenticated()
+  async validarDescarga(
+    @CurrentUser('id') userId: number
+  ): Promise<any> {
+    return await this.descargasService.canUserDownload(userId);
+  }
 
   /**
    * Descargar archivo PEM del certificado

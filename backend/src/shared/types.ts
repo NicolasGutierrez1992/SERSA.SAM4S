@@ -1,6 +1,7 @@
 // Tipos compartidos para evitar conflictos entre entidades y servicios
 
 export enum EstadoDescarga {
+  PREPAGO = 'PREPAGO',
   PENDIENTE_FACTURAR = 'Pendiente de Facturar',
   FACTURADO = 'Facturado',
   COBRADO = 'Cobrado'
@@ -17,7 +18,10 @@ export interface IDescarga {
   estadoDistribuidor: EstadoDescarga;
   createdAt: Date;
   updatedAt: Date;
-  tamaño?: number;  
+  tamaño?: number;
+  tipoDescarga?: 'CUENTA_CORRIENTE' | 'PREPAGO' | null;
+  numero_factura?: string | null;
+  referencia_pago?: string | null;
   usuario?: {
     nombre: string;
     cuit: string;

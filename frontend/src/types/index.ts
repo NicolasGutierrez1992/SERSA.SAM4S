@@ -8,6 +8,7 @@ export enum UserRole {
 
 // Estados de descarga
 export enum EstadoDescarga {
+  PREPAGO = 'PREPAGO',
   PENDIENTE_FACTURAR = 'Pendiente de Facturar',
   FACTURADO = 'Facturado',
   COBRADO = 'Cobrado'

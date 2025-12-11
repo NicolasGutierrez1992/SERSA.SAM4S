@@ -15,6 +15,11 @@ export enum UserStatus {
   ACTIVO = 1,
 }
 
+export enum TipoDescarga {
+  CUENTA_CORRIENTE = 'CUENTA_CORRIENTE',
+  PREPAGO = 'PREPAGO',
+}
+
 export class CreateUserDto {
   @ApiProperty({
     example: 'Juan Pérez',
@@ -99,7 +104,6 @@ export class CreateUserDto {
   @IsNumber({}, { message: 'El ID del usuario debe ser un número' })
   @Type(() => Number)
   created_by?: number;
-
   @ApiPropertyOptional({
     example: "1112345678",
     description: 'Numero de celular para enviar confirmacion via Whatsapp',
@@ -108,6 +112,15 @@ export class CreateUserDto {
   @IsString({ message: 'Debe ser un número de celular válido' })
   @Length(10, 15, { message: 'El número de celular debe tener entre 10 y 15 caracteres' })
   celular?: string;
+
+  @ApiPropertyOptional({
+    example: 'CUENTA_CORRIENTE',
+    enum: TipoDescarga,
+    description: 'Tipo de descarga (CUENTA_CORRIENTE o PREPAGO)',
+  })
+  @IsOptional()
+  @IsEnum(TipoDescarga, { message: 'El tipo de descarga debe ser válido' })
+  tipo_descarga?: TipoDescarga;
 }
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {

@@ -49,6 +49,7 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+*.md
 *~
 
 # Temporary files
@@ -65,6 +66,8 @@ backend/certs/*.p12
 backend/certs/*.key
 backend/certs/*.pem
 backend/certs/*.crt
+backend/certs/*.pfxf
+backend/certs/*.pfx
 
 # Excepto archivos de documentación
 !backend/certs/README.md
@@ -86,5 +89,4 @@ config/secrets.json
 # Logs de auditoría local
 logs/auditoria/
 logs/downloads/
-TECHNICAL-DOCUMENTATION.md
-backend/certs/_certificado.pfxf
+*.md
