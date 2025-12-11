@@ -13,6 +13,7 @@ import { UsersModule } from '../users/users.module';
 import { SharedAuthModule } from '../auth/shared-auth.module';
 import { EncryptionService } from '../common/encryption.service';
 import { CertificadoMigrationService } from '../common/certificado-migration.service';
+import { TimezoneService } from '../common/timezone.service';
 
 @Module({
   imports: [
@@ -23,7 +24,7 @@ import { CertificadoMigrationService } from '../common/certificado-migration.ser
     UsersModule,
   ],
   controllers: [CertificadosController, CertificadoMaestroController],
-  providers: [CertificadosService, CertificadoMaestroService, EncryptionService, CertificadoMigrationService],
-  exports: [CertificadosService, CertificadoMaestroService, EncryptionService, CertificadoMigrationService],
+  providers: [CertificadosService, CertificadoMaestroService, EncryptionService, CertificadoMigrationService, TimezoneService],
+  exports: [CertificadosService, CertificadoMaestroService, EncryptionService, CertificadoMigrationService, TimezoneService],
 })
 export class CertificadosModule {}

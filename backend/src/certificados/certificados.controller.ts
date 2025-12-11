@@ -13,7 +13,8 @@ import {
   HttpCode,
   ForbiddenException,
   UseInterceptors,
-  UploadedFiles
+  UploadedFiles,
+  Logger
 } from '@nestjs/common';
 import { 
   ApiTags, 
@@ -27,6 +28,7 @@ import { Request, Response } from 'express';
 import { CertificadosService } from './certificados.service';
 import { DescargasService } from '../descargas/descargas.service';
 import { UsersService } from '../users/users.service';
+import { TimezoneService } from '../common/timezone.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guards';
 import { RequireAdmin, RequireAuthenticated } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
@@ -47,10 +49,13 @@ import * as path from 'path';
 @Controller('certificados')
 @ApiBearerAuth()
 export class CertificadosController {
+  private readonly logger = new Logger(CertificadosController.name);
+  
   constructor(
     private certificadosService: CertificadosService,
     private descargasService: DescargasService,
     private usersService: UsersService,
+    private timezoneService: TimezoneService,
   ) {}
 
   /**
@@ -349,65 +354,64 @@ export class CertificadosController {
         porcentajeLimite: { type: 'number' }
       }
     }  
-  })
-  @RequireAuthenticated()
-  async getMetricasPersonales(
+  })  @RequireAuthenticated()  async getMetricasPersonales(
     @CurrentUser('id') userId: number,
-    @CurrentUser() user: User
-  ) {
+    @CurrentUser() user: User  ) {
     // Obtener usuario completo desde la base de datos para asegurar limite_descargas
     const usuarioCompleto = await this.usersService.findOne(userId);
-    const hoy = new Date();
-    const inicioSemana = new Date();
-    inicioSemana.setDate(hoy.getDate() - hoy.getDay());
-    inicioSemana.setHours(0, 0, 0, 0);
-    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    // Helper para extraer YYYY-MM-DD de createdAt
-    const getDateString = (date: any) => {
-      if (!date) return '';
-      // Si la fecha viene como string con espacio, reemplazar por 'T'
-      let dateStr = typeof date === 'string' ? date.replace(' ', 'T') : date;
-      const d = new Date(dateStr);
-      return d.toISOString().split('T')[0];
-    };
-    const descargas = await this.descargasService.getDescargas({
+    
+    // Usar zona horaria de Argentina
+    const hoyArgentina = this.timezoneService.getNowArgentina();
+    const inicioSemanaArgentina = this.timezoneService.getStartOfWeekArgentina();
+    const inicioMesArgentina = this.timezoneService.getStartOfMonthArgentina();
+    
+    // Obtener fechas en formato YYYY-MM-DD para las queries
+    const hoyString = this.timezoneService.formatDateToString(hoyArgentina);
+    const semanaString = this.timezoneService.formatDateToString(inicioSemanaArgentina);
+    const mesString = this.timezoneService.formatDateToString(inicioMesArgentina);
+    
+    // Obtener descargas filtrando por fecha en BD (con zona horaria Argentina)
+    const descargasHoyResult = await this.descargasService.getDescargas({
       limit: 1000,
-      usuarioId: userId
+      usuarioId: userId,
+      fechaDesde: hoyString,
+      fechaHasta: hoyString
     });
 
-    const descargasArray = descargas.descargas;
-    // Calcular hoyString en horario Argentina (GMT-3) usando componentes
-    const hoyArgentina = new Date();
-    hoyArgentina.setHours(hoyArgentina.getHours() - 3); // Restar 3 horas para Argentina
-    const hoyString = hoyArgentina.toISOString().split('T')[0];
-     descargasArray.forEach(d => {
-      const fechaDescarga = getDateString(d.createdAt);
-      const esHoy = fechaDescarga === hoyString;
-      console.debug(`createdAt: ${d.createdAt}, getDateString: ${fechaDescarga}, hoyString: ${hoyString}, esHoy: ${esHoy}`);
+    const descargasSemanaResult = await this.descargasService.getDescargas({
+      limit: 1000,
+      usuarioId: userId,
+      fechaDesde: semanaString
     });
-    const descargasHoy = descargasArray.filter(d => 
-      getDateString(d.createdAt) === hoyString
-    ).length;
 
-    const descargasSemana = descargasArray.filter(d => 
-      new Date(d.createdAt) >= inicioSemana
-    ).length;
+    const descargasMesResult = await this.descargasService.getDescargas({
+      limit: 1000,
+      usuarioId: userId,
+      fechaDesde: mesString
+    });
 
-    const descargasMes = descargasArray.filter(d => 
-      new Date(d.createdAt) >= inicioMes
-    ).length;
-    const pendienteFacturar = descargasArray.filter(d => 
-      d.estadoMayorista === EstadoDescarga.PENDIENTE_FACTURAR
-    ).length;
+    // Obtener todas las descargas para contar las pendientes de facturación
+    const todasDescargasResult = await this.descargasService.getDescargas({
+      limit: 1000,
+      usuarioId: userId,
+      estadoMayorista: EstadoDescarga.PENDIENTE_FACTURAR
+    });
+    
+    const descargasHoy = descargasHoyResult.descargas.length;
+    const descargasSemana = descargasSemanaResult.descargas.length;
+    const descargasMes = descargasMesResult.descargas.length;
+    const pendienteFacturar = todasDescargasResult.descargas.length;
 
-    console.log(`Métricas para usuario ${userId}: Hoy=${descargasHoy}, Semana=${descargasSemana}, Mes=${descargasMes}, PendienteFacturar=${pendienteFacturar}, Límite=${usuarioCompleto.limite_descargas}`);
+    this.logger.log(`Métricas para usuario ${userId} (ARG): Hoy=${descargasHoy}, Semana=${descargasSemana}, Mes=${descargasMes}, PendienteFacturar=${pendienteFacturar}, Límite=${usuarioCompleto.limite_descargas}`);
+    
     return {
       descargasHoy,
       descargasSemana,
       descargasMes,
-      pendienteFacturar,      
+      pendienteFacturar,
       limiteDescargas: usuarioCompleto.limite_descargas,
-      porcentajeLimite: Math.round((pendienteFacturar / usuarioCompleto.limite_descargas) * 100)
+      porcentajeLimite: Math.round((pendienteFacturar / usuarioCompleto.limite_descargas) * 100),
+      horaServidor: this.timezoneService.formatDateTimeFull(new Date())
     };
   }
 

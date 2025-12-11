@@ -44,8 +44,23 @@
    - Consideraciones de seguridad
    - **Leer esto para verificar que todo funciona**
 
+### 🕐 Para Zona Horaria de Argentina
+5. **TIMEZONE-ARGENTINA-GUIDE.md** ⭐
+   - Guía de zona horaria (10 minutos)
+   - Configuración de Argentina (UTC-3)
+   - TimezoneService
+   - Uso en reportes y métricas
+   - **Leer esto para entender zona horaria**
+
+6. **TIMEZONE-ARGENTINA-CHANGES.md** ⭐
+   - Cambios realizados (15 minutos)
+   - Detalles técnicos
+   - PostgreSQL AT TIME ZONE
+   - Testing y validación
+   - **Leer esto para ver qué cambió**
+
 ### 📊 Para Resumido
-5. **IMPLEMENTACION-FINAL.md**
+7. **IMPLEMENTACION-FINAL.md**
    - Resumen final (10 minutos)
    - Compilación exitosa
    - API endpoints
@@ -113,6 +128,8 @@
 - `backend/src/common/encryption.service.ts`
 - `backend/src/common/certificado-migration.service.ts`
 - `backend/src/common/app-initializer.service.ts`
+- `backend/src/common/timezone.service.ts` ⭐ (Zona horaria de Argentina)
+- `backend/src/descargas/descargas.service.ts` (Modificado para AT TIME ZONE)
 
 ### Controladores y DTOs
 - `backend/src/certificados/certificado-maestro.controller.ts`

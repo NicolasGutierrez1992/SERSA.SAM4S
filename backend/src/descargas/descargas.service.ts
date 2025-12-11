@@ -5,7 +5,8 @@ import { EstadoDescarga, IDescarga } from '../shared/types';
 import { User } from '../users/entities/user.entity';
 import { Descarga } from './entities/descarga.entity';
 import { AuditoriaService } from '../auditoria/auditoria.service';
-import { Certificado } from '../certificados/entities/certificado.entity';    
+import { Certificado } from '../certificados/entities/certificado.entity';
+import { TimezoneService } from '../common/timezone.service';
 interface RegistrarDescargaData {
   usuarioId: number;
   controladorId?: string;
@@ -29,6 +30,7 @@ export class DescargasService {
     @InjectRepository(Certificado)
     private certificadoRepository: Repository<Certificado>,
     private auditoriaService: AuditoriaService,
+    private timezoneService: TimezoneService,
   ) {
     this.logger.log('DescargasService initialized with PostgreSQL');
   }
@@ -277,8 +279,7 @@ export class DescargasService {
   }
   /**
    * Obtener historial de descargas con filtros
-   */
-  async getDescargas(params: any): Promise<{ descargas: IDescarga[]; total: number }> {
+   */  async getDescargas(params: any): Promise<{ descargas: IDescarga[]; total: number }> {
     const {
       page = 1,
       limit = 50,
@@ -316,19 +317,21 @@ export class DescargasService {
       this.logger.log(`[getDescargas] Filtrando por idMayorista: ${idMayoristaNum}`);
       query.andWhere('usuario.id_mayorista = :idMayorista', { idMayorista: idMayoristaNum });
     }
+    
+    // Filtros de fecha usando zona horaria de Argentina
     if (fechaDesde) {
-      query.andWhere('descarga.created_at >= :fechaDesde', { fechaDesde });
+      query.andWhere('(descarga.created_at AT TIME ZONE \'America/Argentina/Buenos_Aires\')::date >= :fechaDesde', { fechaDesde });
     }
     if (fechaHasta) {
-      query.andWhere('descarga.created_at <= :fechaHasta', { fechaHasta });
+      query.andWhere('(descarga.created_at AT TIME ZONE \'America/Argentina/Buenos_Aires\')::date <= :fechaHasta', { fechaHasta });
     }
     if (mes) {
       const mesNum = typeof mes === 'string' ? parseInt(mes, 10) : mes;
-      query.andWhere('EXTRACT(MONTH FROM descarga.created_at) = :mes', { mes: mesNum });
+      query.andWhere('EXTRACT(MONTH FROM descarga.created_at AT TIME ZONE \'America/Argentina/Buenos_Aires\') = :mes', { mes: mesNum });
     } 
     if(anio) {
       const anioNum = typeof anio === 'string' ? parseInt(anio, 10) : anio;
-      query.andWhere('EXTRACT(YEAR FROM descarga.created_at) = :anio', { anio: anioNum });
+      query.andWhere('EXTRACT(YEAR FROM descarga.created_at AT TIME ZONE \'America/Argentina/Buenos_Aires\') = :anio', { anio: anioNum });
     }
     if (controladorId) {
       query.andWhere('descarga.id_certificado LIKE :controladorId', { controladorId: `${controladorId}%` });
