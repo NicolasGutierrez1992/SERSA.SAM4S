@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {authApi, getUser, getUserById, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales } from '@/lib/api';
+import {authApi, getUser, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales } from '@/lib/api';
 import Image from 'next/image';
 import * as XLSX from 'xlsx';
 
@@ -204,12 +204,10 @@ export default function CertificadosPage() {
      
     }
   };
-
   const handleEstadoChange = async (downloadId: string, nuevoEstado: string, tipo: 'mayorista' | 'distribuidor', userid: number) => {
     try {
-      
-      const usuarioCompleto = await getUserById(userid);
-      if (usuarioCompleto.id_mayorista === 1) {
+      // Usar id_mayorista del usuario logueado (ya está disponible en 'user')
+      if (user?.id_mayorista === 1) {
         await certificadosApi.cambiarEstado(downloadId, { estadoDistribuidor: nuevoEstado, estadoMayorista: nuevoEstado });
       }
       else { 
@@ -219,7 +217,6 @@ export default function CertificadosPage() {
         console.log('cambio de estado:', estado);        
         await certificadosApi.cambiarEstado(downloadId, estado);
       }
-      //con el id del usuario que generó el certificado debo traer su información
       await loadHistorial();
     } catch (error) {
       console.error('Error cambiando estado:', error);

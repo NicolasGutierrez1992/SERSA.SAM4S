@@ -66,8 +66,9 @@ export class ReportesService {
     return 0;
   }  private async getUsuariosActivos() {
     const [total, mayoristas, distribuidores] = await Promise.all([
-      this.userRepository.count({ where: { status: 1 } }),      this.userRepository.count({ where: { status: 1, id_rol: 2 } }), // MAYORISTA
-      this.userRepository.count({ where: { status: 1, id_rol: 3 } }), // DISTRIBUIDOR
+      this.userRepository.count({ where: { status: 1 } }),      
+      this.userRepository.count({ where: { status: 1, rol: 2 } }), // MAYORISTA
+      this.userRepository.count({ where: { status: 1, rol: 3 } }), // DISTRIBUIDOR
     ]);
 
     return { total, mayoristas, distribuidores };

@@ -107,7 +107,7 @@ export class CertificadosController {
     const archivo = await this.descargasService.getCertificadoPem(
       downloadId,
       userId,
-      user.id_rol
+      user.rol
     );
 
    
@@ -160,7 +160,7 @@ export class CertificadosController {
       ...queryDto,
       page,
       limit,
-      usuarioId: user.id_rol === 3 ? userId : undefined // Solo distribuidores filtran por su ID
+      usuarioId: user.rol === 3 ? userId : undefined // Solo distribuidores filtran por su ID
     };
     
     console.log('GET /certificados/descargas - params:', params);
@@ -190,7 +190,7 @@ export class CertificadosController {
     const pageNum = Number(page) || 1;
     const limitNum = Number(limit) || 50;
     // Si el usuario es distribuidor, solo puede consultar su propio id
-    if (user.id_rol === 3 && user.id_usuario !== usuarioId) {
+    if (user.rol === 3 && user.id_usuario !== usuarioId) {
       throw new ForbiddenException('No tiene permiso para ver descargas de otros usuarios');
     }
     
@@ -241,22 +241,22 @@ export class CertificadosController {
     status: 200, 
     description: 'Estado actualizado'
   })  
-  @ApiResponse({ status: 403, description: 'Sin permisos para cambiar estado' })
-  @RequireAuthenticated()
+  @ApiResponse({ status: 403, description: 'Sin permisos para cambiar estado' })  @RequireAuthenticated()
   async updateEstadoDescarga(
-    @Param('downloadId') downloadId: number,
+    @Param('downloadId') downloadId: string,
     @Body() updateEstadoDto: UpdateEstadoDescargaDto,
     @CurrentUser('id') userId: number,
     @CurrentUser() user: User,
     @Req() req: Request  ): Promise<IDescarga> {
     const ip = req.ip || req.connection.remoteAddress;
-    user = await this.usersService.findOne(userId);
-    // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
+    //obtner usuario completo que realizó la descarga con el id usuario de la descarga
+    
+      console.log("Certificado Controller UserCurrent ",user);
     return await this.descargasService.updateEstadoDescarga(
       downloadId,
       updateEstadoDto,
       userId,
-      user.id_rol,
+      user.rol,
       new Date(),
       ip
     );

@@ -14,7 +14,7 @@ export class User {
 
   @ApiProperty({ description: 'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación)' })
   @Column({ type: 'integer', nullable: true })
-  id_rol: number;  
+  rol: number;  
   
   @ApiProperty({ description: 'Nombre completo del usuario' })
   @Column({ type: 'text', nullable: true })

@@ -141,14 +141,14 @@ export class DescargasService {
       estadoDistribuidor: descarga.estadoDistribuidor as EstadoDescarga,
       createdAt: descarga.created_at,
       updatedAt: descarga.updated_at,
-      fechaFacturacion: descarga.fecha_facturacion,
-      tamaño: descarga.tamaño,
+      fechaFacturacion: descarga.fecha_facturacion,      tamaño: descarga.tamaño,
       usuario: descarga.usuario
         ? {
             nombre: descarga.usuario.nombre,
             cuit: descarga.usuario.cuit,
             mail: descarga.usuario.mail,
-            idrol: descarga.usuario.id_rol
+            idrol: descarga.usuario.rol,
+            id_mayorista: descarga.usuario.id_mayorista
           }
         : undefined
     };
@@ -215,21 +215,23 @@ export class DescargasService {
       contentType: 'application/x-pem-file'
     };
   }
-
   /**
    * Cambiar estado de descarga
    */
   async updateEstadoDescarga(
-    descargaId: number,
+    descargaId: string | number,
     nuevoEstado: { estadoMayorista?: EstadoDescarga; estadoDistribuidor?: EstadoDescarga },
     userId: number,
     userRole: number,
     fechaFacturacion: Date,
     ip?: string
   ): Promise<IDescarga> {
+    
     const descarga = await this.descargaRepository.findOne({
       where: { id_descarga: String(descargaId) }
     });
+
+    const idMayorista = await this.obtenerIdMayoristaPorUsuario(descarga.id_usuario);
 
     if (!descarga) {
       throw new Error('Descarga no encontrada');
@@ -247,14 +249,19 @@ export class DescargasService {
     console.log('Estado anterior:', estadoAnterior);
     console.log('Nuevo estado:', nuevoEstado);
     console.log('User role:', userRole);
+    console.log('id mayorista: ', idMayorista);
 
     // Actualizar estados
-    if (nuevoEstado.estadoMayorista) {
+    //Si el usuario logeado es administrador y el id mayorista del usuario que descargo es = 1 actualizo ambos estados
+    if(userRole === 1 && idMayorista === 1){
       descarga.estadoMayorista = nuevoEstado.estadoMayorista;
-    }
-    if (nuevoEstado.estadoDistribuidor && userRole === 1) {
+      descarga.estadoDistribuidor = nuevoEstado.estadoDistribuidor;
+    }else if (userRole === 1 ){
+      descarga.estadoMayorista = nuevoEstado.estadoMayorista;
+    }else{
       descarga.estadoDistribuidor = nuevoEstado.estadoDistribuidor;
     }
+
     // Actualizar fecha de facturación si se proporciona
     if (fechaFacturacion && nuevoEstado.estadoMayorista === EstadoDescarga.FACTURADO) {
       descarga.fecha_facturacion = fechaFacturacion;

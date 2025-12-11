@@ -17,11 +17,12 @@ export interface IDescarga {
   estadoDistribuidor: EstadoDescarga;
   createdAt: Date;
   updatedAt: Date;
-  tamaño?: number;
+  tamaño?: number;  
   usuario?: {
     nombre: string;
     cuit: string;
     mail: string;
     idrol: number;
+    id_mayorista?: number;
   };
 }

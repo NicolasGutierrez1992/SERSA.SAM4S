@@ -79,6 +79,7 @@ export interface DescargaHistorial {
     cuit: string;
     mail: string;
     idrol: number;
+    id_mayorista?: number;
   };
 }
 
@@ -117,15 +118,39 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error) => {
+    const errorInfo = {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message,
+      url: error.config?.url,
+      method: error.config?.method,
+      timestamp: new Date().toISOString()
+    };
+
+    console.error('[API Interceptor] Error completo:', errorInfo);
+    
     if (error.response?.status === 401) {
+      console.error('[API Interceptor] ⚠️ ERROR 401 - Token inválido o expirado');
+      console.error('[API Interceptor] Respuesta del servidor:', error.response?.data);
+      console.error('[API Interceptor] Limpiando sesión y redirigiendo a login...');
+      
       removeStorageItem('token');
       removeStorageItem('user');
       if (typeof window !== 'undefined') {
         // Solo redirigir si NO estamos en /login
         if (window.location.pathname !== '/login') {
-          window.location.href = '/login';
+          console.warn('[API Interceptor] Redirigiendo a /login en 2 segundos...');
+          // Agregar delay mayor para permitir que los logs se capturen
+          setTimeout(() => {
+            console.log('[API Interceptor] Ejecutando redirección a /login');
+            window.location.href = '/login';
+          }, 2000);
         }
       }
+    } else {
+      // Log de otros errores para debugging
+      console.error('[API Interceptor] Error HTTP (no es 401):', errorInfo);
     }
     return Promise.reject(error);
   }

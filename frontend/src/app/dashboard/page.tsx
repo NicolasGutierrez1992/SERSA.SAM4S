@@ -55,7 +55,7 @@ export default function DashboardPage() {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center">
               <Image
-                src="/assets/images/LOGOSersa.png"
+                src="/assets/images/logo.SERSA.jpg"
                 alt="SERSA Logo"
                 width={100}
                 height={50}
@@ -63,8 +63,7 @@ export default function DashboardPage() {
               />
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">
-                  Panel de Control - SERSA
-                </h1>
+                  Panel de Control                </h1>
                 <p className="text-sm text-gray-600">
                   Gestión de Certificados SAM4S
                 </p>

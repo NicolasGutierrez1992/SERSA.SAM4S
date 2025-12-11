@@ -47,12 +47,15 @@ export class UsersController {
   @ApiQuery({ name: 'status', required: false, description: 'Filtrar por estado' })
   @ApiQuery({ name: 'id_mayorista', required: false, description: 'Filtrar por mayorista' })
   @ApiQuery({ name: 'page', required: false, description: 'Página (por defecto 1)' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Elementos por página (por defecto 10)' })
-  async findAll(@Query() query: QueryUsersDto, @Req() req: any) {
+  @ApiQuery({ name: 'limit', required: false, description: 'Elementos por página (por defecto 10)' })  async findAll(@Query() query: QueryUsersDto, @Req() req: any) {
     const currentUser = req.user;
+    console.log('\n========== [UsersController][findAll] INICIANDO ==========');
     console.log('[UsersController][findAll] Query recibido:', query);
+    console.log('[UsersController][findAll] Headers:', req.headers);
+    console.log('[UsersController][findAll] URL:', req.url);
+    
     if (currentUser) {
-      console.log('[UsersController][findAll] Usuario autenticado:', {
+      console.log('[UsersController][findAll] ✅ Usuario autenticado:', {
         id: currentUser.id_usuario || currentUser.id,
         cuit: currentUser.cuit,
         rol: currentUser.id_rol || currentUser.rol,
@@ -61,9 +64,11 @@ export class UsersController {
         id_mayorista: currentUser.id_mayorista
       });
     } else {
-      console.log('[UsersController][findAll] Usuario autenticado: NO PROPORCIONADO');
+      console.log('[UsersController][findAll] ❌ Usuario autenticado: NO PROPORCIONADO');
     }
+    
     const result = await this.usersService.findAll(query, currentUser);
+    
     // Log de salida
     console.log('[UsersController][findAll] Respuesta:', {
       total: result.total,
@@ -72,8 +77,10 @@ export class UsersController {
       totalPages: result.totalPages,
       cantidadUsuarios: result.data.length,
       idsUsuarios: result.data.map(u => u.id_usuario),
-      usuarios: result.data.map(u => ({ id: u.id_usuario, nombre: u.nombre, id_rol: u.id_rol, id_mayorista: u.id_mayorista }))
+      usuarios: result.data.map(u => ({ id: u.id_usuario, nombre: u.nombre, id_rol: u.rol, id_mayorista: u.id_mayorista }))
     });
+    console.log('========== [UsersController][findAll] FIN ==========\n');
+    
     return result;
   }
   @Get('mayoristas')

@@ -68,7 +68,7 @@ export class UsersService {
       mail: createUserDto.email,
       cuit: createUserDto.cuit,
       password: hashedPassword,
-      id_rol: createUserDto.rol,
+      rol: createUserDto.rol,
       status: createUserDto.status || UserStatus.ACTIVO,
       id_mayorista: createUserDto.id_mayorista,
       limite_descargas: createUserDto.limiteDescargas || 5,
@@ -87,13 +87,13 @@ export class UsersService {
     // Obtener todos los usuarios para armar jerarquía y nombreMayorista
     const allUsers = await this.userRepository.find({
       select: [
-        'id_usuario', 'cuit', 'nombre', 'mail', 'id_rol', 'status', 'limite_descargas',
+        'id_usuario', 'cuit', 'nombre', 'mail', 'rol', 'status', 'limite_descargas',
         'must_change_password', 'ultimo_login', 'id_mayorista', 'created_at', 'updated_at', 'celular'
       ]
     });
     // Mapeo id_usuario -> nombre para lookup rápido
     const mayoristaMap = new Map<number, string>();
-    allUsers.filter(u => ( u.id_rol === 3) && (u.id_mayorista === currentUser.id_mayorista)).forEach(m => {
+    allUsers.filter(u => ( u.rol === 3) && (u.id_mayorista === currentUser.id_mayorista)).forEach(m => {
       mayoristaMap.set(m.id_usuario, m.nombre);
     });
     // Lista plana con nombreMayorista
@@ -104,10 +104,10 @@ export class UsersService {
     // Filtros y paginación sobre la lista plana
     let filtered = usuariosConMayorista;
     // Si el usuario autenticado es mayorista, solo puede ver sus propios distribuidores (usuarios con id_mayorista igual a su id)
-    if ((currentUser?.rol === 2 || currentUser?.id_rol === 2)) {
+    if ((currentUser?.rol === 2 || currentUser?.rol === 2)) {
       filtered = filtered.filter(u => u.id_mayorista === (currentUser.id_mayorista));
     }
-    if (rol !== undefined) filtered = filtered.filter(u => u.id_rol === +rol);
+    if (rol !== undefined) filtered = filtered.filter(u => u.rol === +rol);
     if (status !== undefined) filtered = filtered.filter(u => u.status === +status);
     if (id_mayorista !== undefined) filtered = filtered.filter(u => u.id_mayorista === +id_mayorista);
     // Paginación
@@ -134,7 +134,7 @@ export class UsersService {
         cuit: true,
         nombre: true,
         mail: true,
-        id_rol: true,
+        rol: true,
         status: true,
         limite_descargas: true,
         must_change_password: true,
@@ -171,7 +171,7 @@ export class UsersService {
         cuit: true,
         nombre: true,
         mail: true,
-        id_rol: true,
+        rol: true,
         status: true,
         limite_descargas: true,
         must_change_password: true,
@@ -186,12 +186,12 @@ export class UsersService {
     if (!user) {
       console.log('\n⚠️  USUARIO NO ENCONTRADO - Listando todos los usuarios en la BD:');
       const allUsers = await this.userRepository.find({
-        select: ['id_usuario', 'cuit', 'nombre', 'mail', 'id_rol', 'status'],
+        select: ['id_usuario', 'cuit', 'nombre', 'mail', 'rol', 'status'],
       });
       console.log('Total de usuarios en BD:', allUsers.length);
       console.log('Usuarios registrados:');
       allUsers.forEach(u => {
-        console.log(`  - ID: ${u.id_usuario}, CUIT: "${u.cuit}", Nombre: ${u.nombre}, Email: ${u.mail}, Rol: ${u.id_rol}, Status: ${u.status}`);
+        console.log(`  - ID: ${u.id_usuario}, CUIT: "${u.cuit}", Nombre: ${u.nombre}, Email: ${u.mail}, Rol: ${u.rol}, Status: ${u.status}`);
       });
     } else {
       console.log('\n✅ USUARIO ENCONTRADO');
@@ -199,7 +199,7 @@ export class UsersService {
       console.log(`CUIT: ${user.cuit}`);
       console.log(`Nombre: ${user.nombre}`);
       console.log(`Email: ${user.mail}`);
-      console.log(`Rol: ${user.id_rol}`);
+      console.log(`Rol: ${user.rol}`);
       console.log(`Status: ${user.status}`);
     }
     
@@ -216,7 +216,7 @@ export class UsersService {
         cuit: true,
         nombre: true,
         mail: true,
-        id_rol: true,
+        rol: true,
         status: true,
         limite_descargas: true,
         must_change_password: true,
@@ -246,7 +246,7 @@ export class UsersService {
     }
 
     // Validar mayorista si se está actualizando
-    if (updateUserDto.id_mayorista !== undefined && user.id_rol === UserRole.DISTRIBUIDOR) {
+    if (updateUserDto.id_mayorista !== undefined && user.rol === UserRole.DISTRIBUIDOR) {
       if (updateUserDto.id_mayorista) {
         const mayorista = await this.mayoristaRepository.findOne({
           where: { id_mayorista: updateUserDto.id_mayorista },
@@ -323,7 +323,7 @@ export class UsersService {
     const user = await this.findOne(id);
     
     // Verificar si el usuario es mayorista y tiene distribuidores asociados
-    if (user.id_rol === UserRole.MAYORISTA) {
+    if (user.rol === UserRole.MAYORISTA) {
       const distribuidores = await this.userRepository.count({
         where: { id_mayorista: id },
       });
@@ -339,7 +339,7 @@ export class UsersService {
   async getMayoristas(): Promise<User[]> {
     console.log('[UsersService][getMayoristas] Entrada');
     const result = await this.userRepository.find({
-      where: { id_rol: UserRole.MAYORISTA, status: 1 },
+      where: { rol: UserRole.MAYORISTA, status: 1 },
       select: ['id_usuario', 'nombre', 'cuit'],
       order: { nombre: 'ASC' },
     });
@@ -350,7 +350,7 @@ export class UsersService {
   async getDistribuidoresByMayorista(mayoristaId: number): Promise<User[]> {
     console.log('[UsersService][getDistribuidoresByMayorista] Entrada:', mayoristaId);
     const result = await this.userRepository.find({
-      where: { id_mayorista: mayoristaId, id_rol: UserRole.DISTRIBUIDOR },
+      where: { id_mayorista: mayoristaId, rol: UserRole.DISTRIBUIDOR },
       select: ['id_usuario', 'nombre', 'cuit', 'mail', 'status'],
       order: { nombre: 'ASC' },
     });
@@ -364,7 +364,7 @@ export class UsersService {
     
     const headers = 'ID,CUIT,Nombre,Email,Rol,Estado,Límite Descargas,Mayorista,Creado\n';
     const rows = users.map(user => {
-      const rolText = this.getRolText(user.id_rol);
+      const rolText = this.getRolText(user.rol);
       const statusText = user.status === 1 ? 'Activo' : 'Inactivo';
       const mayoristaName = ''; // Sin relación por ahora
       
