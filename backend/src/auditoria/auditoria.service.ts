@@ -92,16 +92,15 @@ export class AuditoriaService {
 
     if (objetivo_tipo) {
       queryBuilder.andWhere('auditoria.objetivo_tipo = :objetivo_tipo', { objetivo_tipo });
-    }
-
-    if (objetivo_id !== undefined) {
+    }    if (objetivo_id !== undefined) {
       queryBuilder.andWhere('auditoria.objetivo_id = :objetivo_id', { objetivo_id });
     }
 
+    // Filtros de fecha usando zona horaria de Argentina (como en descargas)
     if (fecha_desde && fecha_hasta) {
-      queryBuilder.andWhere('auditoria.timestamp BETWEEN :fecha_desde AND :fecha_hasta', {
-        fecha_desde: `${fecha_desde} 00:00:00`,
-        fecha_hasta: `${fecha_hasta} 23:59:59`,
+      queryBuilder.andWhere('(auditoria.timestamp AT TIME ZONE \'America/Argentina/Buenos_Aires\')::date BETWEEN :fecha_desde AND :fecha_hasta', {
+        fecha_desde,
+        fecha_hasta
       });
     }
 
@@ -132,14 +131,14 @@ export class AuditoriaService {
     }).join('\n');
     
     return headers + rows;
-  }
-  async getStatistics(fechaDesde?: string, fechaHasta?: string) {
+  }  async getStatistics(fechaDesde?: string, fechaHasta?: string) {
     const queryBuilder = this.auditoriaRepository.createQueryBuilder('auditoria');
 
+    // Usar zona horaria de Argentina para filtros de fecha (como en descargas)
     if (fechaDesde && fechaHasta) {
-      queryBuilder.andWhere('auditoria.timestamp BETWEEN :fechaDesde AND :fechaHasta', {
-        fechaDesde: `${fechaDesde} 00:00:00`,
-        fechaHasta: `${fechaHasta} 23:59:59`,
+      queryBuilder.andWhere('(auditoria.timestamp AT TIME ZONE \'America/Argentina/Buenos_Aires\')::date BETWEEN :fechaDesde AND :fechaHasta', {
+        fechaDesde,
+        fechaHasta
       });
     }
 

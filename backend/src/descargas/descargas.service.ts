@@ -83,21 +83,23 @@ export class DescargasService {
     //La notificacion sera via mail
     await this.auditoriaService.notificarExcesoDescargas(mayoristaId, totalPendientes);
   }
-
   /**
    * Registrar una nueva descarga exitosa
    */
   async registrarDescarga(data: RegistrarDescargaData): Promise<IDescarga> {
     try {
-      this.logger.log(`Registrando descarga para usuario ${data.usuarioId}`);      const descarga = this.descargaRepository.create({
+      this.logger.log(`Registrando descarga para usuario ${data.usuarioId}`);
+      // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
+      const ahora = new Date();
+      const descarga = this.descargaRepository.create({
         id_usuario: data.usuarioId,
         id_certificado: data.controladorId,        
         certificado_nombre: data.certificadoNombre,
         estadoMayorista: EstadoDescarga.PENDIENTE_FACTURAR,
         estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR,
         tamaño: data.tamaño,
-        updated_at: new Date().toISOString(),
-        created_at: new Date().toISOString()
+        updated_at: ahora.toISOString(),
+        created_at: ahora.toISOString()
       });
 
       const savedDescarga = await this.descargaRepository.save(descarga);

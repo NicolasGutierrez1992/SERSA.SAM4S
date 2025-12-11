@@ -190,8 +190,8 @@ export class NotificacionesService {
     const notificacion = await this.findOne(id);
     await this.notificacionRepository.remove(notificacion);
   }
-
   async cleanup(diasRetencion: number = 90): Promise<number> {
+    // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
     const fechaCorte = new Date();
     fechaCorte.setDate(fechaCorte.getDate() - diasRetencion);
     

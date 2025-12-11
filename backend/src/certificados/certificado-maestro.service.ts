@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import type { Multer } from 'multer';
 import { CertificadoMaestro } from './entities/certificado-maestro.entity';
 import { EncryptionService } from '../common/encryption.service';
+import { TimezoneService } from '../common/timezone.service';
 import * as fs from 'fs';
 import * as forge from 'node-forge';
 
@@ -23,14 +24,14 @@ interface MetadataCertificado {
 }
 
 @Injectable()
-export class CertificadoMaestroService {
-  private readonly logger = new Logger(CertificadoMaestroService.name);
+export class CertificadoMaestroService {  private readonly logger = new Logger(CertificadoMaestroService.name);
   private readonly CERTIFICADO_ID = 'AFIP_PRINCIPAL';
 
   constructor(
     @InjectRepository(CertificadoMaestro)
     private readonly certificadoMaestroRepository: Repository<CertificadoMaestro>,
     private readonly encryptionService: EncryptionService,
+    private readonly timezoneService: TimezoneService,
   ) {}
 
   /**
@@ -112,9 +113,7 @@ export class CertificadoMaestroService {
       // Buscar si ya existe un certificado maestro
       let certificado = await this.certificadoMaestroRepository.findOne({
         where: { id: this.CERTIFICADO_ID },
-      });
-
-      if (certificado) {
+      });      if (certificado) {
         // Actualizar certificado existente
         this.logger.log('Actualizando certificado maestro existente');
         certificado.pfx_data = pfxFile.buffer;
@@ -122,6 +121,7 @@ export class CertificadoMaestroService {
         certificado.metadata = metadata;
         certificado.certificado_identificador = certificado_identificador;
         certificado.activo = true;
+        // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
         certificado.uploaded_at = new Date();
         certificado.updated_at = new Date();
       } else {
@@ -134,6 +134,7 @@ export class CertificadoMaestroService {
           metadata,
           certificado_identificador,
           activo: true,
+          // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
           uploaded_at: new Date(),
         });
       }

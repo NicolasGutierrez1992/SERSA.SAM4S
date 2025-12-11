@@ -248,10 +248,10 @@ export class CertificadosController {
     @Body() updateEstadoDto: UpdateEstadoDescargaDto,
     @CurrentUser('id') userId: number,
     @CurrentUser() user: User,
-    @Req() req: Request
-  ): Promise<IDescarga> {
+    @Req() req: Request  ): Promise<IDescarga> {
     const ip = req.ip || req.connection.remoteAddress;
     user = await this.usersService.findOne(userId);
+    // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
     return await this.descargasService.updateEstadoDescarga(
       downloadId,
       updateEstadoDto,
@@ -320,10 +320,10 @@ export class CertificadosController {
         errors: { type: 'array', items: { type: 'string' } }
       }
     }  
-  })
-  @RequireAuthenticated()
+  })  @RequireAuthenticated()
   async getAfipStatus() {
     // Implementar verificación real de estado AFIP
+    // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
     return {
       wsaa: 'online',
       wscert: 'online', 

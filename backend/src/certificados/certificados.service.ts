@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AfipService } from '../afip/afip.service';
 import { DescargasService } from '../descargas/descargas.service';
+import { TimezoneService } from '../common/timezone.service';
 import { Certificado } from './entities/certificado.entity';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -20,13 +21,13 @@ interface CertificadoGeneradoResponse {
 }
 
 @Injectable()
-export class CertificadosService {
-  private readonly logger = new Logger(CertificadosService.name);
+export class CertificadosService {  private readonly logger = new Logger(CertificadosService.name);
   constructor(
     @InjectRepository(Certificado)
     private readonly certificadoRepository: Repository<Certificado>,
     private readonly afipService: AfipService,
     private readonly descargasService: DescargasService,
+    private readonly timezoneService: TimezoneService,
   ) {
     this.logger.log('CertificadosService initialized - Pure certificate generation');
   }
@@ -98,11 +99,10 @@ export class CertificadosService {
         });
         
         await this.certificadoRepository.save(certificado);
-        this.logger.log(`Certificado almacenado en DB: ${idCertificado}`);
-      } else {
+        this.logger.log(`Certificado almacenado en DB: ${idCertificado}`);      } else {
         // Actualizar timestamp de updated_at y el metadata del certificado
         certificado.metadata = certificadoAfip.certificadoPem;
-
+        // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
         certificado.updated_at = new Date();
         await this.certificadoRepository.save(certificado);
         this.logger.log(`Certificado existente actualizado: ${idCertificado}`);

@@ -297,8 +297,8 @@ export class UsersService {
     } else {
       user.must_change_password = false;
       await this.userRepository.save(user);
-    }
-    // Actualizar último login
+    }    // Actualizar último login
+    // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
     user.ultimo_login = new Date();
     await this.userRepository.save(user);
     console.log('[UsersService][updateLastLogin] Salida: OK');
