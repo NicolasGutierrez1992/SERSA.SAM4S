@@ -271,11 +271,10 @@ export default function CertificadosPage() {
       // Intentar usar el nuevo endpoint de validación PREPAGO
       const validacion = await certificadosApi.validarDescarga();
       setCanDownload(validacion.canDownload);
-      setDownloadMessage(validacion.message);
-    } catch (error) {
+      setDownloadMessage(validacion.message);    } catch (error) {
       // Fallback al método anterior si el endpoint no existe aún
       const limite = user.limite_descargas;
-      const pendientes = await getDescargasPendientes(user.cuit, limite);
+      const pendientes = await getDescargasPendientes(user.cuit, user.rol, limite);
       
       if (user.rol === 1) {
         setCanDownload(true);
@@ -452,24 +451,30 @@ export default function CertificadosPage() {
   const validSelectedCount = Array.from(selectedDownloadIds).filter(id =>
     historial.find(d => d.id === id && d.tipoDescarga !== 'PREPAGO')
   ).length;
-
   const handleLogout = () => {
       authApi.logout();
     };  // Función auxiliar para obtener descargas pendientes
-  async function getDescargasPendientes(userCuit: string, limite: number) {
-    const params: any = {
-      estadoMayorista: 'Pendiente de Facturar',
-      page: 1,
-      limit: 1000
-    };
-    // Solo incluir parámetros que tengan valores
-    const filteredParams = Object.fromEntries(
-      Object.entries(params).filter(([_, v]) => v !== undefined && v !== '')
-    );
-    
-    const response = await certificadosApi.getHistorialDescargas(filteredParams);
-    // Filtrar solo las descargas del usuario actual por cuit
-    return response.descargas.filter(d => d.usuario && d.usuario.cuit === userCuit).length;
+  // Los distribuidores (rol 3) usan estadoDistribuidor, otros usan estadoMayorista
+  async function getDescargasPendientes(userCuit: string, userRol: number, limite: number) {
+    try {
+      const estadoField = userRol === 3 ? 'estadoDistribuidor' : 'estadoMayorista';
+      const params: any = {
+        [estadoField]: 'Pendiente de Facturar',
+        page: 1,
+        limit: 1000
+      };
+      // Solo incluir parámetros que tengan valores
+      const filteredParams = Object.fromEntries(
+        Object.entries(params).filter(([_, v]) => v !== undefined && v !== '')
+      );
+      
+      const response = await certificadosApi.getHistorialDescargas(filteredParams);
+      // Filtrar solo las descargas del usuario actual por cuit
+      return response.descargas.filter(d => d.usuario && d.usuario.cuit === userCuit).length;
+    } catch (error) {
+      console.error('Error al obtener descargas pendientes:', error);
+      return 0; // Retornar 0 si hay error, permitiendo descarga
+    }
   }
 
   // Identificar el último registro por controladorId antes del return
