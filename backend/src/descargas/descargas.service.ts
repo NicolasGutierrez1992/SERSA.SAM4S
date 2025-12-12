@@ -377,7 +377,7 @@ export class DescargasService {
 
     // Actualizar estados
     //Si el usuario logeado es administrador y el id mayorista del usuario que descargo es = 1 actualizo ambos estados
-    if(userRole === 1 && idMayorista === 1){
+    if((userRole === 1 || userRole === 4) && idMayorista === 1){
       descarga.estadoMayorista = nuevoEstado.estadoMayorista;
       descarga.estadoDistribuidor = nuevoEstado.estadoDistribuidor;
     }else if (userRole === 1 ){

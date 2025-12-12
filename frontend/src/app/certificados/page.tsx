@@ -46,11 +46,10 @@ export default function CertificadosPage() {
   const [facturaData, setFacturaData] = useState({
     numero_factura: '',
     referencia_pago: ''
-  });
-  const [pendingEstadoChange, setPendingEstadoChange] = useState<{
+  });  const [pendingEstadoChange, setPendingEstadoChange] = useState<{
     downloadId: string;
     nuevoEstado: string;
-    tipo: 'mayorista' | 'distribuidor';
+    tipo: 'mayorista' | 'distribuidor' | 'ambos';
     userid: number;
   } | null>(null);
   const [facturaLoading, setFacturaLoading] = useState(false);
@@ -348,24 +347,23 @@ export default function CertificadosPage() {
       setDescargaLoading(false);
      
     }
-  };  const handleEstadoChange = async (downloadId: string, nuevoEstado: string, tipo: 'mayorista' | 'distribuidor', userid: number, tipoDescarga?: string) => {
+  };  
+  const handleEstadoChange = async (downloadId: string, nuevoEstado: string, rol: number, userid: number, tipoDescarga?: string) => {
     try {
       // Bloquear cambios si es PREPAGO
       if (tipoDescarga === 'PREPAGO') {
         alert('No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo e inmutable.');
         return;
-      }
-
-      // Si requiere número de factura o referencia, mostrar modal
-      if ((nuevoEstado === 'Facturado' || nuevoEstado === 'Cobrado') && tipo === 'mayorista') {
+      }      // Si requiere número de factura o referencia, mostrar modal
+      if ((nuevoEstado === 'Facturado' || nuevoEstado === 'Cobrado') && rol != 2 ) {
         setFacturaData({
           numero_factura: '',
           referencia_pago: ''
-        });
-        setPendingEstadoChange({
+        });       
+         setPendingEstadoChange({
           downloadId,
           nuevoEstado,
-          tipo,
+          tipo: 'ambos', // Admin y Facturación cambian ambos estados
           userid
         });
         setShowFacturacionModal(true);
@@ -373,29 +371,40 @@ export default function CertificadosPage() {
       }
       
       // Si no requiere datos, hacer cambio directo
-      if (user?.id_mayorista === 1) {
+      // rol 1 = admin (cambia ambos), rol 4 = facturación (cambia ambos)
+      if (rol === 1 || rol === 4) {
         await certificadosApi.cambiarEstado(downloadId, { estadoDistribuidor: nuevoEstado, estadoMayorista: nuevoEstado });
       }
-      else { 
-        const estado = tipo === 'mayorista' 
-          ? { estadoMayorista: nuevoEstado }
-          : { estadoDistribuidor: nuevoEstado };
-        console.log('cambio de estado:', estado);        
+      else {
+        // rol 2 = mayorista (cambia solo distribuidor)
+        const estado = { estadoDistribuidor: nuevoEstado };
+        console.log('cambio de estado mayorista:', estado);        
         await certificadosApi.cambiarEstado(downloadId, estado);
       }
+      
+      // Recargar historial para actualizar la tabla
       await loadHistorial();
+      alert('Estado actualizado correctamente');
     } catch (error) {
       console.error('Error cambiando estado:', error);
       alert('Error al cambiar estado');
     }
-  };
-  const handleConfirmarFacturacion = async () => {
+  };const handleConfirmarFacturacion = async () => {
     if (!pendingEstadoChange) return;
     if (facturaLoading) return; // Prevenir múltiples clics
 
     setFacturaLoading(true);
     try {
-      const updateData: any = { [pendingEstadoChange.tipo === 'mayorista' ? 'estadoMayorista' : 'estadoDistribuidor']: pendingEstadoChange.nuevoEstado };
+      // Si tipo es 'ambos', actualizar ambos estados
+      const updateData: any = {};
+      if (pendingEstadoChange.tipo === 'ambos') {
+        updateData.estadoDistribuidor = pendingEstadoChange.nuevoEstado;
+        updateData.estadoMayorista = pendingEstadoChange.nuevoEstado;
+      } else if (pendingEstadoChange.tipo === 'mayorista') {
+        updateData.estadoMayorista = pendingEstadoChange.nuevoEstado;
+      } else {
+        updateData.estadoDistribuidor = pendingEstadoChange.nuevoEstado;
+      }
       
       // Agregar número de factura si se está cambiando a Facturado
       if (pendingEstadoChange.nuevoEstado === 'Facturado' && facturaData.numero_factura) {
@@ -941,7 +950,7 @@ export default function CertificadosPage() {
                                                   onChange={(e) => {
                                                     const nuevoEstado = e.target.value;
                                                     if (nuevoEstado !== descarga.estadoMayorista) {
-                                                      handleEstadoChange(descarga.id, nuevoEstado, 'mayorista', descarga.usuarioId, descarga.tipoDescarga || undefined);
+                                                      handleEstadoChange(descarga.id, nuevoEstado, user.rol, descarga.usuarioId, descarga.tipoDescarga || undefined);
                                                       // Reset al valor actual para evitar que se quede seleccionado el otro estado
                                                       e.target.value = descarga.estadoMayorista;
                                                     }
@@ -1001,11 +1010,10 @@ export default function CertificadosPage() {
                                   {user?.rol === 2 && (
                                     descarga.tipoDescarga === 'PREPAGO' ? (
                                       <span className="text-xs text-red-600 font-semibold">PREPAGO - Inmutable</span>                                    ) : (
-                                      <select
-                                        onChange={(e) => {
+                                      <select                                        onChange={(e) => {
                                           const nuevoEstado = e.target.value;
                                           if (nuevoEstado !== descarga.estadoDistribuidor) {
-                                            handleEstadoChange(descarga.id, nuevoEstado, 'distribuidor', descarga?.usuarioId, descarga.tipoDescarga || undefined);
+                                            handleEstadoChange(descarga.id, nuevoEstado, user.rol, descarga?.usuarioId, descarga.tipoDescarga || undefined);
                                             // Reset al valor actual para evitar que se quede seleccionado el otro estado
                                             e.target.value = descarga.estadoDistribuidor;
                                           }
