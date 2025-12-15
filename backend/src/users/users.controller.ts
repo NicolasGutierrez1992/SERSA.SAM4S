@@ -122,26 +122,61 @@ export class UsersController {
   }
   @Get(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @SetMetadata('roles', [1, 4]) // 1: Admin, 4: Facturación
-  @ApiOperation({ summary: 'Obtener usuario por ID' })
-  @ApiResponse({ status: 200, description: 'Usuario encontrado', type: User })
+  @SetMetadata('roles', [1, 2, 4]) // 1: Admin, 2: Mayorista, 4: Facturación
+  @ApiOperation({ summary: 'Obtener usuario por ID (y validar permisos de edición)' })
+  @ApiResponse({ status: 200, description: 'Usuario encontrado con info de permisos' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  async findOne(@Param('id', ParseIntPipe) id: number): Promise<User> {
-    return await this.usersService.findOne(id);
+  @ApiResponse({ status: 403, description: 'No tienes permisos para editar este usuario' })
+  async findOne(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: any
+  ): Promise<any> {
+    const user = await this.usersService.findOne(id);
+    const currentUser = req.user;
+    
+    // Determinar si el usuario actual puede editar este usuario
+    let canEdit = currentUser.rol === 1; // Admin siempre puede
+    
+    if (currentUser.rol === 2) {
+      // Mayorista solo puede editar si el usuario a editar tiene el mismo id_mayorista
+      canEdit = user.id_mayorista === currentUser.id_mayorista && user.rol === 3; // Solo distribuidores
+    }
+    
+    return {
+      ...user,
+      canEdit,
+      editableFields: canEdit ? this.getEditableFields(currentUser.rol) : []
+    };
   }
 
+  // Método privado para determinar qué campos puede editar cada rol
+  private getEditableFields(rol: number): string[] {
+    switch (rol) {
+      case 1: // Admin
+        return ['nombre', 'email', 'cuit', 'rol', 'status', 'limiteDescargas', 'id_mayorista', 'celular', 'tipo_descarga'];
+      case 2: // Mayorista
+        return ['limiteDescargas', 'tipo_descarga']; // Solo estos dos
+      case 4: // Facturación
+        return ['nombre', 'email', 'status', 'limiteDescargas', 'id_mayorista', 'celular', 'tipo_descarga'];
+      default:
+        return [];
+    }
+  }
   @Patch(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @SetMetadata('roles', [1, 2]) // 1: Admin, 2: Mayorista
-  @ApiOperation({ summary: 'Actualizar usuario (solo admin y mayoristas)' })
+  @SetMetadata('roles', [1, 2, 4]) // 1: Admin, 2: Mayorista, 4: Facturación
+  @ApiOperation({ summary: 'Actualizar usuario (admin, mayoristas y facturación)' })
   @ApiResponse({ status: 200, description: 'Usuario actualizado exitosamente', type: User })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
+  @ApiResponse({ status: 403, description: 'No tienes permisos para editar este usuario' })
   @ApiResponse({ status: 409, description: 'Email ya existe' })
   async update(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateUserDto: UpdateUserDto
+    @Body() updateUserDto: UpdateUserDto,
+    @Req() req: any
   ): Promise<User> {
-    return await this.usersService.update(id, updateUserDto);
+    const currentUser = req.user;
+    return await this.usersService.update(id, updateUserDto, currentUser);
   }
 
   @Patch(':id/reset-password')

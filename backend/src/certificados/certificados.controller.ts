@@ -421,10 +421,11 @@ export class CertificadosController {
     });
 
     // Obtener todas las descargas para contar las pendientes de facturación
+    console.log(`Obteniendo descargas pendientes de facturación para usuario ${userId}`);
     const todasDescargasResult = await this.descargasService.getDescargas({
       limit: 1000,
       usuarioId: userId,
-      estadoMayorista: EstadoDescarga.PENDIENTE_FACTURAR
+      estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR
     });
     
     const descargasHoy = descargasHoyResult.descargas.length;

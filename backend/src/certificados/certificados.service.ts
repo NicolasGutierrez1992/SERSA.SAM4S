@@ -120,20 +120,22 @@ export class CertificadosService {  private readonly logger = new Logger(Certifi
         certificadoNombre: certificado.archivo_referencia,
         tamaño: certificadoAfip.tamaño,
         ipOrigen: ip
-      });
-
-      this.logger.log(`Descarga registrada exitosamente: ${descarga.id}`);
-      //Validar si la suma de descargas pendientes supera el límite configurado en la variable de sesion NOTIFICATION_LIMIT
+      });      this.logger.log(`Descarga registrada exitosamente: ${descarga.id}`);
+      
+      // ⭐ Validar si la suma de descargas pendientes supera el notification_limit del mayorista
       const idMayorista = await this.descargasService.obtenerIdMayoristaPorUsuario(userId);
       if(idMayorista != 1){
         const pendingDownloads = await this.descargasService.contarDescargasPendientesMayorista(idMayorista);
-        const NOTIFICATION_LIMIT = parseInt(process.env.NOTIFICATION_LIMIT) || 100;
-        this.logger.warn(`Cantidad de descargas pendientes del mayorista ${idMayorista}  (${pendingDownloads})`);
-        this.logger.warn(`Límite configurado en NOTIFICATION_LIMIT (${NOTIFICATION_LIMIT})`);      
-        if (pendingDownloads >= NOTIFICATION_LIMIT) {
-          this.logger.warn(`El mayorista ${idMayorista} ha superado el límite configurado en notificaciones (${NOTIFICATION_LIMIT})`);
-          // Aquí se podría agregar lógica adicional, como enviar una notificación al usuario o administrador
-          this.descargasService.notificarExcesoDescargasMayorista(idMayorista, pendingDownloads);
+        // ⭐ NUEVO: Obtener notification_limit desde la BD (usuario mayorista con rol=2)
+        const notificationLimit = await this.descargasService.obtenerNotificationLimitMayorista(idMayorista);
+        
+        this.logger.warn(`Cantidad de descargas pendientes del mayorista ${idMayorista}: ${pendingDownloads}`);
+        this.logger.warn(`Límite de notificación configurado: ${notificationLimit}`);      
+        
+        if (pendingDownloads >= notificationLimit) {
+          this.logger.warn(`El mayorista ${idMayorista} ha superado el límite configurado en notificaciones (${notificationLimit})`);
+          // Notificación vía email a facturación
+          await this.descargasService.notificarExcesoDescargasMayorista(idMayorista, pendingDownloads);
         }
       }
       

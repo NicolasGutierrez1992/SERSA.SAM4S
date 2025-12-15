@@ -64,12 +64,17 @@ export default function CertificadosPage() {
     numero_factura: '',
     referencia_pago: ''
   });
-  const [bulkLoading, setBulkLoading] = useState(false);
-  const [bulkResults, setBulkResults] = useState<{
+  const [bulkLoading, setBulkLoading] = useState(false);  const [bulkResults, setBulkResults] = useState<{
     success: number;
     failed: number;
     errors: string[];
   } | null>(null);
+
+  // ⭐ Estados para modal de confirmación de descarga
+  const [showDownloadConfirmModal, setShowDownloadConfirmModal] = useState(false);
+  const [pendingDownloadData, setPendingDownloadData] = useState<CreateDescargaRequest | null>(null);
+  const [downloadConfirmLoading, setDownloadConfirmLoading] = useState(false);
+  const [acceptDownloadConfirm, setAcceptDownloadConfirm] = useState(false);
   
   const toggleRowExpanded = (downloadId: string) => {
     setExpandedRows(prev => {
@@ -192,7 +197,18 @@ export default function CertificadosPage() {
     }
   }, [router]);
 
-   
+  // ⭐ DEBUG: Verificar tipo_descarga del usuario
+  useEffect(() => {
+    if (user) {
+      console.log('🔍 DEBUG - Usuario cargado:', {
+        id: user.id,
+        rol: user.rol,
+        tipo_descarga: user.tipo_descarga,
+        limite_descargas: user.limite_descargas
+      });
+    }
+  }, [user]);
+
   useEffect(() => {
     if (activeTab === 'historial') {
       loadHistorial();
@@ -263,49 +279,73 @@ export default function CertificadosPage() {
     const response = await certificadosApi.getHistorialDescargas(filtrosFinal);
     setHistorial(response.descargas || []);
     setHistorialLoading(false);
-  };
-   // Validar límite de descargas (ahora función reutilizable)
+  };   // Validar límite de descargas (ahora función reutilizable)
+  // ⭐ VALIDACIÓN CENTRALIZADA EN BACKEND - Elimina fallback defectuoso
   const validarLimiteDescargas = async () => {
     if (!user) return;
     try {
-      // Intentar usar el nuevo endpoint de validación PREPAGO
+      // Usar endpoint de validación del backend (ÚNICA fuente de verdad)
       const validacion = await certificadosApi.validarDescarga();
       setCanDownload(validacion.canDownload);
-      setDownloadMessage(validacion.message);    } catch (error) {
-      // Fallback al método anterior si el endpoint no existe aún
-      const limite = user.limite_descargas;
-      const pendientes = await getDescargasPendientes(user.cuit, user.rol, limite);
+      setDownloadMessage(validacion.message);
       
-      if (user.rol === 1) {
-        setCanDownload(true);
-        setDownloadMessage('');
-      } else if (pendientes >= limite) {
-        setCanDownload(false);
-        setDownloadMessage(`Has alcanzado el límite de descargas pendientes (${pendientes} de ${limite}). No puedes descargar certificados hasta que se libere el límite.`);
-      } else {
-        setCanDownload(true);
-        setDownloadMessage('');
-      }
+      console.log(`[Frontend] Validación de descarga: ${validacion.canDownload}`, {
+        userType: validacion.userType,
+        limiteDisponible: validacion.limiteDisponible,
+        message: validacion.message
+      });
+    } catch (error) {
+      console.error('Error validando límite de descargas:', error);
+      // Si falla, asumir que NO puede descargar (modo seguro)
+      setCanDownload(false);
+      setDownloadMessage('Error al validar límite de descargas. Por favor, recarga la página.');
     }
   };
 
   useEffect(() => {
     validarLimiteDescargas();
-  }, [user]);
-
-  const handleDescarga = async (e: React.FormEvent) => {
+  }, [user]);  const handleDescarga = async (e: React.FormEvent) => {
     e.preventDefault();
-    setDescargaLoading(true);
     setDescargaError('');
 
     try {
-      // Validaciones
+      // Validaciones locales
       if (descargaData.numeroSerie.length < 1 || descargaData.numeroSerie.length > 10) {
         throw new Error('El número de serie debe tener entre 1 y 10 dígitos');
       }
 
+      // ⭐ NUEVA: Re-validar límite justo antes de mostrar el modal
+      const validacionFinal = await certificadosApi.validarDescarga();
+      if (!validacionFinal.canDownload) {
+        throw new Error(validacionFinal.message);
+      }
+
+      // Guardar los datos pendientes y mostrar modal de confirmación
+      setPendingDownloadData({ ...descargaData });
+      setShowDownloadConfirmModal(true);
+      
+    } catch (error: any) {
+      console.error('Error en validación de descarga:', error);
+      
+      if (error.response?.data?.message) {
+        setDescargaError(error.response.data.message);
+      } else if (error.message === 'Network Error') {
+        setDescargaError('Error de conexión. Verifique que el servidor esté funcionando.');
+      } else {
+        setDescargaError(error.message || 'Error al descargar certificado. Por favor, inténtelo nuevamente.');
+      }
+    }
+  };
+
+  // ⭐ NUEVA: Confirmar descarga después de aceptar el modal
+  const handleConfirmarDescarga = async () => {
+    if (!pendingDownloadData) return;
+    setDownloadConfirmLoading(true);
+    setDescargaError('');
+
+    try {
       // 1. Generar certificado
-      const response = await certificadosApi.descargarCertificado(descargaData);
+      const response = await certificadosApi.descargarCertificado(pendingDownloadData);
       
       // 2. Descargar archivo automáticamente
       const blob = await certificadosApi.descargarArchivo(response.downloadId);
@@ -318,9 +358,12 @@ export default function CertificadosPage() {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(url);      // 4. Cerrar modal
+      setShowDownloadConfirmModal(false);
+      setPendingDownloadData(null);
+      setAcceptDownloadConfirm(false);
 
-      // 4. Limpiar formulario y recargar métricas
+      // 5. Limpiar formulario y recargar métricas
       setDescargaData({
         controladorId: '',
         marca: 'SH',
@@ -343,10 +386,15 @@ export default function CertificadosPage() {
         setDescargaError(error.message || 'Error al descargar certificado. Por favor, inténtelo nuevamente.');
       }
     } finally {
-      setDescargaLoading(false);
-     
+      setDownloadConfirmLoading(false);
     }
-  };  
+  };
+  const handleCancelarDescarga = () => {
+    setShowDownloadConfirmModal(false);
+    setPendingDownloadData(null);
+    setAcceptDownloadConfirm(false);
+    setDescargaError('');
+  };
   const handleEstadoChange = async (downloadId: string, nuevoEstado: string, rol: number, userid: number, tipoDescarga?: string) => {
     try {
       // Bloquear cambios si es PREPAGO
@@ -450,32 +498,15 @@ export default function CertificadosPage() {
   // Calcular descargas seleccionadas válidas (no PREPAGO)
   const validSelectedCount = Array.from(selectedDownloadIds).filter(id =>
     historial.find(d => d.id === id && d.tipoDescarga !== 'PREPAGO')
-  ).length;
-  const handleLogout = () => {
+  ).length;  const handleLogout = () => {
       authApi.logout();
-    };  // Función auxiliar para obtener descargas pendientes
-  // Los distribuidores (rol 3) usan estadoDistribuidor, otros usan estadoMayorista
-  async function getDescargasPendientes(userCuit: string, userRol: number, limite: number) {
-    try {
-      const estadoField = userRol === 3 ? 'estadoDistribuidor' : 'estadoMayorista';
-      const params: any = {
-        [estadoField]: 'Pendiente de Facturar',
-        page: 1,
-        limit: 1000
-      };
-      // Solo incluir parámetros que tengan valores
-      const filteredParams = Object.fromEntries(
-        Object.entries(params).filter(([_, v]) => v !== undefined && v !== '')
-      );
-      
-      const response = await certificadosApi.getHistorialDescargas(filteredParams);
-      // Filtrar solo las descargas del usuario actual por cuit
-      return response.descargas.filter(d => d.usuario && d.usuario.cuit === userCuit).length;
-    } catch (error) {
-      console.error('Error al obtener descargas pendientes:', error);
-      return 0; // Retornar 0 si hay error, permitiendo descarga
-    }
-  }
+    };
+  
+  // ⭐ REMOVIDO: getDescargasPendientes - La validación ahora es 100% en backend
+  // El backend valida en canUserDownload() diferenciando:
+  // - PREPAGO: Valida límite_descargas > 0
+  // - CUENTA_CORRIENTE (rol 3): Valida estadoDistribuidor "Pendiente" >= límite
+  // - CUENTA_CORRIENTE (otros): Valida estadoMayorista "Pendiente" >= límite
 
   // Identificar el último registro por controladorId antes del return
   const ultimosPorControlador: Record<string, string> = {};
@@ -660,10 +691,9 @@ export default function CertificadosPage() {
                 </h3>                {downloadMessage && (
                   <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded mb-6">
                     {downloadMessage}
-                  </div>
-                )}
+                  </div>                )}
                 
-                {user?.tipo_descarga === 'PREPAGO' && metricas && (
+                {(user?.tipo_descarga === 'PREPAGO' || (metricas && metricas.limiteDescargas > 0)) && metricas && (
                   <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
                     <strong>Sistema PREPAGO Activo:</strong> Tienes {metricas.limiteDescargas} descargas disponibles.
                   </div>
@@ -725,22 +755,12 @@ export default function CertificadosPage() {
                     <p className="mt-1 text-xs text-gray-500">
                       Solo números, entre 1 y 10 dígitos. Se completará con ceros a la izquierda.
                     </p>
-                  </div>
-
-                  <button
+                  </div>                  <button
                     type="submit"
-                    disabled={descargaLoading || !descargaData.numeroSerie || !canDownload}
+                    disabled={!descargaData.numeroSerie || !canDownload}
                     className="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {descargaLoading ? (
-                      <span className="flex items-center">
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Procesando descarga...
-                      </span>
-                    ) : !canDownload ? (
+                    {!canDownload ? (
                       'SOLICITAR LIMITE A TU PROVEEDOR'
                     ) : (
                       'Descargar Certificado'
@@ -754,19 +774,27 @@ export default function CertificadosPage() {
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-6">
                   Historial de Descargas
-                </h3>
-                <button
-                  onClick={() => {
-                    // Generar datos para Excel
-                    const data = historial.map((descarga) => ({
-                      Controlador: descarga.controladorId || descarga.certificadoNombre,
-                      Usuario: descarga.usuario ? descarga.usuario.nombre : descarga.usuarioId,
-                      CUIT: descarga.usuario?.cuit || '',
-                      'Estado Mayorista': descarga.estadoMayorista || '',
-                      'Fecha de Facturación': descarga.fechaFacturacion ? new Date(descarga.fechaFacturacion).toLocaleDateString() : 'Sin facturar',
-                      'Estado Distribuidor': descarga.estadoDistribuidor || '',
-                      'Ultima Creacion': descarga.updatedAt ? new Date(descarga.updatedAt).toLocaleDateString() : 'Sin fecha',
-                    }));
+                </h3>                <button
+                  onClick={() => {                    // Generar datos para Excel
+                    const data = historial.map((descarga) => {
+                      const baseData: Record<string, any> = {
+                        Controlador: descarga.controladorId || descarga.certificadoNombre || '',
+                        Usuario: descarga.usuario ? descarga.usuario.nombre : (descarga.usuarioId || ''),
+                        CUIT: descarga.usuario?.cuit || '',
+                        'Estado Mayorista': descarga.estadoMayorista || '',
+                        'Fecha de Facturación': descarga.fechaFacturacion ? new Date(descarga.fechaFacturacion).toLocaleDateString() : 'Sin facturar',
+                        'Estado Distribuidor': descarga.estadoDistribuidor || '',
+                        'Ultima Creacion': descarga.updatedAt ? new Date(descarga.updatedAt).toLocaleDateString() : 'Sin fecha',
+                      };
+
+                      // ⭐ Agregar columnas de facturación SOLO si el usuario NO es distribuidor (rol ≠ 3)
+                      if (user?.rol !== 3) {
+                        baseData['Número de Factura'] = descarga.numero_factura || '-';
+                        baseData['Referencia de Pago'] = descarga.referencia_pago || '-';
+                      }
+
+                      return baseData;
+                    });
                     const ws = XLSX.utils.json_to_sheet(data);
                     const wb = XLSX.utils.book_new();
                     XLSX.utils.book_append_sheet(wb, ws, 'Historial');
@@ -1291,6 +1319,133 @@ export default function CertificadosPage() {
                   </>
                 ) : (
                   'Confirmar'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⭐ Modal de confirmación de descarga - Aviso de cobro y límites */}
+      {showDownloadConfirmModal && user && metricas && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-medium text-gray-900">
+                Confirmar Descarga de Certificado
+              </h3>
+              <svg className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+
+            {/* Información del certificado */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <p className="text-sm text-gray-700 mb-2">
+                <span className="font-semibold">Certificado:</span> SE{pendingDownloadData?.marca}{pendingDownloadData?.modelo}{pendingDownloadData?.numeroSerie?.toString().padStart(10, '0')}
+              </p>
+                </div>
+
+            {/* Aviso según tipo de descarga - PREPAGO si tipo_descarga='PREPAGO' O limite_descargas > 0, sino CUENTA_CORRIENTE */}
+            {(user?.tipo_descarga === 'PREPAGO' || metricas?.limiteDescargas > 0) ? (
+              // PREPAGO: Se descuenta del límite disponible
+              <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
+                <p className="text-sm font-semibold text-purple-800 mb-2">
+                  ⚡ Sistema PREPAGO
+                </p>
+                <p className="text-sm text-purple-700 mb-3">
+                  Esta descarga te descontará <strong>1 descarga</strong> de tu límite disponible.
+                </p>
+                <div className="bg-white rounded p-2 mb-2">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-600">Límite actual:</span>
+                    <span className="font-semibold text-gray-900">{metricas?.limiteDescargas} descargas</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-600">Después de la descarga:</span>
+                    <span className="font-semibold text-indigo-600">{Math.max(0, (metricas?.limiteDescargas || 0) - 1)} descargas</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // CUENTA_CORRIENTE: Genera una deuda a pagar
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                <p className="text-sm font-semibold text-amber-800 mb-2">
+                  💰 Cuenta Corriente - Deuda Pendiente
+                </p>
+                <p className="text-sm text-amber-700 mb-3">
+                  Esta descarga generará un cargo en tu cuenta que deberá ser pagado.
+                </p>
+                <div className="bg-white rounded p-2 mb-2">
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-gray-600">Descargas pendientes:</span>
+                    <span className="font-semibold text-gray-900">{metricas.pendienteFacturar} / {metricas.limiteDescargas}</span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-gray-600">Después de la descarga:</span>
+                    <span className={`font-semibold ${metricas.pendienteFacturar + 1 >= metricas.limiteDescargas ? 'text-red-600' : 'text-orange-600'}`}>
+                      {metricas.pendienteFacturar + 1} / {metricas.limiteDescargas}
+                    </span>
+                  </div>
+                </div>
+                {metricas.pendienteFacturar + 1 >= metricas.limiteDescargas && (
+                  <div className="bg-red-50 border border-red-200 rounded p-2 mt-2">
+                    <p className="text-xs text-red-700 font-semibold">
+                      ⚠️ Alcanzarás tu límite de descargas pendientes
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}            {/* Confirmación */}
+            <div className="bg-gray-50 rounded-lg p-4 mb-4">
+              <p className="text-sm text-gray-700 mb-3">
+                Al descargar el certificado {(user?.tipo_descarga === 'PREPAGO' || metricas?.limiteDescargas > 0) ? 
+                  'se descontará de tu límite disponible' : 
+                  'se agregará un cargo a tu cuenta que deberá ser abonado en el próximo período de facturación'}.
+              </p>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  id="confirmDownload"
+                  className="h-4 w-4 rounded border-gray-300"
+                  defaultChecked={false}
+                  onChange={(e) => setAcceptDownloadConfirm(e.target.checked)}
+                />
+                <span className="text-sm text-gray-700">
+                  Entiendo y acepto proceder con la descarga
+                </span>
+              </label>
+            </div>
+
+            {/* Botones */}
+            <div className="flex gap-3">
+              <button
+                onClick={handleCancelarDescarga}
+                disabled={downloadConfirmLoading}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmarDescarga}
+                disabled={downloadConfirmLoading || !acceptDownloadConfirm}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {downloadConfirmLoading ? (
+                  <>
+                    <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Descargando...</span>
+                  </>
+                ) : (
+                  <span className="flex items-center gap-2">
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Descargar Certificado
+                  </span>
                 )}
               </button>
             </div>

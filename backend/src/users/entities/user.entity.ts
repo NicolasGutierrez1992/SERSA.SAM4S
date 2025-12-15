@@ -66,6 +66,14 @@ export class User {
     example: 'CUENTA_CORRIENTE'
   })
   tipo_descarga: 'CUENTA_CORRIENTE' | 'PREPAGO';
+
+  @ApiPropertyOptional({ 
+    description: 'Límite de descargas pendientes para notificación (solo para mayoristas, rol=2). Default: 100',
+    example: 100,
+    nullable: true
+  })
+  @Column({ type: 'integer', nullable: true, default: 100 })
+  notification_limit: number;
   
   @OneToMany(() => Descarga, descarga => descarga.usuario)
   descargas: Descarga[];

@@ -80,17 +80,35 @@ export default function UsuariosPage() {
     email: user.mail,
     cuit: user.cuit,
     rol: user.rol,
-    status: user.status,
-    limiteDescargas: user.limite_descargas,
+    status: user.status,    limiteDescargas: user.limite_descargas,
     id_mayorista: user.id_mayorista,
     celular: user.celular,
     tipo_descarga: user.tipo_descarga || 'CUENTA_CORRIENTE',
+    notification_limit: user.notification_limit !== null && user.notification_limit !== undefined ? user.notification_limit : 100,
   });
+  const openEditUser = async (user: any) => {
+    try {
+      // ⭐ Llamar al GET endpoint para validar permisos
+      const response = await api.get(`/users/${user.id_usuario}`);
+      const userData = response.data;
+      
+      // Validar que pueda editar
+      if (!userData.canEdit) {
+        message.error('No tienes permisos para editar este usuario');
+        return;
+      }
 
-  const openEditUser = (user: any) => {
-    setEditingUser(user);
-    form.setFieldsValue(mapUserToForm(user));
-    setModalVisible(true);
+      setEditingUser(userData);
+      form.setFieldsValue(mapUserToForm(userData));
+      setModalVisible(true);
+    } catch (err: any) {
+      console.error('Error al validar permisos:', err);
+      if (err?.response?.data?.message) {
+        message.error(err.response.data.message);
+      } else {
+        message.error('No tienes permisos para editar este usuario');
+      }
+    }
   };
 
   // Validaciones frontend para crear usuario
@@ -109,7 +127,6 @@ export default function UsuariosPage() {
     }
     return null;
   };
-
   //guarda los cambios del modal o crea un nuevo usuario
   const handleModalOk = async () => {
     try {
@@ -124,11 +141,55 @@ export default function UsuariosPage() {
         message.error(error);
         return;
       }
-      console.log('Valores validados para enviar al backend:', values);
-      console.log('Usuario en edición:', editingUser);
-      if (editingUser) {
+
+      // ⭐ Si es mayorista editando, y cambia el tipo_descarga, mostrar confirmación
+      if (editingUser && isMayorista && values.tipo_descarga !== editingUser.tipo_descarga) {
+        const tipoAnterior = editingUser.tipo_descarga || 'CUENTA_CORRIENTE';
+        const tipoNuevo = values.tipo_descarga;
+        const labelAnterior = tipoAnterior === 'PREPAGO' ? 'Prepago' : 'Cuenta Corriente';
+        const labelNuevo = tipoNuevo === 'PREPAGO' ? 'Prepago' : 'Cuenta Corriente';
+        
+        const confirmacion = window.confirm(
+          `⚠️ CAMBIO DE TIPO DE DESCARGA\n\n` +
+          `Usuario: ${editingUser.nombre}\n` +
+          `Cambiar de: ${labelAnterior} → ${labelNuevo}\n\n` +
+          (tipoNuevo === 'PREPAGO' 
+            ? `Se le descontará el límite en cada descarga.\n` 
+            : `Se validará por descargas pendientes de pago.\n`) +
+          `\n¿Confirmar este cambio?`
+        );
+
+        if (!confirmacion) {
+          return;
+        }
+      }      console.log('Valores validados para enviar al backend:', values);
+      console.log('Usuario en edición:', editingUser);      if (editingUser) {
+        // ⭐ Filtrar campos según el rol
+        let dataToSend: any = {};
+        
+        if (isMayorista) {
+          // Los mayoristas solo pueden editar estos campos
+          dataToSend = {
+            limiteDescargas: values.limiteDescargas,
+            tipo_descarga: values.tipo_descarga
+          };
+          console.log('[Mayorista Edit] Campos filtrados:', dataToSend);
+        } else if (!isMayorista && editingUser.rol === 2) {
+          // Admin editando Mayorista: puede editar notification_limit, limiteDescargas y tipo_descarga
+          dataToSend = {
+            limiteDescargas: values.limiteDescargas,
+            tipo_descarga: values.tipo_descarga,
+            notification_limit: values.notification_limit
+          };
+          console.log('[Admin Edit Mayorista] Campos permitidos:', dataToSend);
+        } else {
+          // Admin editando otros usuarios: todos los campos
+          dataToSend = values;
+          console.log('[Admin Edit User] Todos los campos:', dataToSend);
+        }
+        
         // Lógica para editar usuario
-        await api.patch(`/users/${editingUser.id_usuario}`, values);
+        await api.patch(`/users/${editingUser.id_usuario}`, dataToSend);
         message.success('Usuario actualizado');
       } else {
         // Lógica para crear usuario
@@ -149,13 +210,18 @@ export default function UsuariosPage() {
           const url = `https://wa.me/${numeroCompleto}?text=${mensaje}`;
           window.open(url, '_blank');
         }
-      }
-      setModalVisible(false);
+      }      setModalVisible(false);
       form.resetFields();
-      // Refrescar lista
-      const res = await api.get('/users');
-      setUsuarios(res.data.data || []);
-      setJerarquia(res.data.jerarquia || []);
+      // Refrescar lista de usuarios
+      try {
+        const res = await api.get('/users');
+        const nuevosUsuarios = res.data.data || res.data || [];
+        console.log('[Refrescando tabla] Nuevos usuarios:', nuevosUsuarios);
+        setUsuarios(nuevosUsuarios);
+        setJerarquia(res.data.jerarquia || []);
+      } catch (err) {
+        console.error('[Error refrescando usuarios]:', err);
+      }
     } catch (err: any) {
       if (err?.response?.data?.message) {
         message.error(err.response.data.message);
@@ -190,8 +256,7 @@ export default function UsuariosPage() {
       dataIndex: 'id_mayorista',
       key: 'id_mayorista',
       render: (id: number) => MAYORISTAS_MAP[id] || '-',
-    },
-    { title: 'Límite Descargas', dataIndex: 'limite_descargas', key: 'limite_descargas', sorter: (a: any, b: any) => a.limite_descargas - b.limite_descargas },
+    },    { title: 'Límite Descargas', dataIndex: 'limite_descargas', key: 'limite_descargas', sorter: (a: any, b: any) => a.limite_descargas - b.limite_descargas },
     { 
       title: 'Tipo Descarga', 
       dataIndex: 'tipo_descarga', 
@@ -201,7 +266,18 @@ export default function UsuariosPage() {
         const label = tipo === 'PREPAGO' ? 'Prepago' : 'Cuenta Corriente';
         return <span style={{ color, fontWeight: 500 }}>{label}</span>;
       }
-    },
+    },    ...(currentUser.rol === 1 ? [{
+      title: 'Límite Notificación',
+      dataIndex: 'notification_limit',
+      key: 'notification_limit',
+      render: (limit: number, record: any) => {
+        // Solo mostrar para mayoristas (rol=2)
+        if (record.rol !== 2) return '-';
+        // Si no hay valor, mostrar 100 (default)
+        const displayValue = limit !== null && limit !== undefined ? limit : 100;
+        return <span style={{ fontWeight: 500, color: '#0ea5e9' }}>{displayValue}</span>;
+      }
+    }] : []),
   //  { title: 'Último Login', dataIndex: 'ultimo_login', key: 'ultimo_login', sorter: (a: any, b: any) => (a.ultimo_login || '').localeCompare(b.ultimo_login || '') },
     {
       title: 'Acciones',
@@ -339,8 +415,7 @@ export default function UsuariosPage() {
                   className="mb-8"
                   scroll={{ x: 'max-content' }}
                 />
-                {/* Modal para agregar/editar usuario */}
-                <Modal
+                {/* Modal para agregar/editar usuario */}                <Modal
                   title={editingUser ? 'Editar usuario' : 'Agregar usuario'}
                   open={modalVisible}
                   onOk={handleModalOk}
@@ -350,10 +425,24 @@ export default function UsuariosPage() {
                   okButtonProps={{ style: { background: '#6366f1', borderColor: '#6366f1', color: '#fff' }, className: 'hover:bg-indigo-700 hover:border-indigo-700' }}
                   cancelButtonProps={{ style: { background: '#6366f1', borderColor: '#6366f1', color: '#fff' }, className: 'hover:bg-indigo-700 hover:border-indigo-700' }}
                   destroyOnClose
-                >                  <Form
+                >
+                  {/* ⭐ Mostrar info si es mayorista editando */}
+                  {isMayorista && editingUser && (
+                    <div style={{ 
+                      backgroundColor: '#f0f9ff', 
+                      border: '1px solid #0ea5e9', 
+                      borderRadius: '6px',
+                      padding: '12px',
+                      marginBottom: '16px'
+                    }}>
+                      <p style={{ margin: 0, fontSize: '14px', color: '#0369a1', fontWeight: 500 }}>
+                        ℹ️ Como mayorista, solo puedes editar: Límite de Descargas y Tipo de Descarga
+                      </p>
+                    </div>
+                  )}                  <Form
                     form={form}
                     layout="vertical"
-                    initialValues={editingUser || { status: 1, id_rol: 3, tipo_descarga: 'CUENTA_CORRIENTE' }}
+                    initialValues={editingUser || { status: 1, id_rol: 3, tipo_descarga: 'CUENTA_CORRIENTE', notification_limit: 100 }}
                   >
                     <Form.Item name="cuit" label="CUIT" rules={[{ required: true, message: 'Ingrese el CUIT' }]}>
                       <Input disabled={isMayorista} />
@@ -393,18 +482,16 @@ export default function UsuariosPage() {
                     </Form.Item>                    <Form.Item name="limiteDescargas" label="Límite de Descargas" rules={[{ required: true }]}> 
                       <Input type="number" min={1} />
                     </Form.Item>
-                    
-                    <Form.Item name="tipo_descarga" label="Tipo de Descarga" rules={[{ required: true, message: 'Seleccione el tipo de descarga' }]}>
+                      <Form.Item name="tipo_descarga" label="Tipo de Descarga" rules={[{ required: true, message: 'Seleccione el tipo de descarga' }]}>
                       <Select 
-                        disabled={isMayorista}
+                        disabled={isMayorista && !editingUser}
                         options={[
                           { value: 'CUENTA_CORRIENTE', label: 'Cuenta Corriente' },
                           { value: 'PREPAGO', label: 'Prepago' }
                         ]}
                       />
                     </Form.Item>
-                    
-                    <Form.Item name="id_mayorista" label="Mayorista">
+                      <Form.Item name="id_mayorista" label="Mayorista">
                       <Select 
                         disabled={isMayorista} 
                         allowClear 
@@ -421,6 +508,29 @@ export default function UsuariosPage() {
                         }
                       />
                     </Form.Item>
+
+                    {/* ⭐ Campo notification_limit: Solo Admin puede verlo y editarlo, solo para Mayoristas */}
+                    {!isMayorista && (editingUser?.rol === 2 || form.getFieldValue('rol') === 2) && (
+                      <Form.Item 
+                        name="notification_limit" 
+                        label="Límite para notificación de descargas pendientes"
+                        tooltip="Cuando las descargas pendientes del mayorista superan este valor, se envía un email a facturación"
+                        rules={[
+                          { required: true, message: 'Ingrese el límite de notificación' },
+                          { 
+                            pattern: /^\d+$/, 
+                            message: 'Debe ser un número entero' 
+                          }
+                        ]}
+                      >
+                        <Input 
+                          type="number" 
+                          min={1} 
+                          max={10000} 
+                          placeholder="Ej: 100, 150, 200"
+                        />
+                      </Form.Item>
+                    )}
                     
                     {/* Solo mostrar password al crear */}
                     {!editingUser && (

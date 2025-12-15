@@ -92,7 +92,7 @@ export default function LoginPage() {
               />
             </div>
             <h2 className="text-2xl font-bold text-gray-900">
-              Gestión de Certificados CRS
+              Gestión de Certificados Sam4s
             </h2>
             <p className="mt-2 text-sm text-gray-600">
               Ingrese sus credenciales para acceder

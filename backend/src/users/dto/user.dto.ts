@@ -103,8 +103,7 @@ export class CreateUserDto {
   @IsOptional()
   @IsNumber({}, { message: 'El ID del usuario debe ser un número' })
   @Type(() => Number)
-  created_by?: number;
-  @ApiPropertyOptional({
+  created_by?: number;  @ApiPropertyOptional({
     example: "1112345678",
     description: 'Numero de celular para enviar confirmacion via Whatsapp',
   })
@@ -121,6 +120,17 @@ export class CreateUserDto {
   @IsOptional()
   @IsEnum(TipoDescarga, { message: 'El tipo de descarga debe ser válido' })
   tipo_descarga?: TipoDescarga;
+
+  @ApiPropertyOptional({
+    example: 150,
+    description: 'Límite de notificación de descargas pendientes (solo para mayoristas, rol=2). Default: 100',
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'El límite de notificación debe ser un número' })
+  @Min(1, { message: 'El límite de notificación mínimo es 1' })
+  @Max(10000, { message: 'El límite de notificación máximo es 10000' })
+  @Type(() => Number)
+  notification_limit?: number;
 }
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
@@ -199,7 +209,6 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @Max(1000, { message: 'El límite máximo es 1000' })
   @Type(() => Number)
   limiteDescargas?: number;
-
   @ApiPropertyOptional({
     example: true,
     description: 'Indica si el usuario debe cambiar su contraseña',
@@ -212,6 +221,17 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsString({ message: 'Debe ser un número de celular válido' })
   @Length(10, 15, { message: 'El número de celular debe tener entre 10 y 15 caracteres' })
   celular?: string;
+
+  @ApiPropertyOptional({
+    example: 150,
+    description: 'Límite de notificación de descargas pendientes (solo para mayoristas, rol=2). Default: 100',
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'El límite de notificación debe ser un número' })
+  @Min(1, { message: 'El límite de notificación mínimo es 1' })
+  @Max(10000, { message: 'El límite de notificación máximo es 10000' })
+  @Type(() => Number)
+  notification_limit?: number;
 }
 
 export class QueryUsersDto {

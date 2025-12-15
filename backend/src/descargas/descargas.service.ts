@@ -89,21 +89,47 @@ export class DescargasService {
     });
     return user?.id_mayorista || 0;
   }
-
   /**
-   * notificar al administrador que el mayorista supero el limite de descargas pendientes
+   * Obtener el notification_limit del mayorista
+   * Busca al usuario con rol=2 e id_mayorista = mayoristaId
    */
-  async notificarExcesoDescargasMayorista(mayoristaId: number, totalPendientes: number): Promise<void> {
-    this.logger.warn(`El mayorista ${mayoristaId} ha superado el límite de descargas pendientes: ${totalPendientes}`);
-    // Aquí se podría agregar lógica adicional, como enviar una notificación al usuario o administrador
-    //La notificacion sera via mail
-    await this.auditoriaService.notificarExcesoDescargas(mayoristaId, totalPendientes);
+  async obtenerNotificationLimitMayorista(mayoristaId: number): Promise<number> {
+    const mayorista = await this.descargaRepository.manager.getRepository(User).findOne({
+      where: { 
+        rol: 2,  // rol MAYORISTA
+        id_mayorista: mayoristaId 
+      },
+      select: ['notification_limit']
+    });
+    
+    // Si no existe el usuario mayorista o no tiene límite asignado, usar default 100
+    if (!mayorista || mayorista.notification_limit === null || mayorista.notification_limit === undefined) {
+      this.logger.warn(`No se encontró notification_limit para mayorista ${mayoristaId}, usando default 100`);
+      return 100;
+    }
+    
+    return mayorista.notification_limit;
   }
 
   /**
+   * notificar al administrador que el mayorista supero el limite de descargas pendientes
+   * Obtiene el notification_limit de la BD en lugar de una variable de sesión
+   */
+  async notificarExcesoDescargasMayorista(mayoristaId: number, totalPendientes: number): Promise<void> {
+    this.logger.warn(`El mayorista ${mayoristaId} ha superado el límite de descargas pendientes: ${totalPendientes}`);
+    // Obtener el notification_limit de la BD
+    const notificationLimit = await this.obtenerNotificationLimitMayorista(mayoristaId);
+    this.logger.warn(`Límite de notificación del mayorista ${mayoristaId}: ${notificationLimit}, Descargas pendientes: ${totalPendientes}`);
+    // La notificación se envía vía mail
+    await this.auditoriaService.notificarExcesoDescargas(mayoristaId, totalPendientes);
+  }
+  /**
    * Validar si un usuario puede descargar certificados
    * Admin (1) y Mayorista (2): siempre pueden
-   * Distribuidor (3) y Facturación (4): deben tener límite disponible
+   * Distribuidor (3) y Facturación (4): deben validar según tipo_descarga
+   * 
+   * CUENTA_CORRIENTE: Validar descargas pendientes >= límite configurado
+   * PREPAGO: Validar límite disponible > 0
    */
   async canUserDownload(userId: number): Promise<ValidacionDescargaDto> {
     const userRepository = this.descargaRepository.manager.getRepository(User);
@@ -125,25 +151,55 @@ export class DescargasService {
       };
     }
 
-    // Distribuidor (3) y Facturación (4) - validar límite
-    if (user.limite_descargas <= 0) {
-      const mensaje = user.tipo_descarga === 'PREPAGO'
-        ? 'Debe realizar un prepago para descargar certificados'
-        : 'Ha alcanzado el límite de descargas. Contacte a su proveedor';
+    // Distribuidor (3) y Facturación (4) - validar según tipo_descarga
+    if (user.tipo_descarga === 'PREPAGO') {
+      // ⭐ PREPAGO: Validar límite numérico
+      if (user.limite_descargas <= 0) {
+        return {
+          canDownload: false,
+          message: 'Debe realizar un prepago para descargar certificados',
+          userType: 'PREPAGO',
+          limiteDisponible: user.limite_descargas
+        };
+      }
+      
+      return {
+        canDownload: true,
+        message: '',
+        userType: 'PREPAGO',
+        limiteDisponible: user.limite_descargas
+      };
+    }
+    
+    // ⭐ CUENTA_CORRIENTE: Validar descargas pendientes
+    // Los distribuidores (rol 3) usan estadoDistribuidor, otros usan estadoMayorista
+    const estadoField = user.rol === 3 ? 'estadoDistribuidor' : 'estadoMayorista';
+    const estadoValue = user.rol === 3 ? EstadoDescarga.PENDIENTE_FACTURAR : EstadoDescarga.PENDIENTE_FACTURAR;
+    
+    const descargasPendientes = await this.descargaRepository.count({
+      where: {
+        id_usuario: userId,
+        [estadoField]: estadoValue
+      }
+    });
 
+    const limite = user.limite_descargas;
+    
+    // Si descargas pendientes >= límite, bloquear (opción A)
+    if (descargasPendientes >= limite) {
       return {
         canDownload: false,
-        message: mensaje,
-        userType: user.tipo_descarga,
-        limiteDisponible: user.limite_descargas
+        message: `Has alcanzado el límite de descargas pendientes (${descargasPendientes} de ${limite}). No puedes descargar certificados hasta que se libere el límite.`,
+        userType: 'CUENTA_CORRIENTE',
+        limiteDisponible: limite - descargasPendientes
       };
     }
 
     return {
       canDownload: true,
       message: '',
-      userType: user.tipo_descarga,
-      limiteDisponible: user.limite_descargas
+      userType: 'CUENTA_CORRIENTE',
+      limiteDisponible: limite - descargasPendientes
     };
   }
   /**
@@ -441,7 +497,7 @@ export class DescargasService {
       mes,
       anio,
       controladorId,
-      estadoMayorista,
+      estadoDistribuidor,
       marca
     } = params;
 
@@ -486,8 +542,8 @@ export class DescargasService {
     if (controladorId) {
       query.andWhere('descarga.id_certificado LIKE :controladorId', { controladorId: `${controladorId}%` });
     }
-    if (estadoMayorista) {
-      query.andWhere('descarga.estadoMayorista = :estadoMayorista', { estadoMayorista });
+    if (estadoDistribuidor) {
+      query.andWhere('descarga.estadoDistribuidor = :estadoDistribuidor', { estadoDistribuidor });
     }
     if (marca) {
       query.andWhere('descarga.marca = :marca', { marca });

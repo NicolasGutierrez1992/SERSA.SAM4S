@@ -78,16 +78,16 @@ export class UsersService {
     console.log('[UsersService][create] Salida:', savedUser);
     return savedUser;
   }
-
   async findAll(queryDto: QueryUsersDto = {}, currentUser?: any) {
     console.log('[UsersService][findAll] Entrada:', queryDto, currentUser);
     const { page = 10, limit = 100, rol, status, id_mayorista } = queryDto;    // Obtener todos los usuarios para armar jerarquía y nombreMayorista
     const allUsers = await this.userRepository.find({
       select: [
         'id_usuario', 'cuit', 'nombre', 'mail', 'rol', 'status', 'limite_descargas',
-        'must_change_password', 'ultimo_login', 'id_mayorista', 'created_at', 'updated_at', 'celular', 'tipo_descarga'
+        'must_change_password', 'ultimo_login', 'id_mayorista', 'created_at', 'updated_at', 'celular', 'tipo_descarga', 'notification_limit'
       ]
     });
+   
     // Mapeo id_usuario -> nombre para lookup rápido
     const mayoristaMap = new Map<number, string>();
     allUsers.filter(u => ( u.rol === 3) && (u.id_mayorista === currentUser.id_mayorista)).forEach(m => {
@@ -192,10 +192,31 @@ export class UsersService {
     });
     console.log('[UsersService][findByMail] Salida:', user);
     return user;
-  }
-  async update(id: number, updateUserDto: UpdateUserDto): Promise<User> {
-    console.log('[UsersService][update] Entrada:', id, updateUserDto);
+  }  async update(id: number, updateUserDto: UpdateUserDto, currentUser?: any): Promise<User> {
+    console.log('[UsersService][update] Entrada:', id, updateUserDto, currentUser);
     const user = await this.findOne(id);
+
+    // ⭐ VALIDACIÓN POR ROL - Si es mayorista, validar permisos
+    if (currentUser && currentUser.rol === 2) { // Mayorista
+      // 1. Solo puede editar si el usuario tiene el mismo id_mayorista
+      if (user.id_mayorista !== currentUser.id_mayorista) {
+        throw new BadRequestException('No tienes permisos para editar usuarios de otro mayorista');
+      }
+      
+      // 2. Solo puede editar si el usuario es distribuidor (rol 3)
+      if (user.rol !== 3) {
+        throw new BadRequestException('Los mayoristas solo pueden editar distribuidores');
+      }
+      
+      // 3. Solo puede editar estos campos: limiteDescargas y tipo_descarga
+      const allowedFields = ['limiteDescargas', 'tipo_descarga'];
+      const attemptedFields = Object.keys(updateUserDto).filter(key => updateUserDto[key] !== undefined);
+      const unallowedFields = attemptedFields.filter(field => !allowedFields.includes(field));
+      
+      if (unallowedFields.length > 0) {
+        throw new BadRequestException(`No tienes permisos para editar los campos: ${unallowedFields.join(', ')}`);
+      }
+    }
 
     // Verificar email único si se está actualizando
     if (updateUserDto.email && updateUserDto.email !== user.mail) {
@@ -219,16 +240,33 @@ export class UsersService {
       } else {
         throw new BadRequestException('Los distribuidores deben tener un mayorista asociado');
       }
-    }    // Mapear campos del DTO a campos de la BD
+    }
+
+    // Mapear campos del DTO a campos de la BD
     const updateData: any = {};
     if (updateUserDto.nombre) updateData.nombre = updateUserDto.nombre;
     if (updateUserDto.email) updateData.mail = updateUserDto.email;
     if (updateUserDto.rol) updateData.id_rol = updateUserDto.rol;
-    if (updateUserDto.status !== undefined) updateData.status = updateUserDto.status;
-    if (updateUserDto.id_mayorista !== undefined) updateData.id_mayorista = updateUserDto.id_mayorista;
+    if (updateUserDto.status !== undefined) updateData.status = updateUserDto.status;    if (updateUserDto.id_mayorista !== undefined) updateData.id_mayorista = updateUserDto.id_mayorista;
     if (updateUserDto.limiteDescargas !== undefined) updateData.limite_descargas = updateUserDto.limiteDescargas;
     if (updateUserDto.celular !== undefined) updateData.celular = updateUserDto.celular;
     if (updateUserDto.tipo_descarga !== undefined) updateData.tipo_descarga = updateUserDto.tipo_descarga;
+    
+    // ⭐ NUEVO: Validar notification_limit - Solo admin puede editarlo, y solo para mayoristas (rol=2)
+    if (updateUserDto.notification_limit !== undefined) {
+      // Solo admin (rol=1) puede editar notification_limit
+      if (!currentUser || currentUser.rol !== 1) {
+        throw new BadRequestException('Solo administradores pueden editar el límite de notificación');
+      }
+      
+      // notification_limit solo se puede editar para usuarios mayoristas (rol=2)
+      if (user.rol !== 2) {
+        throw new BadRequestException('El límite de notificación solo se puede asignar a usuarios mayoristas (rol=2)');
+      }
+      
+      updateData.notification_limit = updateUserDto.notification_limit;
+    }
+    
     console.log('[UsersService][update] updateData:', updateData);
     Object.assign(user, updateData);
     console.log('[UsersService][update] user después de assign:', user);
