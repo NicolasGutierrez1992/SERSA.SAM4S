@@ -203,12 +203,26 @@ export default function UsuariosPage() {
         // Abrir WhatsApp Web con mensaje de alta
         const celular = values.celular?.replace(/[^\d]/g, '');
         const password = values.password;
+        const cuit = values.cuit;
         if (celular && password) {
           // Ajusta el código de país según corresponda (ejemplo: 54 para Argentina)
           const numeroCompleto = celular.startsWith('54') ? celular : `54${celular}`;
-          const mensaje = encodeURIComponent(`Bienvenido a SERSA. Tu usuario fue dado de alta. Contraseña: ${password}`);
-          const url = `https://wa.me/${numeroCompleto}?text=${mensaje}`;
-          window.open(url, '_blank');
+          //Mejorar el mensaje a enviar por whatsapp
+          const mensaje = encodeURIComponent(
+              `Bienvenido/a al sistema de gestión de Certificados de SERSA
+              
+              Tu usuario fue dado de alta correctamente.
+              Usuario: ${cuit}
+              Contraseña: ${password}
+              
+              link de acceso: https://sersa-certs-frontend.vercel.app/
+
+              Si necesitas ayuda, estamos aquí para ayudarte`
+            );
+
+            const url = `https://wa.me/${numeroCompleto}?text=${mensaje}`;
+            window.open(url, '_blank');
+
         }
       }      setModalVisible(false);
       form.resetFields();

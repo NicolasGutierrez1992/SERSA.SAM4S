@@ -204,9 +204,10 @@ export class AuditoriaService {
         <div style="font-family: Arial, sans-serif; color: #222;">
           <h2 style="color: #b91c1c;">⚠️ Alerta de Descargas Pendientes</h2>
           <p>Estimado administrador,</p>
-          <p>El <b>mayorista con ID:</b> <span style="color:#2563eb; font-weight:bold;">${mayorista}</span> ha superado el límite de descargas pendientes de facturar.</p>
+          <p>El <b>mayorista </b> <span style="color:#2563eb; font-weight:bold;">${mayorista}</span> ha superado el límite de descargas pendientes de facturar.</p>
           <p><b>Total de descargas pendientes:</b> <span style="color:#b91c1c; font-size:1.2em;">${totalPendientes}</span></p>
           <p style="margin-top:20px;">Por favor, revise la situación en el sistema de gestión de certificados.</p>
+          <p style="margin-top:20px;">https://sersa-certs-frontend.vercel.app/.</p>
           <hr style="margin:24px 0;"/>
           <p style="font-size:0.95em; color:#555;">Saludos,<br/>Sistema SERSA</p>
         </div>
