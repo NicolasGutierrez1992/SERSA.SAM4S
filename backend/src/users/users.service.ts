@@ -312,7 +312,7 @@ export class UsersService {
     const user = await this.userRepository.findOne({ where: { id_usuario: id } });
     if (!user) throw new Error('Usuario no encontrado');
     // Usar contraseña por defecto del .env
-    const nuevaPassword = process.env.DEFAULT_USER_PASSWORD || 'sersa2025';
+    const nuevaPassword = process.env.DEFAULT_USER_PASSWORD || 'ceritificados';
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(nuevaPassword, saltRounds);
     user.password = hashedPassword;

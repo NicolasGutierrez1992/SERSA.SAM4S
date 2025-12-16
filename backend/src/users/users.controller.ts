@@ -178,12 +178,12 @@ export class UsersController {
     const currentUser = req.user;
     return await this.usersService.update(id, updateUserDto, currentUser);
   }
-
+  //Se utiliza en el blanqueo de contraseña desde el panel de administración
   @Patch(':id/reset-password')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @SetMetadata('roles', [1, 2]) // 1: Admin, 2: Mayorista
-  @ApiOperation({ summary: 'Resetear contraseña de usuario (solo admin y mayoristas)' })
-  @ApiResponse({ status: 200, description: 'Contraseña reseteada y email enviado' })
+  @ApiOperation({ summary: 'Resetear contraseña de usuario (solo admin)' })
+  @ApiResponse({ status: 200, description: 'Contraseña reseteada' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
   async resetPassword(@Param('id', ParseIntPipe) id: number): Promise<void> {
     await this.usersService.resetPassword(id);

@@ -46,7 +46,7 @@ export class AuthController {
   ): Promise<void> {
     await this.authService.changePassword(userId, changePasswordDto);
   }
-
+  // utilizada para el seteo de contraseña en primer login
   @Post('reset-password/:userId')
   @RequireAdmin()
   @HttpCode(HttpStatus.NO_CONTENT)

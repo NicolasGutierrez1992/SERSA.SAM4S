@@ -162,8 +162,10 @@ export default function UsuariosPage() {
         if (!confirmacion) {
           return;
         }
-      }      console.log('Valores validados para enviar al backend:', values);
-      console.log('Usuario en edición:', editingUser);      if (editingUser) {
+      }
+      console.log('Valores validados para enviar al backend:', values);
+      console.log('Usuario en edición:', editingUser);
+      if (editingUser) {
         // ⭐ Filtrar campos según el rol
         let dataToSend: any = {};
         
@@ -207,7 +209,6 @@ export default function UsuariosPage() {
         if (celular && password) {
           // Ajusta el código de país según corresponda (ejemplo: 54 para Argentina)
           const numeroCompleto = celular.startsWith('54') ? celular : `54${celular}`;
-          //Mejorar el mensaje a enviar por whatsapp
           const mensaje = encodeURIComponent(
               `Bienvenido/a al sistema de gestión de Certificados de SERSA
               
@@ -321,7 +322,27 @@ export default function UsuariosPage() {
   const handleResetPassword = async (user: any) => {
     try {
       await api.patch(`/users/${user.id_usuario}/reset-password`);
-      message.success('Contraseña reseteada. El usuario debe revisar su email.');
+      message.success('Contraseña reseteada.');
+      //enviar whatsapp al usuario informando el reseteo de contraseña directamente desde el front
+       if (user.celular) {
+          // Ajusta el código de país según corresponda (ejemplo: 54 para Argentina)
+          const numeroCompleto = user.celular.startsWith('54') ? user.celular : `54${user.celular}`;
+          const mensaje = encodeURIComponent(
+              `Bienvenido/a al sistema de gestión de Certificados de SERSA
+
+              Tu contraseña fue reseteada correctamente
+              Usuario: ${user.cuit}
+              Contraseña: ceritificados
+
+              link de acceso: https://sersa-certs-frontend.vercel.app/
+
+              Si necesitas ayuda, estamos aquí para ayudarte`
+            );
+
+            const url = `https://wa.me/${numeroCompleto}?text=${mensaje}`;
+            window.open(url, '_blank');
+
+        }
     } catch (err) {
       message.error('No se pudo resetear la contraseña');
     }
