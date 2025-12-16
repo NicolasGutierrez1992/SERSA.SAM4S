@@ -22,6 +22,7 @@ export default function CertificadosPage() {
   const [descargaError, setDescargaError] = useState('');
   const [canDownload, setCanDownload] = useState(true);
   const [downloadMessage, setDownloadMessage] = useState('');
+  const [downloadUserType, setDownloadUserType] = useState<'CUENTA_CORRIENTE' | 'PREPAGO' | "SIN_LIMITE" | null>(null);
   
   // Estados para filtros
   const [filtros, setFiltros] = useState({
@@ -288,6 +289,7 @@ export default function CertificadosPage() {
       const validacion = await certificadosApi.validarDescarga();
       setCanDownload(validacion.canDownload);
       setDownloadMessage(validacion.message);
+      setDownloadUserType(validacion.userType);
       
       console.log(`[Frontend] Validación de descarga: ${validacion.canDownload}`, {
         userType: validacion.userType,
@@ -693,9 +695,14 @@ export default function CertificadosPage() {
                     {downloadMessage}
                   </div>                )}
                 
-                {(user?.tipo_descarga === 'PREPAGO' || (metricas && metricas.limiteDescargas > 0)) && metricas && (
+                {(downloadUserType === 'PREPAGO') && metricas && (
                   <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
                     <strong>Sistema PREPAGO Activo:</strong> Tienes {metricas.limiteDescargas} descargas disponibles.
+                  </div>
+                )}
+                {(downloadUserType === 'CUENTA_CORRIENTE') && metricas && (
+                  <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
+                    <strong>Sistema CUENTA CORRIENTE Activo:</strong> Tienes {metricas.limiteDescargas - metricas.pendienteFacturar} de {metricas.limiteDescargas} descargas disponibles.
                   </div>
                 )}
 
@@ -1347,7 +1354,7 @@ export default function CertificadosPage() {
                 </div>
 
             {/* Aviso según tipo de descarga - PREPAGO si tipo_descarga='PREPAGO' O limite_descargas > 0, sino CUENTA_CORRIENTE */}
-            {(user?.tipo_descarga === 'PREPAGO' || metricas?.limiteDescargas > 0) ? (
+            {(downloadUserType === 'PREPAGO' ) ? (
               // PREPAGO: Se descuenta del límite disponible
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
                 <p className="text-sm font-semibold text-purple-800 mb-2">
