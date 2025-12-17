@@ -498,12 +498,16 @@ export class DescargasService {
       anio,
       controladorId,
       estadoDistribuidor,
-      marca
-    } = params;
-
-    this.logger.log(`[getDescargas] Parámetros recibidos:`, params);
+      estadoMayorista,
+      marca,
+      userRole // ⭐ NUEVO: Rol del usuario para filtrado inteligente
+    } = params;    this.logger.log(`[getDescargas] Parámetros recibidos:`, params);
     this.logger.log(`[getDescargas] usuarioId: ${usuarioId} (tipo: ${typeof usuarioId})`);
     this.logger.log(`[getDescargas] idMayorista: ${idMayorista} (tipo: ${typeof idMayorista})`);
+    this.logger.log(`[getDescargas] userRole: ${userRole}`);
+    this.logger.log(`[getDescargas] estadoMayorista: ${estadoMayorista}`);
+    this.logger.log(`[getDescargas] estadoDistribuidor: ${estadoDistribuidor}`);
+    this.logger.log(`[getDescargas] cuit: ${cuit}`);
 
     const query = this.descargaRepository.createQueryBuilder('descarga')
       .leftJoinAndSelect('descarga.usuario', 'usuario')
@@ -538,13 +542,20 @@ export class DescargasService {
     if(anio) {
       const anioNum = typeof anio === 'string' ? parseInt(anio, 10) : anio;
       query.andWhere('EXTRACT(YEAR FROM descarga.created_at AT TIME ZONE \'America/Argentina/Buenos_Aires\') = :anio', { anio: anioNum });
-    }
-    if (controladorId) {
+    }    if (controladorId) {
       query.andWhere('descarga.id_certificado LIKE :controladorId', { controladorId: `${controladorId}%` });
     }
+      // ⭐ FILTRADO DE ESTADOS - Lógica flexible
+    // Ambos estados pueden filtrarse independientemente según el parámetro explícito
+    if (estadoMayorista) {
+      this.logger.log(`[getDescargas] Filtrando por estadoMayorista: ${estadoMayorista}`);
+      query.andWhere('descarga.estadoMayorista = :estadoMayorista', { estadoMayorista });
+    }
     if (estadoDistribuidor) {
+      this.logger.log(`[getDescargas] Filtrando por estadoDistribuidor: ${estadoDistribuidor}`);
       query.andWhere('descarga.estadoDistribuidor = :estadoDistribuidor', { estadoDistribuidor });
     }
+    
     if (marca) {
       query.andWhere('descarga.marca = :marca', { marca });
     }

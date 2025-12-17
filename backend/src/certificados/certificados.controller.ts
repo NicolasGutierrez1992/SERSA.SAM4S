@@ -190,7 +190,8 @@ export class CertificadosController {
       ...queryDto,
       page,
       limit,
-      usuarioId: user.rol === 3 ? userId : undefined // Solo distribuidores filtran por su ID
+      usuarioId: user.rol === 3 ? userId : undefined, // Solo distribuidores filtran por su ID
+      userRole: user.rol // ⭐ NUEVO: Pasar el rol del usuario para filtrado inteligente
     };
     
     console.log('GET /certificados/descargas - params:', params);
@@ -384,9 +385,11 @@ export class CertificadosController {
         porcentajeLimite: { type: 'number' }
       }
     }  
-  })  @RequireAuthenticated()  async getMetricasPersonales(
+  })  @RequireAuthenticated()
+  async getMetricasPersonales(
     @CurrentUser('id') userId: number,
-    @CurrentUser() user: User  ) {
+    @CurrentUser() user: User
+  ) {
     // Obtener usuario completo desde la base de datos para asegurar limite_descargas
     const usuarioCompleto = await this.usersService.findOne(userId);
     
@@ -400,50 +403,123 @@ export class CertificadosController {
     const semanaString = this.timezoneService.formatDateToString(inicioSemanaArgentina);
     const mesString = this.timezoneService.formatDateToString(inicioMesArgentina);
     
-    // Obtener descargas filtrando por fecha en BD (con zona horaria Argentina)
-    const descargasHoyResult = await this.descargasService.getDescargas({
-      limit: 1000,
-      usuarioId: userId,
-      fechaDesde: hoyString,
-      fechaHasta: hoyString
-    });
-
-    const descargasSemanaResult = await this.descargasService.getDescargas({
-      limit: 1000,
-      usuarioId: userId,
-      fechaDesde: semanaString
-    });
-
-    const descargasMesResult = await this.descargasService.getDescargas({
-      limit: 1000,
-      usuarioId: userId,
-      fechaDesde: mesString
-    });
-
-    // Obtener todas las descargas para contar las pendientes de facturación
-    console.log(`Obteniendo descargas pendientes de facturación para usuario ${userId}`);
-    const todasDescargasResult = await this.descargasService.getDescargas({
-      limit: 1000,
-      usuarioId: userId,
-      estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR
-    });
-    
-    const descargasHoy = descargasHoyResult.descargas.length;
-    const descargasSemana = descargasSemanaResult.descargas.length;
-    const descargasMes = descargasMesResult.descargas.length;
-    const pendienteFacturar = todasDescargasResult.descargas.length;
-
-    this.logger.log(`Métricas para usuario ${userId} (ARG): Hoy=${descargasHoy}, Semana=${descargasSemana}, Mes=${descargasMes}, PendienteFacturar=${pendienteFacturar}, Límite=${usuarioCompleto.limite_descargas}`);
-    
-    return {
-      descargasHoy,
-      descargasSemana,
-      descargasMes,
-      pendienteFacturar,
-      limiteDescargas: usuarioCompleto.limite_descargas,
-      porcentajeLimite: Math.round((pendienteFacturar / usuarioCompleto.limite_descargas) * 100),
-      horaServidor: this.timezoneService.formatDateTimeFull(new Date())
-    };
+    // ⭐ NUEVO: Métricas específicas por rol
+    if (user.rol === 1 || user.rol === 4) {
+      // ========== ROL 1 (ADMIN) y ROL 4 (FACTURADOR) ==========
+      console.log(`[getMetricasPersonales] Admin/Facturador (rol: ${user.rol}, userId: ${userId})`);
+      
+      // 1. Descargas Totales (histórico, sin filtro de fecha, sin usuarioId)
+      const descargasTotalesResult = await this.descargasService.getDescargas({
+        limit: 1000,
+        userRole: user.rol
+        // SIN usuarioId: para ver TODAS las descargas del sistema
+      });
+      
+      // 2. Descargas de esta semana (sin usuarioId)
+      const descargasSemanaResult = await this.descargasService.getDescargas({
+        limit: 1000,
+        fechaDesde: semanaString,
+        userRole: user.rol
+        // SIN usuarioId: para ver TODAS las descargas de la semana
+      });
+      
+      // 3. Pendiente de facturar (estadoMayorista)
+      const pendienteFacturarResult = await this.descargasService.getDescargas({
+        limit: 1000,
+        estadoMayorista: EstadoDescarga.PENDIENTE_FACTURAR,
+        userRole: user.rol
+        // SIN usuarioId: para ver TODAS las descargas pendientes
+      });
+      
+      const descargasTotales = descargasTotalesResult.descargas.length;
+      const descargasSemana = descargasSemanaResult.descargas.length;
+      const pendienteFacturar = pendienteFacturarResult.descargas.length;
+      
+      this.logger.log(`[Métricas Admin/Facturador] Totales=${descargasTotales}, Semana=${descargasSemana}, Pendiente=${pendienteFacturar}`);
+      
+      return {
+        descargasTotales,
+        descargasSemana,
+        pendienteFacturar,
+        rol: user.rol
+      };
+      
+    } else if (user.rol === 2) {
+      // ========== ROL 2 (MAYORISTA) ==========
+      console.log(`[getMetricasPersonales] Mayorista (userId: ${userId}, idMayorista: ${usuarioCompleto.id_mayorista})`);
+      
+      // Para mayorista: incluye distribuidores asociados
+      // Usar idMayorista para obtener descargas del mayorista + sus distribuidores
+      
+      // 1. Pendiente de facturar (estadoMayorista) - Incluye distribuidores
+      const pendienteMayoristaResult = await this.descargasService.getDescargas({
+        limit: 1000,
+        idMayorista: usuarioCompleto.id_mayorista,
+        estadoMayorista: EstadoDescarga.PENDIENTE_FACTURAR,
+        userRole: user.rol
+      });
+      
+      // 2. Pendiente de facturar (estadoDistribuidor) - Incluye distribuidores
+      const pendienteDistribuidorResult = await this.descargasService.getDescargas({
+        limit: 1000,
+        idMayorista: usuarioCompleto.id_mayorista,
+        estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR,
+        userRole: user.rol
+      });
+      
+      // 3. Descargas propias totales (sin filtro de estado)
+      const descargasPropiasTotalResult = await this.descargasService.getDescargas({
+        limit: 1000,
+        usuarioId: userId,
+        userRole: user.rol
+      });
+      
+      const pendienteFacturarMayorista = pendienteMayoristaResult.descargas.length;
+      const pendienteFacturarDistribuidor = pendienteDistribuidorResult.descargas.length;
+      const descargasPropiasTotal = descargasPropiasTotalResult.descargas.length;
+      
+      this.logger.log(`[Métricas Mayorista] PendienteMayorista=${pendienteFacturarMayorista}, PendienteDistribuidor=${pendienteFacturarDistribuidor}, PropiasTotal=${descargasPropiasTotal}`);
+      
+      return {
+        pendienteFacturarMayorista,
+        pendienteFacturarDistribuidor,
+        descargasPropiasTotal,
+        rol: user.rol
+      };
+      
+    } else if (user.rol === 3) {
+      // ========== ROL 3 (DISTRIBUIDOR) ==========
+      console.log(`[getMetricasPersonales] Distribuidor (userId: ${userId})`);
+      
+      // 1. Pendiente de facturar (estadoDistribuidor) - Solo propias
+      const pendienteFacturarResult = await this.descargasService.getDescargas({
+        limit: 1000,
+        usuarioId: userId,
+        estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR,
+        userRole: user.rol
+      });
+      
+      const pendienteFacturar = pendienteFacturarResult.descargas.length;
+      const limiteDescargas = usuarioCompleto.limite_descargas;
+      const porcentajeLimite = limiteDescargas > 0 
+        ? Math.round((pendienteFacturar / limiteDescargas) * 100)
+        : 0;
+      
+      this.logger.log(`[Métricas Distribuidor] Pendiente=${pendienteFacturar}, Límite=${limiteDescargas}, Porcentaje=${porcentajeLimite}%`);
+      
+      return {
+        pendienteFacturar,
+        limiteDescargas,
+        porcentajeLimite,
+        rol: user.rol
+      };
+    } else {
+      // Fallback para otros roles
+      return {
+        error: 'Rol no soportado',
+        rol: user.rol
+      };
+    }
   }
 
   @Post('upload')

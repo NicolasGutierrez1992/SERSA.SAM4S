@@ -112,6 +112,15 @@ export class QueryDescargasDto {
 
   @ApiPropertyOptional({
     example: 1,
+    description: 'Rol del usuario para filtrado inteligente de estados'
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  userRole?: number;
+
+  @ApiPropertyOptional({
+    example: 1,
     description: 'Filtrar por usuario',
   })
   @IsOptional()

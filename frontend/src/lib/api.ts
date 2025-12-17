@@ -88,12 +88,18 @@ export interface DescargaHistorial {
 }
 
 export interface MetricasPersonales {
-  descargasHoy: number;
-  descargasSemana: number;
-  descargasMes: number;
-  pendienteFacturar: number;
-  limiteDescargas: number;
-  porcentajeLimite: number;
+  rol: number;
+  // Admin (Rol 1) y Facturador (Rol 4)
+  descargasTotales?: number;
+  descargasSemana?: number;
+  // Mayorista (Rol 2)
+  pendienteFacturarMayorista?: number;
+  pendienteFacturarDistribuidor?: number;
+  descargasPropiasTotal?: number;
+  // Distribuidor (Rol 3) - y Admin/Mayorista también pueden tener estos campos
+  pendienteFacturar?: number;
+  limiteDescargas?: number;
+  porcentajeLimite?: number;
 }
 
 export interface ValidacionDescargaDto {
@@ -244,8 +250,7 @@ export const certificadosApi = {
     const response = await api.get(`/certificados/descargar/${downloadId}/archivo`, {
       responseType: 'blob',
     });
-    return response.data;
-  },
+    return response.data;  },
   // Obtener historial de descargas
   getHistorialDescargas: async (params?: {
     page?: number;
@@ -254,11 +259,14 @@ export const certificadosApi = {
     fechaHasta?: string;
     controladorId?: string;
     estadoMayorista?: string;
+    estadoDistribuidor?: string; // ⭐ NUEVO: Filtro por estado distribuidor
     marca?: string;
     cuit?: string;
     idMayorista?: string;
     mes?: number;
-    anio?: number;  }): Promise<{
+    anio?: number;
+    userRole?: number; // ⭐ NUEVO: Rol del usuario para filtrado inteligente
+  }): Promise<{
     descargas: DescargaHistorial[];
     total: number;
     totalPages?: number;

@@ -23,14 +23,14 @@ export default function CertificadosPage() {
   const [canDownload, setCanDownload] = useState(true);
   const [downloadMessage, setDownloadMessage] = useState('');
   const [downloadUserType, setDownloadUserType] = useState<'CUENTA_CORRIENTE' | 'PREPAGO' | "SIN_LIMITE" | null>(null);
-  
-  // Estados para filtros
+    // Estados para filtros
   const [filtros, setFiltros] = useState({
     cuit: '',
     idMayorista: '',
     mes: '',
     controladorId: '',
     estadoMayorista: '',
+    estadoDistribuidor: '', // ⭐ NUEVO: Para filtrar por estado distribuidor
     marca: '',
     anio: ''
   });
@@ -257,6 +257,9 @@ export default function CertificadosPage() {
       Object.entries(filtrosFinal).filter(([_, v]) => v !== '' && v !== undefined && v !== null)
     );
     
+    // ⭐ IMPORTANTE: Pasar userRole al backend para filtrado inteligente
+    filtrosFinal.userRole = user?.rol;
+    
     // Convertir mes y anio a número
     if (filtrosFinal.mes) {
       const mesNum = Number(filtrosFinal.mes);
@@ -396,15 +399,17 @@ export default function CertificadosPage() {
     setPendingDownloadData(null);
     setAcceptDownloadConfirm(false);
     setDescargaError('');
-  };
-  const handleEstadoChange = async (downloadId: string, nuevoEstado: string, rol: number, userid: number, tipoDescarga?: string) => {
+  };  const handleEstadoChange = async (downloadId: string, nuevoEstado: string, rol: number, userid: number, tipoDescarga?: string) => {
     try {
       // Bloquear cambios si es PREPAGO
       if (tipoDescarga === 'PREPAGO') {
         alert('No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo e inmutable.');
         return;
-      }      // Si requiere número de factura o referencia, mostrar modal
-      if ((nuevoEstado === 'Facturado' || nuevoEstado === 'Cobrado') && rol != 2 ) {
+      }
+      
+      // ⭐ NUEVA LÓGICA: Solo Admin y Facturación pueden requerir datos de facturación
+      if ((nuevoEstado === 'Facturado' || nuevoEstado === 'Cobrado') && (rol === 1 || rol === 4)) {
+        // Admin y Facturación: mostrar modal para datos adicionales
         setFacturaData({
           numero_factura: '',
           referencia_pago: ''
@@ -420,14 +425,14 @@ export default function CertificadosPage() {
       }
       
       // Si no requiere datos, hacer cambio directo
-      // rol 1 = admin (cambia ambos), rol 4 = facturación (cambia ambos)
       if (rol === 1 || rol === 4) {
-        await certificadosApi.cambiarEstado(downloadId, { estadoDistribuidor: nuevoEstado, estadoMayorista: nuevoEstado });
+        // Admin y Facturación: cambiar estadoMayorista
+        await certificadosApi.cambiarEstado(downloadId, { estadoMayorista: nuevoEstado });
       }
-      else {
-        // rol 2 = mayorista (cambia solo distribuidor)
+      else if (rol === 2 || rol === 3) {
+        // Mayorista y Distribuidor: cambiar solo estadoDistribuidor
         const estado = { estadoDistribuidor: nuevoEstado };
-        console.log('cambio de estado mayorista:', estado);        
+        console.log('cambio de estado distribuidor:', estado);        
         await certificadosApi.cambiarEstado(downloadId, estado);
       }
       
@@ -582,72 +587,184 @@ export default function CertificadosPage() {
             </div>
           </div>
         </div>
-      </header>
-
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        {/* Métricas */}
+      </header>      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        {/* Métricas - Dinámicas según rol */}
         {metricas && (
           <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {/*  Descargas Esta semana */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2z" />
-                    </svg>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Esta Semana</dt>
-                      <dd className="text-lg font-medium text-gray-900">{metricas.descargasSemana}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/*  Pendientes Facturar*/}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <svg className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                    </svg>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Pendiente Facturar</dt>
-                      <dd className="text-lg font-medium text-gray-900">{metricas.pendienteFacturar}</dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {/*  Limite de descarga */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <div className={`h-6 w-6 rounded-full flex items-center justify-center ${
-                      metricas.porcentajeLimite >= 80 ? 'bg-red-400' : 'bg-green-400'
-                    }`}>
-                      <span className="text-xs font-bold text-white">
-                        {metricas.porcentajeLimite}%
-                      </span>
+            
+            {/* ========== ADMIN (Rol 1) y FACTURADOR (Rol 4) ========== */}
+            {(user?.rol === 1 || user?.rol === 4) && (
+              <>
+                {/* 1. Descargas Totales (histórico) */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Descargas Totales</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.descargasTotales}</dd>
+                        </dl>
+                      </div>
                     </div>
                   </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">Uso del Límite</dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        {metricas.pendienteFacturar}/{metricas.limiteDescargas!=0 ? metricas.limiteDescargas : '∞'}
-                      </dd>
-                    </dl>
+                </div>
+
+                {/* 2. Descargas Esta Semana */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Esta Semana</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.descargasSemana}</dd>
+                        </dl>
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </div>
+
+                {/* 3. Pendiente de Facturar (Estado Mayorista) */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente Facturar</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.pendienteFacturar}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ========== MAYORISTA (Rol 2) ========== */}
+            {user?.rol === 2 && (
+              <>
+                {/* 1. Pendiente Mayorista */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente (Estado Mayorista)</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.pendienteFacturarMayorista}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Pendiente Distribuidor */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente (Estado Distribuidor)</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.pendienteFacturarDistribuidor}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Descargas Propias Total */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2z" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Descargas Propias</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.descargasPropiasTotal}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ========== DISTRIBUIDOR (Rol 3) ========== */}
+            {user?.rol === 3 && (
+              <>
+                {/* 1. Pendiente de Facturar */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente Facturar</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.pendienteFacturar}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Uso del Límite */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <div className={`h-6 w-6 rounded-full flex items-center justify-center ${
+                          metricas.porcentajeLimite! >= 80 ? 'bg-red-400' : 'bg-green-400'
+                        }`}>
+                          <span className="text-xs font-bold text-white">
+                            {metricas.porcentajeLimite}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Uso del Límite</dt>
+                          <dd className="text-lg font-medium text-gray-900">
+                            {metricas.pendienteFacturar}/{metricas.limiteDescargas!= 0 ? metricas.limiteDescargas : '∞'}
+                          </dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
+            
           </div>
         )}
 
@@ -694,15 +811,14 @@ export default function CertificadosPage() {
                   <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded mb-6">
                     {downloadMessage}
                   </div>                )}
-                
-                {(downloadUserType === 'PREPAGO') && metricas && (
+                  {(downloadUserType === 'PREPAGO') && metricas && (
                   <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
                     <strong>Sistema PREPAGO Activo:</strong> Tienes {metricas.limiteDescargas} descargas disponibles.
                   </div>
                 )}
-                {(downloadUserType === 'CUENTA_CORRIENTE') && metricas && (
+                {(downloadUserType === 'CUENTA_CORRIENTE') && metricas && user?.rol === 3 && (
                   <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
-                    <strong>Sistema CUENTA CORRIENTE Activo:</strong> Tienes {metricas.limiteDescargas - metricas.pendienteFacturar} de {metricas.limiteDescargas} descargas disponibles.
+                    <strong>Sistema CUENTA CORRIENTE Activo:</strong> Tienes {metricas.limiteDescargas! - (metricas.pendienteFacturar || 0)} de {metricas.limiteDescargas} descargas disponibles.
                   </div>
                 )}
 
@@ -885,30 +1001,48 @@ export default function CertificadosPage() {
                       {Array.from({ length: 2100 - 2025 + 1 }, (_, i) => 2025 + i).map(year => (
                         <option key={year} value={year}>{year}</option>
                       ))}
-                    </select>
-                  </div>                  <div>
+                    </select>                  </div>                  <div>
                     <label className="block text-sm font-medium text-gray-700">Estado</label>
-                    <select
-                      value={filtros.estadoMayorista}
-                      onChange={e => setFiltros(prev => ({ ...prev, estadoMayorista: e.target.value }))}
-                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    >
-                      <option value="">Todos los estados</option>
-                      <option value="PREPAGO">PREPAGO</option>
-                      <option value="Pendiente de Facturar">Pendiente de Facturar</option>
-                      <option value="Facturado">Facturado</option>
-                      <option value="Cobrado">Cobrado</option>
-                    </select>
+                    {/* ⭐ FILTRO DINÁMICO SEGÚN ROL */}
+                    {(user?.rol === 1 || user?.rol === 4) ? (
+                      // ROL 1 (Admin) y ROL 4 (Facturación): Filtrar por EstadoMayorista
+                      <select
+                        value={filtros.estadoMayorista}
+                        onChange={e => setFiltros(prev => ({ ...prev, estadoMayorista: e.target.value }))}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        <option value="">Todos los estados</option>
+                        <option value="PREPAGO">PREPAGO</option>
+                        <option value="Pendiente de Facturar">Pendiente de Facturar</option>
+                        <option value="Facturado">Facturado</option>
+                        <option value="Cobrado">Cobrado</option>
+                      </select>
+                    ) : (
+                      // ROL 2 (Mayorista) y ROL 3 (Distribuidor): Filtrar por EstadoDistribuidor
+                      <select
+                        value={filtros.estadoDistribuidor || ''}
+                        onChange={e => setFiltros(prev => ({ ...prev, estadoDistribuidor: e.target.value }))}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      >
+                        <option value="">Todos los estados</option>
+                        <option value="PREPAGO">PREPAGO</option>
+                        <option value="Pendiente de Facturar">Pendiente de Facturar</option>
+                        <option value="Facturado">Facturado</option>
+                        <option value="Cobrado">Cobrado</option>
+                      </select>
+                    )}
                   </div>
                 </div>
                 {/* Tabla */}
                 {historialLoading ? (
                   <div className="flex justify-center py-8">
                     <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-                  </div>
-                ) : (
+                  </div>                ) : (
                   <div>
-                    <div className="overflow-x-auto">                      <table>                        <thead className="bg-gray-50">                          <tr>
+                    <div className="overflow-x-auto">
+                      <table>
+                        <thead className="bg-gray-50">
+                          <tr>
                             {(user?.rol === 1 || user?.rol === 4) && (
                               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                                 <input
@@ -920,19 +1054,37 @@ export default function CertificadosPage() {
                                 />
                               </th>
                             )}
-                            <th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Controlador</th>
-                            <th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
-                            {user?.rol == 4   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>)}                            {user?.rol !== 3   && (<th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>)}
-                            {user?.rol !== 3   && (<th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Fecha de Facturación</th>)}
-                            {(user?.rol === 2 || user?.rol === 3)   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Distribuidor</th>)}
-                            {user?.rol !== 4   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Ultima Creacion</th>)}
-                            {user?.rol == 4   && (<th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>)}
-                            <th className="px-3 py-3  text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Acciones</th>
+                            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Controlador</th>
+                            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
+                            {user?.rol === 4 && (
+                              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>
+                            )}
+                            {(user?.rol === 1 || user?.rol === 4) && (
+                              <>
+                                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>
+                                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Fecha de Facturación</th>
+                              </>
+                            )}
+                            {user?.rol === 2 && (
+                              <>
+                                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>
+                                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Distribuidor</th>
+                              </>
+                            )}
+                            {user?.rol === 3 && (
+                              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Distribuidor</th>
+                            )}
+                            {user?.rol !== 4 && (
+                              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Ultima Creacion</th>
+                            )}
+                            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Acciones</th>
                           </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-gray-200">                          {historial.map((descarga) => {
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {historial.map((descarga) => {
                             const esUltimo = descarga.controladorId && ultimosPorControlador[descarga.controladorId] === descarga.id;
-                            return (                              <tr key={descarga.id}>
+                            return (
+                              <tr key={descarga.id}>
                                 {(user?.rol === 1 || user?.rol === 4) && (
                                   <td className="px-3 py-4 whitespace-nowrap text-sm">
                                     <input
@@ -944,113 +1096,143 @@ export default function CertificadosPage() {
                                       title={descarga.tipoDescarga === 'PREPAGO' ? 'PREPAGO no puede ser seleccionado' : 'Seleccionar para cambio masivo'}
                                     />
                                   </td>
-                                )}
-                                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.controladorId || descarga.certificadoNombre}</td>
+                                )}                                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.controladorId || descarga.certificadoNombre}</td>
                                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.usuario ? descarga.usuario.nombre : descarga.usuarioId}</td>
-                                {user?.rol == 4   && (<td className="px-3 py-4  whitespace-nowrap">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full `}>{descarga.usuario?.cuit}</span>
-                                </td>)}{user?.rol !== 3   && (<td className="px-3 py-4 whitespace-nowrap">
-                                  <div className="space-y-2">
-                                    {/* Collapsible row header */}
-                                    <button
-                                      onClick={() => toggleRowExpanded(descarga.id)}
-                                      className="flex items-center gap-2 w-full hover:opacity-80"
-                                    >
-                                      <svg
-                                        className={`h-4 w-4 transition-transform ${expandedRows.has(descarga.id) ? 'rotate-90' : ''}`}
-                                        fill="none"
-                                        viewBox="0 0 24 24"
-                                        stroke="currentColor"
+                                {user?.rol === 4 && (
+                                  <td className="px-3 py-4 whitespace-nowrap">
+                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full `}>{descarga.usuario?.cuit}</span>
+                                  </td>
+                                )}
+                                {(user?.rol === 1 || user?.rol === 4) && (
+                                  <td className="px-3 py-4 whitespace-nowrap">
+                                    <div className="space-y-2">
+                                      {/* Collapsible row header - ADMIN/FACTURACIÓN ven EstadoMayorista */}
+                                      <button
+                                        onClick={() => toggleRowExpanded(descarga.id)}
+                                        className="flex items-center gap-2 w-full hover:opacity-80"
                                       >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                      </svg>
-                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>
-                                        Estado: {descarga.estadoMayorista}
-                                      </span>
-                                    </button>
-                                    
-                                    {/* Expanded content */}
-                                    {expandedRows.has(descarga.id) && (
-                                      <div className="pl-6 space-y-2 border-l-2 border-gray-300">                                        {/* Estado change dropdown */}                                        {(user?.rol === 1 || user?.rol === 4) && (
-                                          <div>
-                                            {descarga.tipoDescarga === 'PREPAGO' ? (
-                                              <div className="p-3 bg-red-50 border border-red-200 rounded">
-                                                <p className="text-xs font-semibold text-red-700">
-                                                  ⚠️ Estado PREPAGO - Inmutable
-                                                </p>
-                                                <p className="text-xs text-red-600 mt-1">
-                                                  No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo.
-                                                </p>
-                                              </div>                                            ) : (
-                                              <>
-                                                <label className="block text-xs font-semibold text-gray-700 mb-2">
-                                                  Cambiar Estado:
-                                                </label>
-                                                <select
-                                                  onChange={(e) => {
-                                                    const nuevoEstado = e.target.value;
-                                                    if (nuevoEstado !== descarga.estadoMayorista) {
-                                                      handleEstadoChange(descarga.id, nuevoEstado, user.rol, descarga.usuarioId, descarga.tipoDescarga || undefined);
-                                                      // Reset al valor actual para evitar que se quede seleccionado el otro estado
-                                                      e.target.value = descarga.estadoMayorista;
-                                                    }
-                                                  }}
-                                                  className="mt-1 text-xs border border-gray-300 rounded px-2 py-1 w-full hover:border-indigo-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                                                  value={descarga.estadoMayorista}
-                                                >
-                                                  <option value={descarga.estadoMayorista}>{descarga.estadoMayorista}</option>
-                                                  <option value="Pendiente de Facturar">Pendiente de Facturar</option>
-                                                  <option value="Facturado">Facturado</option>
-                                                  <option value="Cobrado">Cobrado</option>
-                                                </select>
-                                              </>
+                                        <svg
+                                          className={`h-4 w-4 transition-transform ${expandedRows.has(descarga.id) ? 'rotate-90' : ''}`}
+                                          fill="none"
+                                          viewBox="0 0 24 24"
+                                          stroke="currentColor"
+                                        >
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                        </svg>
+                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>
+                                          Estado: {descarga.estadoMayorista}
+                                        </span>
+                                      </button>
+                                      
+                                      {/* Expanded content */}
+                                      {expandedRows.has(descarga.id) && (
+                                        <div className="pl-6 space-y-2 border-l-2 border-gray-300">
+                                          {/* Estado change dropdown */}
+                                          {(user?.rol === 1 || user?.rol === 4) && (
+                                            <div>
+                                              {descarga.tipoDescarga === 'PREPAGO' ? (
+                                                <div className="p-3 bg-red-50 border border-red-200 rounded">
+                                                  <p className="text-xs font-semibold text-red-700">
+                                                    ⚠️ Estado PREPAGO - Inmutable
+                                                  </p>
+                                                  <p className="text-xs text-red-600 mt-1">
+                                                    No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo.
+                                                  </p>
+                                                </div>
+                                              ) : (
+                                                <>
+                                                  <label className="block text-xs font-semibold text-gray-700 mb-2">
+                                                    Cambiar Estado:
+                                                  </label>
+                                                  <select
+                                                    onChange={(e) => {
+                                                      const nuevoEstado = e.target.value;
+                                                      if (nuevoEstado !== descarga.estadoMayorista) {
+                                                        handleEstadoChange(descarga.id, nuevoEstado, user.rol, descarga.usuarioId, descarga.tipoDescarga || undefined);
+                                                        // Reset al valor actual para evitar que se quede seleccionado el otro estado
+                                                        e.target.value = descarga.estadoMayorista;
+                                                      }
+                                                    }}
+                                                    className="mt-1 text-xs border border-gray-300 rounded px-2 py-1 w-full hover:border-indigo-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                                    value={descarga.estadoMayorista}
+                                                  >
+                                                    <option value={descarga.estadoMayorista}>{descarga.estadoMayorista}</option>
+                                                    <option value="Pendiente de Facturar">Pendiente de Facturar</option>
+                                                    <option value="Facturado">Facturado</option>
+                                                    <option value="Cobrado">Cobrado</option>
+                                                  </select>
+                                                </>
+                                              )}
+                                            </div>
+                                          )}
+                                          
+                                          {/* Invoice and payment reference fields */}
+                                          <div className="space-y-1 pt-2">
+                                            {descarga.numero_factura && (
+                                              <div className="text-xs">
+                                                <span className="font-semibold text-gray-700">Nro Factura:</span>
+                                                <span className="ml-2 text-gray-600">{descarga.numero_factura}</span>
+                                              </div>
+                                            )}
+                                            {descarga.referencia_pago && (
+                                              <div className="text-xs">
+                                                <span className="font-semibold text-gray-700">Referencia:</span>
+                                                <span className="ml-2 text-gray-600">{descarga.referencia_pago}</span>
+                                              </div>
+                                            )}
+                                            {!descarga.numero_factura && !descarga.referencia_pago && (
+                                              <div className="text-xs text-gray-500">
+                                                Sin datos de facturación
+                                              </div>
                                             )}
                                           </div>
-                                        )}
-                                        
-                                        {/* Invoice and payment reference fields */}
-                                        <div className="space-y-1 pt-2">
-                                          {descarga.numero_factura && (
-                                            <div className="text-xs">
-                                              <span className="font-semibold text-gray-700">Nro Factura:</span>
-                                              <span className="ml-2 text-gray-600">{descarga.numero_factura}</span>
-                                            </div>
-                                          )}
-                                          {descarga.referencia_pago && (
-                                            <div className="text-xs">
-                                              <span className="font-semibold text-gray-700">Referencia:</span>
-                                              <span className="ml-2 text-gray-600">{descarga.referencia_pago}</span>
-                                            </div>
-                                          )}
-                                          {!descarga.numero_factura && !descarga.referencia_pago && (
-                                            <div className="text-xs text-gray-500">
-                                              Sin datos de facturación
-                                            </div>
-                                          )}
                                         </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                </td>)}                                {user?.rol !== 3   && (<td className="px-3 py-4  whitespace-nowrap text-sm text-gray-900">{
-                                  !descarga.fechaFacturacion
-                                    ? 'Sin facturar'
-                                    : new Date(descarga.fechaFacturacion).toLocaleDateString()
-                                }</td>)}
-
-                                {(user?.rol === 2 || user?.rol === 3)   && (<td className="px-3 py-4  whitespace-nowrap">
-                                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>{descarga.estadoDistribuidor}</span>
-                                </td>)}
-                              
-                                {user?.rol !== 4   && (<td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{
-                                  isNaN(new Date(descarga.updatedAt).getTime())
-                                    ? 'Sin fecha'
-                                    : new Date(descarga.updatedAt).toLocaleDateString()
-                                }</td>)}                                <td className="px-3 py-4 whitespace-nowrap text-sm font-medium space-x-2">
-                                  {/* Cambiar estado distribuidor (Mayorista) */}
+                                      )}
+                                    </div>
+                                  </td>
+                                )}
+                                {(user?.rol === 1 || user?.rol === 4) && (
+                                  <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{
+                                    !descarga.fechaFacturacion
+                                      ? 'Sin facturar'
+                                      : new Date(descarga.fechaFacturacion).toLocaleDateString()
+                                  }</td>
+                                )}
+                                {user?.rol === 2 && (
+                                  <>
+                                    <td className="px-3 py-4 whitespace-nowrap">
+                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>
+                                        {descarga.estadoMayorista}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-4 whitespace-nowrap">
+                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>
+                                        {descarga.estadoDistribuidor}
+                                      </span>
+                                    </td>
+                                  </>                                )}
+                                {user?.rol === 3 && (
+                                  <td className="px-3 py-4 whitespace-nowrap">
+                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>
+                                      {descarga.estadoDistribuidor}
+                                    </span>
+                                  </td>
+                                )}
+                                {user?.rol !== 4 && (
+                                  <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                                    {
+                                      isNaN(new Date(descarga.updatedAt).getTime())
+                                        ? 'Sin fecha'
+                                        : new Date(descarga.updatedAt).toLocaleDateString()
+                                    }
+                                  </td>
+                                )}                                <td className="px-3 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                   {user?.rol === 2 && (
                                     descarga.tipoDescarga === 'PREPAGO' ? (
-                                      <span className="text-xs text-red-600 font-semibold">PREPAGO - Inmutable</span>                                    ) : (
-                                      <select                                        onChange={(e) => {
+                                      <span className="text-xs text-red-600 font-semibold">PREPAGO - Inmutable</span>
+                                    ) : (
+                                      <select
+                                        onChange={(e) => {
                                           const nuevoEstado = e.target.value;
                                           if (nuevoEstado !== descarga.estadoDistribuidor) {
                                             handleEstadoChange(descarga.id, nuevoEstado, user.rol, descarga?.usuarioId, descarga.tipoDescarga || undefined);
@@ -1066,9 +1248,7 @@ export default function CertificadosPage() {
                                         <option value="Facturado">Facturado</option>
                                       </select>
                                     )
-                                  )}
-                                  {/* Descargar archivo: oculto para mayorista y facturación */}
-                                  {user?.rol !== 2 && user?.rol !== 4 && (
+                                  )}                                  {user?.rol !== 2 && user?.rol !== 4 && (
                                     <button
                                       onClick={async () => {
                                         if (!esUltimo) return;
@@ -1107,7 +1287,8 @@ export default function CertificadosPage() {
                         </div>
                       )}
                     </div>
-                  </div>                )}
+                  </div>
+                )}
               </div>
             )}
           </div>

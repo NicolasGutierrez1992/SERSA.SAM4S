@@ -158,7 +158,7 @@ export class QueryDescargasDto {
   @Type(() => Number)
   @IsNumber()
   idMayorista?: number;
-  
+
   @ApiPropertyOptional({ 
     description: 'Estado de facturación mayorista',
     example: 'Pendiente de Facturar'
@@ -166,6 +166,23 @@ export class QueryDescargasDto {
   @IsOptional()
   @IsString()
   estadoMayorista?: string;
+
+  @ApiPropertyOptional({ 
+    description: 'Estado de facturación distribuidor',
+    example: 'Pendiente de Facturar'
+  })
+  @IsOptional()
+  @IsString()
+  estadoDistribuidor?: string;
+
+  @ApiPropertyOptional({
+    example: 1,
+    description: 'Rol del usuario para filtrado inteligente de estados'
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  userRole?: number;
 
   @ApiPropertyOptional({
     example: 'SH',
