@@ -1563,20 +1563,19 @@ export default function CertificadosPage() {
                 </p>
                 <p className="text-sm text-amber-700 mb-3">
                   Esta descarga generará un cargo en tu cuenta que deberá ser pagado.
-                </p>
-                <div className="bg-white rounded p-2 mb-2">
+                </p>                <div className="bg-white rounded p-2 mb-2">
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-gray-600">Descargas pendientes:</span>
-                    <span className="font-semibold text-gray-900">{metricas.pendienteFacturar} / {metricas.limiteDescargas}</span>
+                    <span className="font-semibold text-gray-900">{(metricas?.pendienteFacturar || 0)} / {(metricas?.limiteDescargas || 0)}</span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-600">Después de la descarga:</span>
-                    <span className={`font-semibold ${metricas.pendienteFacturar + 1 >= metricas.limiteDescargas ? 'text-red-600' : 'text-orange-600'}`}>
-                      {metricas.pendienteFacturar + 1} / {metricas.limiteDescargas}
+                    <span className={`font-semibold ${(metricas?.pendienteFacturar || 0) + 1 >= (metricas?.limiteDescargas || 0) ? 'text-red-600' : 'text-orange-600'}`}>
+                      {(metricas?.pendienteFacturar || 0) + 1} / {(metricas?.limiteDescargas || 0)}
                     </span>
                   </div>
                 </div>
-                {metricas.pendienteFacturar + 1 >= metricas.limiteDescargas && (
+                {(metricas?.pendienteFacturar || 0) + 1 >= (metricas?.limiteDescargas || 0) && (
                   <div className="bg-red-50 border border-red-200 rounded p-2 mt-2">
                     <p className="text-xs text-red-700 font-semibold">
                       ⚠️ Alcanzarás tu límite de descargas pendientes
@@ -1587,7 +1586,7 @@ export default function CertificadosPage() {
             )}            {/* Confirmación */}
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
               <p className="text-sm text-gray-700 mb-3">
-                Al descargar el certificado {(user?.tipo_descarga === 'PREPAGO' || metricas?.limiteDescargas > 0) ? 
+                Al descargar el certificado {(user?.tipo_descarga === 'PREPAGO' || (metricas?.limiteDescargas ?? 0) > 0) ? 
                   'se descontará de tu límite disponible' : 
                   'se agregará un cargo a tu cuenta que deberá ser abonado en el próximo período de facturación'}.
               </p>
