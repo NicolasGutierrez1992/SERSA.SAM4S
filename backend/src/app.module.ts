@@ -9,6 +9,7 @@ import { AppService } from './app.service';
 import { SharedAuthModule } from './auth/shared-auth.module';
 
 // Luego los demás módulos
+import { CommonModule } from './common/common.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { CertificadosModule } from './certificados/certificados.module';
@@ -73,7 +74,9 @@ import { AppInitializerService } from './common/app-initializer.service';
         },
       ],
       inject: [ConfigService],
-    }),      // Módulos funcionales
+    }),    
+    // Módulos funcionales
+    CommonModule,
     AuthModule,
     UsersModule,
     CertificadosModule,

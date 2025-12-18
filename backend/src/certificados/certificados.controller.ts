@@ -42,7 +42,7 @@ import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/dto/user.dto';
 import { EstadoDescarga, IDescarga } from '../shared/types';
 import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
+import { memoryStorage } from 'multer';
 import * as path from 'path';
 
 @ApiTags('Certificados CRS')
@@ -521,7 +521,6 @@ export class CertificadosController {
       };
     }
   }
-
   @Post('upload')
 @ApiOperation({ summary: 'Actualizar archivos de certificados', description: 'Permite a un administrador subir los archivos certificado.pfx, pwrCst.txt y Root_RTI.txt' })
 @ApiResponse({ status: 200, description: 'Archivos actualizados correctamente' })
@@ -531,25 +530,7 @@ export class CertificadosController {
   { name: 'pwrCst', maxCount: 1 },
   { name: 'rootRti', maxCount: 1 },
 ], {
-  storage: diskStorage({
-    destination: (req, file, cb) => {
-      cb(null, path.join(__dirname, '../../certs'));
-    },
-    filename: (req, file, cb) => {
-      let filename = file.originalname;
-      if (file.fieldname === 'certificado') filename = 'certificado.pfx';
-      if (file.fieldname === 'pwrCst') filename = 'pwrCst.txt';
-      if (file.fieldname === 'rootRti') filename = 'Root_RTI.txt';
-      cb(null, filename);
-    },
-  }),
-  fileFilter: (req, file, cb) => {
-    if (['certificado', 'pwrCst', 'rootRti'].includes(file.fieldname)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Campo de archivo no permitido'), false);
-    }
-  },
+  storage: memoryStorage(),
 }))
 async uploadCertFiles(@UploadedFiles() files: { certificado?: any[], pwrCst?: any[], rootRti?: any[] }) {
   await this.certificadosService.guardarArchivosCert(files);

@@ -3,6 +3,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { CertificadosController } from './certificados.controller';
 import { CertificadosService } from './certificados.service';
 import { CertificadoMaestroController } from './certificado-maestro.controller';
+import { CertificadoAdminController } from './controllers/certificado-admin.controller';
 import { CertificadoMaestroService } from './certificado-maestro.service';
 import { User } from '../users/entities/user.entity';
 import { Certificado } from './entities/certificado.entity';
@@ -23,7 +24,7 @@ import { TimezoneService } from '../common/timezone.service';
     SharedAuthModule,
     UsersModule,
   ],
-  controllers: [CertificadosController, CertificadoMaestroController],
+  controllers: [CertificadosController, CertificadoMaestroController, CertificadoAdminController],
   providers: [CertificadosService, CertificadoMaestroService, EncryptionService, CertificadoMigrationService, TimezoneService],
   exports: [CertificadosService, CertificadoMaestroService, EncryptionService, CertificadoMigrationService, TimezoneService],
 })

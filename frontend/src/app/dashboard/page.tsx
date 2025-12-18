@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { getUser, authApi } from '@/lib/api';
+import { CertificateStatusCard } from '@/components/CertificateStatusCard';
 
 export default function DashboardPage() {
   const [user, setUser] = useState<any>(null);
@@ -191,52 +192,26 @@ export default function DashboardPage() {
                 <div className="mt-8">
                   <h3 className="text-lg font-medium">
                     <span className="absolute inset-0" aria-hidden="true" />
-                    Certificados ROOT
+                    CONFIGURACIONES ADMINISTRADOR
                   </h3>
                   <p className="mt-2 text-sm text-gray-500">
-                    editar y actualizar los archivos de certificados del sistema
+                    editar y actualizar las configuraciones y los archivos de certificados del sistema
                   </p>
                 </div>
                 <span className="pointer-events-none absolute top-6 right-6 text-gray-300 group-hover:text-gray-400" aria-hidden="true">
                   <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
                   </svg>
                 </span>
-              </div>
-            )}
+              </div>            )}
 
           </div>
           <div className="mt-10 mb-4" />
-          {/* Stats Grid */}
-          <div className="grid grid-cols-1 gap-5 sm:grid-cols-1 lg:grid-cols-1">
-            {/* Estado del Sistema */}
-            <div className="bg-white overflow-hidden shadow rounded-lg">
-              <div className="p-5">
-                <div className="flex items-center">
-                  <div className="flex-shrink-0">
-                    <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="ml-5 w-0 flex-1">
-                    <dl>
-                      <dt className="text-sm font-medium text-gray-500 truncate">
-                        Estado del Sistema
-                      </dt>
-                      <dd className="text-lg font-medium text-gray-900">
-                        Operativo
-                      </dd>
-                    </dl>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-5 py-3">
-                <div className="text-sm">   </div>
-                  <span className="font-medium text-green-700">
-                    Todos los servicios funcionando
-                  </span>
-                </div>
-              </div>
+          {/* Stats Grid - Estado del Certificado (Solo Admin) */}
+          {user?.rol === 1 && (
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-1 lg:grid-cols-1">
+              <CertificateStatusCard />
             </div>
+          )}
         </div>
       </main>
     </div>

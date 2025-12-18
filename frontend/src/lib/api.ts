@@ -365,7 +365,40 @@ export const certificadosApi = {
       },
     });
     return response.data;
-  }, 
+  },
+};
+
+// App Settings API (Admin only)
+export const appSettingsApi = {
+  // Obtener todas las configuraciones
+  getAll: async (): Promise<Array<{ id: string; value: string; description?: string; data_type?: string }>> => {
+    const response = await api.get('/app-settings');
+    return response.data;
+  },
+
+  // Obtener una configuración específica
+  getByKey: async (key: string): Promise<{ id: string; value: string }> => {
+    const response = await api.get(`/app-settings/${key}`);
+    return response.data;
+  },
+
+  // Actualizar una configuración
+  update: async (key: string, value: string): Promise<{ message: string }> => {
+    const response = await api.put(`/app-settings/${key}`, { value });
+    return response.data;
+  },
+
+  // Obtener estadísticas del caché (debug)
+  getCacheStats: async (): Promise<any> => {
+    const response = await api.get('/app-settings/debug/cache-stats');
+    return response.data;
+  },
+
+  // Forzar actualización del caché
+  refreshCache: async (): Promise<{ message: string }> => {
+    const response = await api.put('/app-settings/debug/refresh-cache', {});
+    return response.data;
+  },
 };
 
 export default api;

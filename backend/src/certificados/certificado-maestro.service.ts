@@ -33,9 +33,9 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
     private readonly encryptionService: EncryptionService,
     private readonly timezoneService: TimezoneService,
   ) {}
-
   /**
    * Obtener el certificado maestro (desencriptado)
+   * Valida que no esté expirado antes de devolverlo
    * @returns Buffer con el archivo .pfx
    */
   async obtenerCertificadoMaestro(): Promise<{
@@ -54,6 +54,9 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
           'Certificado maestro no configurado. Por favor, cargue un certificado .pfx.',
         );
       }
+
+      // Validar que el certificado no esté expirado
+      this.validarExpirationCertificado(certificado.metadata);
 
       // Desencriptar la contraseña
       const password = this.encryptionService.decrypt(certificado.password_encriptada);
@@ -247,7 +250,6 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
       throw error;
     }
   }
-
   /**
    * Cargar certificado desde archivo físico (para migración)
    * @param filePath Ruta al archivo .pfx
@@ -274,6 +276,93 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
       });
     } catch (error) {
       this.logger.error('Error cargando certificado desde archivo', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Validar que el certificado no esté expirado
+   * Lanza error si expiró, advertencia si está próximo a vencer
+   */
+  private validarExpirationCertificado(metadata?: MetadataCertificado): void {
+    if (!metadata || !metadata.validTo) {
+      this.logger.warn('No se pudo validar expiración: metadatos incompletos');
+      return;
+    }
+
+    const fechaVencimiento = new Date(metadata.validTo);
+    const fechaActual = new Date();
+    const diasParaVencer = Math.floor(
+      (fechaVencimiento.getTime() - fechaActual.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    if (diasParaVencer < 0) {
+      this.logger.error(
+        `Certificado maestro ha expirado hace ${Math.abs(diasParaVencer)} días`,
+      );
+      throw new BadRequestException(
+        `Certificado maestro expirado el ${fechaVencimiento.toLocaleDateString('es-AR')}. Por favor, cargue un nuevo certificado.`,
+      );
+    }
+
+    if (diasParaVencer < 30) {
+      this.logger.warn(
+        `⚠️ ADVERTENCIA: Certificado maestro vencerá en ${diasParaVencer} días (${fechaVencimiento.toLocaleDateString('es-AR')})`,
+      );
+    }
+  }
+
+  /**
+   * Obtener estado de expiración del certificado maestro
+   */
+  async obtenerEstadoExpiración(): Promise<{
+    estado: 'ACTIVO' | 'EXPIRADO' | 'PROXIMO_A_VENCER';
+    diasParaVencer: number;
+    fechaVencimiento: Date;
+    alertas: string[];
+  }> {
+    try {
+      const certificado = await this.certificadoMaestroRepository.findOne({
+        where: { id: this.CERTIFICADO_ID, activo: true },
+      });
+
+      if (!certificado || !certificado.metadata?.validTo) {
+        throw new NotFoundException(
+          'Certificado maestro no configurado o metadatos incompletos',
+        );
+      }
+
+      const fechaVencimiento = new Date(certificado.metadata.validTo);
+      const fechaActual = new Date();
+      const diasParaVencer = Math.floor(
+        (fechaVencimiento.getTime() - fechaActual.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      const alertas: string[] = [];
+      let estado: 'ACTIVO' | 'EXPIRADO' | 'PROXIMO_A_VENCER' = 'ACTIVO';
+
+      if (diasParaVencer < 0) {
+        estado = 'EXPIRADO';
+        alertas.push(
+          `🔴 CRÍTICO: Certificado expirado hace ${Math.abs(diasParaVencer)} días`,
+        );
+      } else if (diasParaVencer < 30) {
+        estado = 'PROXIMO_A_VENCER';
+        alertas.push(`⚠️ ADVERTENCIA: Certificado vencerá en ${diasParaVencer} días`);
+      } else {
+        alertas.push(
+          `✅ Certificado vigente. Vencimiento en ${diasParaVencer} días`,
+        );
+      }
+
+      return {
+        estado,
+        diasParaVencer,
+        fechaVencimiento,
+        alertas,
+      };
+    } catch (error) {
+      this.logger.error('Error obteniendo estado de expiración', error);
       throw error;
     }
   }

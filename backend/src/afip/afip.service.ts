@@ -7,6 +7,7 @@ import * as soap from 'soap';
 import * as forge from 'node-forge';
 import { LoggerService } from '../common/logger.service';
 import { CertificadoMaestroService } from '../certificados/certificado-maestro.service';
+import { AfipFilesService } from './services/afip-files.service';
 
 export interface CertificadoRequest {
   //controladorId: string;
@@ -40,11 +41,11 @@ export class AfipService {
   private tokenCache: { token?: string; sign?: string; expirationTime?: Date } = {};
   // Flag para saber si se intenta leer desde archivo o BD
   private readonly usarBdParaCertificado: boolean;
-
   constructor(
     private configService: ConfigService,
     private loggerService: LoggerService,
     private certificadoMaestroService: CertificadoMaestroService,
+    private afipFilesService: AfipFilesService,
   ) {
     // Configuraciones desde .env
     this.wsaaUrl = this.configService.get('AFIP_WSAA_URL');
@@ -161,17 +162,25 @@ export class AfipService {
       logs.push({ timestamp: new Date().toISOString(), step: 'wscert_result', message: 'Resultado de renovarCertificadoResponse', result });
 
       let buffer = '';      if (result && result.return) {
-        const rta = result.return;
-        this.loggerService.info('AFIP-generarCertificado', 'Procesando respuesta del WS', rta);
+        const rta = result.return;        this.loggerService.info('AFIP-generarCertificado', 'Procesando respuesta del WS', rta);
         logs.push({ timestamp: new Date().toISOString(), step: 'wscert_response', message: 'Procesando respuesta del WS', rta });
-        // Leer root RTI
-        const rootExists = this.rootPath && fs.existsSync(this.rootPath);
-        this.loggerService.debug('AFIP-generarCertificado', 'Verificando Root RTI', { 
-          rootPath: this.rootPath, 
-          exists: rootExists,
-          cwd: process.cwd()
-        });
-        const rootFileRTI = rootExists ? fs.readFileSync(this.rootPath, 'utf8').replace(/\r?\n/g, '') : '';
+        
+        // Leer root RTI desde BD (migrado de filesystem)
+        let rootFileRTI = '';
+        try {
+          const rootRtiBuffer = await this.afipFilesService.obtenerArchivoRootRTI();
+          rootFileRTI = rootRtiBuffer.toString('utf8').replace(/\r?\n/g, '');
+          this.loggerService.debug('AFIP-generarCertificado', 'Root RTI obtenido de BD correctamente', { size: rootFileRTI.length });
+          logs.push({ timestamp: new Date().toISOString(), step: 'root_rti_bd', message: 'Root RTI obtenido de BD correctamente' });
+        } catch (error) {
+          // Fallback a filesystem si no está en BD
+          this.loggerService.error('AFIP-generarCertificado', 'Error obteniendo Root RTI de BD, intentando filesystem', error);
+          const rootExists = this.rootPath && fs.existsSync(this.rootPath);
+          if (rootExists) {
+            rootFileRTI = fs.readFileSync(this.rootPath, 'utf8').replace(/\r?\n/g, '');
+            logs.push({ timestamp: new Date().toISOString(), step: 'root_rti_filesystem', message: 'Root RTI obtenido del filesystem (fallback)' });
+          }
+        }
         buffer = '-----BEGIN CMS-----\n';
         if (rootFileRTI) {
           let cadena = rootFileRTI;
@@ -411,9 +420,18 @@ export class AfipService {
   /**
    * Construir certificado PEM completo
    */
-  private construirCertificadoPem(certificadoData: any): string {
-    // Leer certificado raíz RTI
-    const rootRTI = fs.readFileSync(this.rootPath, 'utf8');
+  private async construirCertificadoPem(certificadoData: any): Promise<string> {
+    // Leer certificado raíz RTI desde BD o filesystem
+    let rootRTI = '';
+    try {
+      const rootRtiBuffer = await this.afipFilesService.obtenerArchivoRootRTI();
+      rootRTI = rootRtiBuffer.toString('utf8');
+    } catch (error) {
+      // Fallback a filesystem
+      if (this.rootPath && fs.existsSync(this.rootPath)) {
+        rootRTI = fs.readFileSync(this.rootPath, 'utf8');
+      }
+    }
     
     // Construir certificado completo según especificación AFIP
     return `${rootRTI}
@@ -456,11 +474,11 @@ ${certificadoData.certificado || ''}`;
       if (this.certPath && !fs.existsSync(this.certPath)) {
         errors.push(`Certificado PFX no encontrado: ${this.certPath}`);
       }
-    }
-
-    if (!this.rootPath) errors.push('AFIP_ROOT_PATH no configurado');
+    }    // Root RTI ahora es opcional (puede venir de BD)
+    // Solo validar si la ruta está configurada
     if (this.rootPath && !fs.existsSync(this.rootPath)) {
-      errors.push(`Certificado Root RTI no encontrado: ${this.rootPath}`);
+      this.loggerService.debug('AFIP', `Root RTI no encontrado en filesystem (buscará en BD): ${this.rootPath}`);
+      // No agregamos error porque puede estar en BD
     }
 
     this.loggerService.info('AFIP', `Configuración AFIP validada - ${errors.length === 0 ? 'OK' : 'Errores encontrados'}`, {

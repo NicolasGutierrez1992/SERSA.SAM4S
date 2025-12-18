@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { AfipService } from '../afip/afip.service';
 import { DescargasService } from '../descargas/descargas.service';
 import { TimezoneService } from '../common/timezone.service';
+import { AfipFilesService } from '../afip/services/afip-files.service';
 import { Certificado } from './entities/certificado.entity';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -28,6 +29,7 @@ export class CertificadosService {  private readonly logger = new Logger(Certifi
     private readonly afipService: AfipService,
     private readonly descargasService: DescargasService,
     private readonly timezoneService: TimezoneService,
+    private readonly afipFilesService: AfipFilesService,
   ) {
     this.logger.log('CertificadosService initialized - Pure certificate generation');
   }
@@ -159,32 +161,55 @@ export class CertificadosService {  private readonly logger = new Logger(Certifi
       throw new BadRequestException(`Error generando certificado: ${error.message}`);
     }
   }
-
   /**
    * Validar configuración del servicio
    */
   async validarConfiguracion() {
     return this.afipService.validateConfiguration();
-  }
+  }  async guardarArchivosCert(files: { certificado?: any[], pwrCst?: any[], rootRti?: any[] }) {
+    const certsPath = path.join(__dirname, '../../certs');
+    console.log('Guardando archivos en:', certsPath);
+    
+    // Asegurar que el directorio exista
+    if (!fs.existsSync(certsPath)) {
+      fs.mkdirSync(certsPath, { recursive: true });
+    }
 
-  
-async guardarArchivosCert(files: { certificado?: any[], pwrCst?: any[], rootRti?: any[] }) {
-  const certsPath = path.join(__dirname, '../../certs');
-  console.log('Guardando archivos en:', certsPath);
-  if (files.certificado && files.certificado[0]) {
-    const certPath = files.certificado[0].path;
-    const certBuffer = fs.readFileSync(certPath);
-    fs.writeFileSync(path.join(certsPath, 'certificado.pfx'), certBuffer);
+    try {
+      // Guardar certificado.pfx
+      if (files.certificado && files.certificado[0]) {
+        const certBuffer = files.certificado[0].buffer;
+        fs.writeFileSync(path.join(certsPath, 'certificado.pfx'), certBuffer);
+        console.log('✓ certificado.pfx guardado en filesystem');
+      }
+
+      // Guardar pwrCst.txt
+      if (files.pwrCst && files.pwrCst[0]) {
+        const pwrBuffer = files.pwrCst[0].buffer;
+        fs.writeFileSync(path.join(certsPath, 'pwrCst.txt'), pwrBuffer);
+        console.log('✓ pwrCst.txt guardado en filesystem');
+      }
+
+      // Guardar Root_RTI.txt EN LA BD (IMPORTANTE) - Directo desde buffer, sin pasar por path
+      if (files.rootRti && files.rootRti[0]) {
+        const rootBuffer = files.rootRti[0].buffer;
+
+        // Guardar en filesystem como backup
+        fs.writeFileSync(path.join(certsPath, 'Root_RTI.txt'), rootBuffer);
+        console.log('✓ Root_RTI.txt guardado en filesystem');
+        
+        // Guardar en BD (CRÍTICO) - Directo desde buffer sin path
+        try {
+          await this.afipFilesService.cargarArchivoRootRTI(rootBuffer, 'Root_RTI.txt');
+          console.log('✓ Root_RTI.txt guardado en base de datos');
+        } catch (error) {
+          console.error('⚠️ Error guardando Root_RTI.txt en BD:', error);
+          this.logger.warn('Error guardando Root_RTI en BD, pero el archivo se guardó en filesystem', error);
+        }
+      }
+    } catch (error) {
+      this.logger.error('Error guardando archivos de certificados:', error);
+      throw error;
+    }
   }
-  if (files.pwrCst && files.pwrCst[0]) {
-    const pwrPath = files.pwrCst[0].path;
-    const pwrBuffer = fs.readFileSync(pwrPath);
-    fs.writeFileSync(path.join(certsPath, 'pwrCst.txt'), pwrBuffer);
-  }
-  if (files.rootRti && files.rootRti[0]) {
-    const rootPath = files.rootRti[0].path;
-    const rootBuffer = fs.readFileSync(rootPath);
-    fs.writeFileSync(path.join(certsPath, 'Root_RTI.txt'), rootBuffer);
-  }
-}
 }
