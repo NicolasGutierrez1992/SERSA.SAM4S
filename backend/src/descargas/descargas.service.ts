@@ -214,18 +214,38 @@ export class DescargasService {
       const validacion = await this.canUserDownload(data.usuarioId);
       if (!validacion.canDownload) {
         throw new ForbiddenException(validacion.message);
-      }
-
-      // Obtener usuario para determinar tipo_descarga
+      }      // Obtener usuario para determinar tipo_descarga
       const userRepository = this.descargaRepository.manager.getRepository(User);
       const user = await userRepository.findOne({ 
         where: { id_usuario: data.usuarioId } 
       });
 
-      // ⭐ Determinar estado inicial según tipo_descarga
-      const estadoInicial = user.tipo_descarga === 'PREPAGO'
-        ? EstadoDescarga.PREPAGO
-        : EstadoDescarga.PENDIENTE_FACTURAR;
+      // ⭐ Determinar estado inicial según tipo_descarga y mayorista
+      // NUEVA LÓGICA: Distribuidores PREPAGO de mayorista ≠ 1 pueden tener estados diferentes
+      let estadoMayoristaInicial: EstadoDescarga;
+      let estadoDistribuidorInicial: EstadoDescarga;
+
+      if (user.tipo_descarga === 'PREPAGO') {
+        if (user.id_mayorista === 1) {
+          // SERSA (mayorista = 1): Ambos PREPAGO (inmutables)
+          estadoMayoristaInicial = EstadoDescarga.PREPAGO;
+          estadoDistribuidorInicial = EstadoDescarga.PREPAGO;
+          this.logger.log(`[registrarDescarga] PREPAGO de SERSA: Ambos estados = PREPAGO`);
+        } else {
+          // Otro mayorista: Distribuidor PREPAGO (inmutable), Mayorista PENDIENTE (mutable)
+          estadoMayoristaInicial = EstadoDescarga.PENDIENTE_FACTURAR;
+          estadoDistribuidorInicial = EstadoDescarga.PREPAGO;
+          this.logger.log(
+            `[registrarDescarga] PREPAGO de mayorista ${user.id_mayorista}: ` +
+            `Mayorista=PENDIENTE (mutable), Distribuidor=PREPAGO (inmutable)`
+          );
+        }
+      } else {
+        // CUENTA_CORRIENTE: Ambos PENDIENTE
+        estadoMayoristaInicial = EstadoDescarga.PENDIENTE_FACTURAR;
+        estadoDistribuidorInicial = EstadoDescarga.PENDIENTE_FACTURAR;
+        this.logger.log(`[registrarDescarga] CUENTA_CORRIENTE: Ambos estados = PENDIENTE`);
+      }
 
       // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
       const ahora = new Date();
@@ -234,8 +254,8 @@ export class DescargasService {
         id_certificado: data.controladorId,        
         certificado_nombre: data.certificadoNombre,
         tipo_descarga: user.tipo_descarga, // ⭐ Guardar tipo de descarga
-        estadoMayorista: estadoInicial,
-        estadoDistribuidor: estadoInicial,
+        estadoMayorista: estadoMayoristaInicial,
+        estadoDistribuidor: estadoDistribuidorInicial,
         tamaño: data.tamaño,
         updated_at: ahora.toISOString(),
         created_at: ahora.toISOString()
@@ -400,24 +420,34 @@ export class DescargasService {
   ): Promise<IDescarga> {
       const descarga = await this.descargaRepository.findOne({
       where: { id_descarga: String(descargaId) }
-    });
-
-    if (!descarga) {
+    });    if (!descarga) {
       throw new Error('Descarga no encontrada');
-    }
-
-    // ⭐ NUEVA: Bloquear cambios si es PREPAGO
-    if (descarga.tipo_descarga === 'PREPAGO' || descarga.estadoMayorista === EstadoDescarga.PREPAGO) {
-      throw new ForbiddenException(
-        'No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo e inmutable.'
-      );
     }
 
     const idMayorista = await this.obtenerIdMayoristaPorUsuario(descarga.id_usuario);
 
-    // Validar permisos
+    // ⭐ NUEVA LÓGICA: Validar permisos según rol
+    // Distribuidor (3) nunca puede cambiar estados
     if (userRole === 3) {
-      throw new Error('No tiene permisos para cambiar estados');
+      throw new ForbiddenException('Distribuidores no pueden cambiar estados de descargas');
+    }
+
+    // ⭐ NUEVA LÓGICA: Bloqueo selectivo de PREPAGO
+    // Caso 1: PREPAGO de SERSA (mayorista = 1) - Bloquear AMBOS estados
+    if (descarga.tipo_descarga === 'PREPAGO' && idMayorista === 1) {
+      throw new ForbiddenException(
+        'No se puede modificar estados de descargas PREPAGO de SERSA. El estado PREPAGO es definitivo e inmutable.'
+      );
+    }
+
+    // Caso 2: PREPAGO de otro mayorista - Bloquear solo estadoDistribuidor
+    if (descarga.tipo_descarga === 'PREPAGO' && idMayorista !== 1) {
+      if (nuevoEstado.estadoDistribuidor !== undefined && 
+          nuevoEstado.estadoDistribuidor !== EstadoDescarga.PREPAGO) {
+        throw new ForbiddenException(
+          'No se puede cambiar estadoDistribuidor. El estado PREPAGO en el distribuidor es definitivo e inmutable. Solo el estadoMayorista puede modificarse.'
+        );
+      }
     }
 
     const estadoAnterior = {
@@ -426,20 +456,29 @@ export class DescargasService {
       numero_factura: descarga.numero_factura,
       referencia_pago: descarga.referencia_pago
     };
-    console.log('Estado anterior:', estadoAnterior);
-    console.log('Nuevo estado:', nuevoEstado);
-    console.log('User role:', userRole);
-    console.log('id mayorista: ', idMayorista);
 
-    // Actualizar estados
-    //Si el usuario logeado es administrador y el id mayorista del usuario que descargo es = 1 actualizo ambos estados
-    if((userRole === 1 || userRole === 4) && idMayorista === 1){
-      descarga.estadoMayorista = nuevoEstado.estadoMayorista;
+    this.logger.log(`[updateEstadoDescarga] Usuario ${userId} (rol ${userRole}) intenta cambiar estados`);
+    this.logger.log(`[updateEstadoDescarga] Descarga ${descargaId}: tipo=${descarga.tipo_descarga}, mayorista=${idMayorista}`);
+    this.logger.log(`[updateEstadoDescarga] Estado anterior:`, estadoAnterior);
+    this.logger.log(`[updateEstadoDescarga] Nuevo estado solicitado:`, nuevoEstado);
+
+    // ⭐ NUEVA LÓGICA: Determinar qué estados puede cambiar el usuario
+    // Admin (1) y Facturación (4): Pueden cambiar estadoMayorista
+    if (userRole === 1 || userRole === 4) {
+      if (nuevoEstado.estadoMayorista !== undefined) {
+        descarga.estadoMayorista = nuevoEstado.estadoMayorista;
+        this.logger.log(`[updateEstadoDescarga] Admin/Facturación cambió estadoMayorista`);
+      }
+      // Si es SERSA (mayorista = 1), también pueden cambiar distribuidor
+      if (idMayorista === 1 && nuevoEstado.estadoDistribuidor !== undefined) {
+        descarga.estadoDistribuidor = nuevoEstado.estadoDistribuidor;
+        this.logger.log(`[updateEstadoDescarga] Admin/Facturación cambió estadoDistribuidor (SERSA)`);
+      }
+    }
+    // Mayorista (2): Puede cambiar estadoDistribuidor de sus distribuidores
+    else if (userRole === 2 && nuevoEstado.estadoDistribuidor !== undefined) {
       descarga.estadoDistribuidor = nuevoEstado.estadoDistribuidor;
-    }else if (userRole === 1 ){
-      descarga.estadoMayorista = nuevoEstado.estadoMayorista;
-    }else{
-      descarga.estadoDistribuidor = nuevoEstado.estadoDistribuidor;
+      this.logger.log(`[updateEstadoDescarga] Mayorista cambió estadoDistribuidor`);
     }
 
     // Manejar número de factura (solo para estado Facturado)

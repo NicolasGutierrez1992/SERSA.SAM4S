@@ -399,46 +399,63 @@ export default function CertificadosPage() {
     setPendingDownloadData(null);
     setAcceptDownloadConfirm(false);
     setDescargaError('');
-  };  const handleEstadoChange = async (downloadId: string, nuevoEstado: string, rol: number, userid: number, tipoDescarga?: string) => {
+  };  const handleEstadoChange = async (downloadId: string, nuevoEstado: string, rol: number, userid: number, tipoDescarga?: string, idMayorista?: number) => {
     try {
-      // Bloquear cambios si es PREPAGO
-      if (tipoDescarga === 'PREPAGO') {
-        alert('No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo e inmutable.');
-        return;
-      }
+      // ⭐ NUEVA LÓGICA SIMPLIFICADA
       
-      // ⭐ NUEVA LÓGICA: Solo Admin y Facturación pueden requerir datos de facturación
-      if ((nuevoEstado === 'Facturado' || nuevoEstado === 'Cobrado') && (rol === 1 || rol === 4)) {
-        // Admin y Facturación: mostrar modal para datos adicionales
-        setFacturaData({
-          numero_factura: '',
-          referencia_pago: ''
-        });       
-         setPendingEstadoChange({
-          downloadId,
-          nuevoEstado,
-          tipo: 'ambos', // Admin y Facturación cambian ambos estados
-          userid
-        });
-        setShowFacturacionModal(true);
-        return;
-      }
-      
-      // Si no requiere datos, hacer cambio directo
+      // Admin (1) y Facturación (4): Cambiar estadoMayorista
       if (rol === 1 || rol === 4) {
-        // Admin y Facturación: cambiar estadoMayorista
+        // ÚNICA restricción: Si mayorista = 1 (SERSA), bloquear completamente
+        if (idMayorista === 1) {
+          alert('No se puede modificar el estado de descargas del mayorista SERSA.');
+          return;
+        }
+        
+        // Si requiere datos de facturación, mostrar modal
+        if (nuevoEstado === 'Facturado' || nuevoEstado === 'Cobrado') {
+          setFacturaData({
+            numero_factura: '',
+            referencia_pago: ''
+          });       
+          setPendingEstadoChange({
+            downloadId,
+            nuevoEstado,
+            tipo: 'mayorista', // Admin/Fact SIEMPRE cambian solo estadoMayorista
+            userid
+          });
+          setShowFacturacionModal(true);
+          return;
+        }
+        
+        // Cambio directo sin modal
         await certificadosApi.cambiarEstado(downloadId, { estadoMayorista: nuevoEstado });
-      }
-      else if (rol === 2 || rol === 3) {
-        // Mayorista y Distribuidor: cambiar solo estadoDistribuidor
-        const estado = { estadoDistribuidor: nuevoEstado };
-        console.log('cambio de estado distribuidor:', estado);        
-        await certificadosApi.cambiarEstado(downloadId, estado);
+        await loadHistorial();
+        alert('Estado actualizado correctamente');
+        return;
       }
       
-      // Recargar historial para actualizar la tabla
-      await loadHistorial();
-      alert('Estado actualizado correctamente');
+      // Mayorista (2): Cambiar estadoDistribuidor
+      if (rol === 2) {
+        // Mayorista NO puede cambiar estado si la descarga es PREPAGO
+        if (tipoDescarga === 'PREPAGO') {
+          alert('No se puede modificar el estado de descargas PREPAGO. El estado es definitivo.');
+          return;
+        }
+        
+        const estado = { estadoDistribuidor: nuevoEstado };
+        console.log('cambio de estado distribuidor (mayorista):', estado);        
+        await certificadosApi.cambiarEstado(downloadId, estado);
+        await loadHistorial();
+        alert('Estado actualizado correctamente');
+        return;
+      }
+      
+      // Distribuidor (3): No puede cambiar nada
+      if (rol === 3) {
+        alert('Los distribuidores no pueden cambiar estados de descargas.');
+        return;
+      }
+      
     } catch (error) {
       console.error('Error cambiando estado:', error);
       alert('Error al cambiar estado');
@@ -1126,17 +1143,16 @@ export default function CertificadosPage() {
                                       
                                       {/* Expanded content */}
                                       {expandedRows.has(descarga.id) && (
-                                        <div className="pl-6 space-y-2 border-l-2 border-gray-300">
-                                          {/* Estado change dropdown */}
+                                        <div className="pl-6 space-y-2 border-l-2 border-gray-300">                                          {/* Estado change dropdown */}
                                           {(user?.rol === 1 || user?.rol === 4) && (
                                             <div>
-                                              {descarga.tipoDescarga === 'PREPAGO' ? (
+                                              {(descarga.usuario?.id_mayorista === 1 && descarga.tipoDescarga === "PREPAGO") ? (
                                                 <div className="p-3 bg-red-50 border border-red-200 rounded">
                                                   <p className="text-xs font-semibold text-red-700">
-                                                    ⚠️ Estado PREPAGO - Inmutable
+                                                    ⚠️ Distri SERSA - PREPAGO - No modificable
                                                   </p>
                                                   <p className="text-xs text-red-600 mt-1">
-                                                    No se puede modificar el estado de descargas PREPAGO. El estado PREPAGO es definitivo.
+                                                    No se puede modificar el estado de descargas para PREPAGO DE SERSA.
                                                   </p>
                                                 </div>
                                               ) : (
@@ -1148,7 +1164,7 @@ export default function CertificadosPage() {
                                                     onChange={(e) => {
                                                       const nuevoEstado = e.target.value;
                                                       if (nuevoEstado !== descarga.estadoMayorista) {
-                                                        handleEstadoChange(descarga.id, nuevoEstado, user.rol, descarga.usuarioId, descarga.tipoDescarga || undefined);
+                                                        handleEstadoChange(descarga.id, nuevoEstado, user.rol, descarga.usuarioId, descarga.tipoDescarga || undefined, descarga.usuario?.id_mayorista);
                                                         // Reset al valor actual para evitar que se quede seleccionado el otro estado
                                                         e.target.value = descarga.estadoMayorista;
                                                       }
