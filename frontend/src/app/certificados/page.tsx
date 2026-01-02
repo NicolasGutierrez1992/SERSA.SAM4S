@@ -405,11 +405,7 @@ export default function CertificadosPage() {
       
       // Admin (1) y Facturación (4): Cambiar estadoMayorista
       if (rol === 1 || rol === 4) {
-        // ÚNICA restricción: Si mayorista = 1 (SERSA), bloquear completamente
-        if (idMayorista === 1) {
-          alert('No se puede modificar el estado de descargas del mayorista SERSA.');
-          return;
-        }
+       
         
         // Si requiere datos de facturación, mostrar modal
         if (nuevoEstado === 'Facturado' || nuevoEstado === 'Cobrado') {
@@ -426,11 +422,14 @@ export default function CertificadosPage() {
           setShowFacturacionModal(true);
           return;
         }
-        
-        // Cambio directo sin modal
-        await certificadosApi.cambiarEstado(downloadId, { estadoMayorista: nuevoEstado });
+         // ÚNICA restricción: Si mayorista = 1 (SERSA), al ser Admin o Facturación, permitir cambio de ambos estados)
+        if (idMayorista === 1) {
+          await certificadosApi.cambiarEstado(downloadId, { estadoMayorista: nuevoEstado, estadoDistribuidor: nuevoEstado });
+        } else {
+          await certificadosApi.cambiarEstado(downloadId, { estadoMayorista: nuevoEstado });
+        }
         await loadHistorial();
-        alert('Estado actualizado correctamente');
+        //alert('Estado actualizado correctamente');
         return;
       }
       
@@ -446,7 +445,7 @@ export default function CertificadosPage() {
         console.log('cambio de estado distribuidor (mayorista):', estado);        
         await certificadosApi.cambiarEstado(downloadId, estado);
         await loadHistorial();
-        alert('Estado actualizado correctamente');
+        //alert('Estado actualizado correctamente');
         return;
       }
       
@@ -492,7 +491,7 @@ export default function CertificadosPage() {
       setPendingEstadoChange(null);
       setFacturaData({ numero_factura: '', referencia_pago: '' });
       await loadHistorial();
-      alert('Estado actualizado correctamente');
+      //alert('Estado actualizado correctamente');
     } catch (error) {
       console.error('Error al confirmar facturación:', error);
       alert('Error al actualizar estado');
