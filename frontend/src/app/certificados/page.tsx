@@ -416,7 +416,7 @@ export default function CertificadosPage() {
           setPendingEstadoChange({
             downloadId,
             nuevoEstado,
-            tipo: 'mayorista', // Admin/Fact SIEMPRE cambian solo estadoMayorista
+            tipo: 'ambos', // Admin/Fact SIEMPRE cambian solo estadoMayorista
             userid
           });
           setShowFacturacionModal(true);
@@ -425,6 +425,7 @@ export default function CertificadosPage() {
          // ÚNICA restricción: Si mayorista = 1 (SERSA), al ser Admin o Facturación, permitir cambio de ambos estados)
         if (idMayorista === 1) {
           await certificadosApi.cambiarEstado(downloadId, { estadoMayorista: nuevoEstado, estadoDistribuidor: nuevoEstado });
+          console.log('cambio de estado ambos (admin/facturación, mayorista 1):', { estadoMayorista: nuevoEstado, estadoDistribuidor: nuevoEstado }); 
         } else {
           await certificadosApi.cambiarEstado(downloadId, { estadoMayorista: nuevoEstado });
         }

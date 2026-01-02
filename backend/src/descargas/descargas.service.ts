@@ -418,9 +418,11 @@ export class DescargasService {
     fechaFacturacion: Date,
     ip?: string
   ): Promise<IDescarga> {
-      const descarga = await this.descargaRepository.findOne({
+    
+    const descarga = await this.descargaRepository.findOne({
       where: { id_descarga: String(descargaId) }
-    });    if (!descarga) {
+    });    
+    if (!descarga) {
       throw new Error('Descarga no encontrada');
     }
 
@@ -460,7 +462,8 @@ export class DescargasService {
     this.logger.log(`[updateEstadoDescarga] Usuario ${userId} (rol ${userRole}) intenta cambiar estados`);
     this.logger.log(`[updateEstadoDescarga] Descarga ${descargaId}: tipo=${descarga.tipo_descarga}, mayorista=${idMayorista}`);
     this.logger.log(`[updateEstadoDescarga] Estado anterior:`, estadoAnterior);
-    this.logger.log(`[updateEstadoDescarga] Nuevo estado solicitado:`, nuevoEstado);
+    this.logger.log(`[updateEstadoDescarga] Nuevo estadoMayorista solicitado:`, nuevoEstado.estadoMayorista);
+    this.logger.log(`[updateEstadoDescarga] Nuevo estadoDistribuidor solicitado:`, nuevoEstado.estadoDistribuidor);
 
     // ⭐ NUEVA LÓGICA: Determinar qué estados puede cambiar el usuario
     // Admin (1) y Facturación (4): Pueden cambiar estadoMayorista
