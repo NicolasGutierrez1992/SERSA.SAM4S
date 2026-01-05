@@ -789,7 +789,7 @@ export default function CertificadosPage() {
                         <dl>
                           <dt className="text-sm font-medium text-gray-500 truncate">Uso del Límite</dt>
                           <dd className="text-lg font-medium text-gray-900">
-                            {metricas.pendienteFacturar + metricas.pendienteCobrar}/{metricas.limiteDescargas!= 0 ? metricas.limiteDescargas : '∞'}
+                            {(metricas.pendienteFacturar|| 0) + (metricas.pendienteCobrar || 0)}/{metricas.limiteDescargas!= 0 ? metricas.limiteDescargas : '∞'}
                           </dd>
                         </dl>
                       </div>
