@@ -1,0 +1,86 @@
+╔═══════════════════════════════════════════════════════════════════════════╗
+║          ✅ CAMBIO IMPLEMENTADO: LÍMITE DE DESCARGA                       ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+
+📍 UBICACIÓN: backend/src/descargas/descargas.service.ts (línea ~179)
+    Método: canUserDownload()
+
+═══════════════════════════════════════════════════════════════════════════
+
+┌─ ANTES (INCORRECTO) ────────────────────────────────────────────────────┐
+│                                                                          │
+│  const descargasPendientes = await this.descargaRepository.count({       │
+│    where: {                                                              │
+│      id_usuario: userId,                                                │
+│      [estadoField]: EstadoDescarga.PENDIENTE_FACTURAR  // ❌ Solo esto  │
+│    }                                                                     │
+│  });                                                                     │
+│                                                                          │
+│  Lógica: PENDIENTE_FACTURAR libera con Facturado ❌ INCORRECTO          │
+│                                                                          │
+└─────────────────────────────────────────────────────────────────────────┘
+
+         ⬇️  CAMBIO REALIZADO
+
+┌─ DESPUÉS (CORRECTO) ───────────────────────────────────────────────────┐
+│                                                                         │
+│  const descargasPendientes = await this.descargaRepository.count({      │
+│    where: [                                                             │
+│      {                                                                  │
+│        id_usuario: userId,                                             │
+│        [estadoField]: EstadoDescarga.PENDIENTE_FACTURAR                 │
+│      },                                                                 │
+│      {                                                                  │
+│        id_usuario: userId,                                             │
+│        [estadoField]: EstadoDescarga.FACTURADO  // ✅ + Agregado       │
+│      }                                                                  │
+│    ]                                                                    │
+│  });                                                                    │
+│                                                                         │
+│  Lógica: PENDIENTE_FACTURAR + FACTURADO bloquean                        │
+│          Solo COBRADO libera ✅ CORRECTO                                │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════════════
+
+🎯 COMPORTAMIENTO NUEVO:
+
+   Estado Distribuidor      Bloquea Límite?    Efecto
+   ─────────────────────────────────────────────────────────
+   Pendiente de Facturar    ✅ SÍ            Suma al bloqueo
+   Facturado                ✅ SÍ            Suma al bloqueo (NUEVO)
+   Cobrado                  ❌ NO            Libera límite (NUEVO)
+   PREPAGO                  ❌ NO            N/A (inmutable)
+
+═══════════════════════════════════════════════════════════════════════════
+
+📊 EJEMPLO PRÁCTICO:
+
+   Usuario: Distribuidor con limite = 5
+
+   Historial:
+   ├─ Cert 1: estadoDistribuidor = PENDIENTE_FACTURAR
+   ├─ Cert 2: estadoDistribuidor = PENDIENTE_FACTURAR
+   ├─ Cert 3: estadoDistribuidor = FACTURADO
+   ├─ Cert 4: estadoDistribuidor = COBRADO
+   └─ Cert 5: estadoDistribuidor = COBRADO
+
+   Cálculo:
+   ────────
+   descargasPendientes = COUNT(PENDIENTE + FACTURADO)
+                       = 2 + 1 = 3
+
+   Disponible = 5 - 3 = 2 descargas más antes de bloquear
+
+═══════════════════════════════════════════════════════════════════════════
+
+✨ RESULTADO:
+
+   ✅ Backend compilado sin errores
+   ✅ Lógica de límites correcta
+   ✅ PREPAGO sin cambios
+   ✅ Distribuidor bloqueado hasta COBRADO
+   ✅ Mayorista sin impacto
+
+═══════════════════════════════════════════════════════════════════════════

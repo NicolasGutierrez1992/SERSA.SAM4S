@@ -170,17 +170,23 @@ export class DescargasService {
         limiteDisponible: user.limite_descargas
       };
     }
-    
-    // ⭐ CUENTA_CORRIENTE: Validar descargas pendientes
+      // ⭐ CUENTA_CORRIENTE: Validar descargas pendientes + facturadas
     // Los distribuidores (rol 3) usan estadoDistribuidor, otros usan estadoMayorista
+    // IMPORTANTE: Contar descargas en PENDIENTE_FACTURAR y FACTURADO (ambos bloquean)
+    // Solo COBRADO libera el límite
     const estadoField = user.rol === 3 ? 'estadoDistribuidor' : 'estadoMayorista';
-    const estadoValue = user.rol === 3 ? EstadoDescarga.PENDIENTE_FACTURAR : EstadoDescarga.PENDIENTE_FACTURAR;
     
     const descargasPendientes = await this.descargaRepository.count({
-      where: {
-        id_usuario: userId,
-        [estadoField]: estadoValue
-      }
+      where: [
+        {
+          id_usuario: userId,
+          [estadoField]: EstadoDescarga.PENDIENTE_FACTURAR
+        },
+        {
+          id_usuario: userId,
+          [estadoField]: EstadoDescarga.FACTURADO
+        }
+      ]
     });
 
     const limite = user.limite_descargas;

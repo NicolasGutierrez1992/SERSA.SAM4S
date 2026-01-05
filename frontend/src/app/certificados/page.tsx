@@ -731,9 +731,7 @@ export default function CertificadosPage() {
                   </div>
                 </div>
               </>
-            )}
-
-            {/* ========== DISTRIBUIDOR (Rol 3) ========== */}
+            )}            {/* ========== DISTRIBUIDOR (Rol 3) ========== */}
             {user?.rol === 3 && (
               <>
                 {/* 1. Pendiente de Facturar */}
@@ -755,7 +753,26 @@ export default function CertificadosPage() {
                   </div>
                 </div>
 
-                {/* 2. Uso del Límite */}
+                {/* 2. Pendiente de Cobrar (Facturado) */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente de Cobrar</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.pendienteCobrar || 0}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. Uso del Límite */}
                 <div className="bg-white overflow-hidden shadow rounded-lg">
                   <div className="p-5">
                     <div className="flex items-center">
@@ -772,7 +789,7 @@ export default function CertificadosPage() {
                         <dl>
                           <dt className="text-sm font-medium text-gray-500 truncate">Uso del Límite</dt>
                           <dd className="text-lg font-medium text-gray-900">
-                            {metricas.pendienteFacturar}/{metricas.limiteDescargas!= 0 ? metricas.limiteDescargas : '∞'}
+                            {metricas.pendienteFacturar + metricas.pendienteCobrar}/{metricas.limiteDescargas!= 0 ? metricas.limiteDescargas : '∞'}
                           </dd>
                         </dl>
                       </div>
@@ -835,7 +852,7 @@ export default function CertificadosPage() {
                 )}
                 {(downloadUserType === 'CUENTA_CORRIENTE') && metricas && user?.rol === 3 && (
                   <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
-                    <strong>Sistema CUENTA CORRIENTE Activo:</strong> Tienes {metricas.limiteDescargas! - (metricas.pendienteFacturar || 0)} de {metricas.limiteDescargas} descargas disponibles.
+                    <strong>Sistema CUENTA CORRIENTE Activo:</strong> Tienes {metricas.limiteDescargas! - (metricas.pendienteFacturar + metricas.pendienteCobrar || 0)} de {metricas.limiteDescargas} descargas disponibles.
                   </div>
                 )}
 

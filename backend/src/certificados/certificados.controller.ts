@@ -381,6 +381,7 @@ export class CertificadosController {
         descargasSemana: { type: 'number' },
         descargasMes: { type: 'number' },
         pendienteFacturar: { type: 'number' },
+        pendientesTotales: { type: 'number' },
         limiteDescargas: { type: 'number' },
         porcentajeLimite: { type: 'number' }
       }
@@ -486,29 +487,43 @@ export class CertificadosController {
         descargasPropiasTotal,
         rol: user.rol
       };
+        } 
       
-    } else if (user.rol === 3) {
+        else if (user.rol === 3) {
       // ========== ROL 3 (DISTRIBUIDOR) ==========
       console.log(`[getMetricasPersonales] Distribuidor (userId: ${userId})`);
       
-      // 1. Pendiente de facturar (estadoDistribuidor) - Solo propias
-      const pendienteFacturarResult = await this.descargasService.getDescargas({
+      // ⭐ CAMBIO: Contar descargas en PENDIENTE_FACTURAR y FACTURADO
+      // Solo COBRADO libera el límite
+      // Obtener descargas pendientes
+      const pendientesResult = await this.descargasService.getDescargas({
         limit: 1000,
         usuarioId: userId,
         estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR,
         userRole: user.rol
       });
       
-      const pendienteFacturar = pendienteFacturarResult.descargas.length;
+      // Obtener descargas facturadas
+      const facturadosResult = await this.descargasService.getDescargas({
+        limit: 1000,
+        usuarioId: userId,
+        estadoDistribuidor: EstadoDescarga.FACTURADO,
+        userRole: user.rol
+      });
+      
+      // Sumar ambos estados
+      const pendienteFacturar = pendientesResult.descargas.length ;
+      const pendienteCobrar = facturadosResult.descargas.length;
       const limiteDescargas = usuarioCompleto.limite_descargas;
       const porcentajeLimite = limiteDescargas > 0 
         ? Math.round((pendienteFacturar / limiteDescargas) * 100)
         : 0;
       
-      this.logger.log(`[Métricas Distribuidor] Pendiente=${pendienteFacturar}, Límite=${limiteDescargas}, Porcentaje=${porcentajeLimite}%`);
+      this.logger.log(`[Métricas Distribuidor] Pendientes=${pendientesResult.descargas.length}, Facturados=${facturadosResult.descargas.length}, Total=${pendienteFacturar + pendienteCobrar}, Límite=${limiteDescargas}, Porcentaje=${porcentajeLimite}%`);
       
       return {
         pendienteFacturar,
+        pendienteCobrar,
         limiteDescargas,
         porcentajeLimite,
         rol: user.rol

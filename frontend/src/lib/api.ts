@@ -98,6 +98,7 @@ export interface MetricasPersonales {
   descargasPropiasTotal?: number;
   // Distribuidor (Rol 3) - y Admin/Mayorista también pueden tener estos campos
   pendienteFacturar?: number;
+  pendienteCobrar?: number; // ⭐ NUEVO: Descargas en estado FACTURADO
   limiteDescargas?: number;
   porcentajeLimite?: number;
 }
