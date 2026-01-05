@@ -1226,12 +1226,60 @@ export default function CertificadosPage() {
                                         {descarga.estadoDistribuidor}
                                       </span>
                                     </td>
-                                  </>                                )}
-                                {user?.rol === 3 && (
+                                  </>                                )}                                {user?.rol === 3 && (
                                   <td className="px-3 py-4 whitespace-nowrap">
-                                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>
-                                      {descarga.estadoDistribuidor}
-                                    </span>
+                                    {/* Para Distribuidor SERSA (idMayorista=1): Mostrar estado con datos de facturación */}
+                                    {descarga.usuario?.id_mayorista === 1 ? (
+                                      <div className="space-y-2">
+                                        {/* Collapsible row header - DISTRIBUIDOR SERSA ve EstadoDistribuidor + datos facturación */}
+                                        <button
+                                          onClick={() => toggleRowExpanded(descarga.id)}
+                                          className="flex items-center gap-2 hover:opacity-80"
+                                        >
+                                          <svg
+                                            className={`h-4 w-4 transition-transform ${expandedRows.has(descarga.id) ? 'rotate-90' : ''}`}
+                                            fill="none"
+                                            viewBox="0 0 24 24"
+                                            stroke="currentColor"
+                                          >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                          </svg>
+                                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>
+                                            {descarga.estadoDistribuidor}
+                                          </span>
+                                        </button>
+                                        
+                                        {/* Expanded content - Mostrar datos de facturación */}
+                                        {expandedRows.has(descarga.id) && (
+                                          <div className="pl-6 space-y-2 border-l-2 border-gray-300">
+                                            <div className="space-y-1">
+                                              {descarga.numero_factura && (
+                                                <div className="text-xs">
+                                                  <span className="font-semibold text-gray-700">Nro Factura:</span>
+                                                  <span className="ml-2 text-gray-600">{descarga.numero_factura}</span>
+                                                </div>
+                                              )}
+                                              {descarga.referencia_pago && (
+                                                <div className="text-xs">
+                                                  <span className="font-semibold text-gray-700">Referencia:</span>
+                                                  <span className="ml-2 text-gray-600">{descarga.referencia_pago}</span>
+                                                </div>
+                                              )}
+                                              {!descarga.numero_factura && !descarga.referencia_pago && (
+                                                <div className="text-xs text-gray-500">
+                                                  Sin datos de facturación
+                                                </div>
+                                              )}
+                                            </div>
+                                          </div>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      /* Para otros mayoristas: Solo mostrar estado sin expandible */
+                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>
+                                        {descarga.estadoDistribuidor}
+                                      </span>
+                                    )}
                                   </td>
                                 )}
                                 {user?.rol !== 4 && (
