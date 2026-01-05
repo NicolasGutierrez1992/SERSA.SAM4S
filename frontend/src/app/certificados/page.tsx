@@ -745,7 +745,7 @@ export default function CertificadosPage() {
                       </div>
                       <div className="ml-5 w-0 flex-1">
                         <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente Facturar</dt>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente de Facturar</dt>
                           <dd className="text-lg font-medium text-gray-900">{metricas.pendienteFacturar}</dd>
                         </dl>
                       </div>
@@ -764,7 +764,7 @@ export default function CertificadosPage() {
                       </div>
                       <div className="ml-5 w-0 flex-1">
                         <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente de Cobrar</dt>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente de Pago</dt>
                           <dd className="text-lg font-medium text-gray-900">{metricas.pendienteCobrar || 0}</dd>
                         </dl>
                       </div>
