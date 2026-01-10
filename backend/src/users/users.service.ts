@@ -1,7 +1,7 @@
-import { Injectable, NotFoundException, BadRequestException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import { Injectable, BadRequestException, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { User } from './entities/user.entity';
 import { Mayorista } from './entities/mayorista.entity';
 import { CreateUserDto, UpdateUserDto, QueryUsersDto, UserRole, UserStatus } from './dto/user.dto';
@@ -16,11 +16,37 @@ export class UsersService {
   ) {
     console.log('TEST LOG: UsersService constructor ejecutado');
   }
-
   // ✅ Running in PRODUCTION mode with real AFIP integration
 
-  async create(createUserDto: CreateUserDto): Promise<User> {
+  async create(createUserDto: CreateUserDto, creatorUser?: any): Promise<User> {
     console.log('[UsersService][create] Entrada:', createUserDto);
+    console.log('[UsersService][create] Usuario creador:', creatorUser?.rol);    // ⭐ VALIDACIÓN: Verificar qué roles puede crear el usuario actual
+    if (creatorUser) {
+      const rolACrear = createUserDto.rol;
+      
+      // Solo Admin (rol 1) y Técnico (rol 5) pueden crear usuarios
+      if (creatorUser.rol === 1) {
+        // Admin puede crear CUALQUIER rol (incluyendo otros Admin)
+        console.log(`[UsersService][create] ✅ Admin puede crear rol ${rolACrear}`);
+      } else if (creatorUser.rol === 5) {
+        // Técnico puede crear cualquier rol EXCEPTO Admin y Facturación
+        if (rolACrear === UserRole.ADMINISTRADOR) {
+          throw new ForbiddenException(
+            'No puedes crear usuarios con rol ADMINISTRADOR. Solo el administrador puede hacerlo.'
+          );
+        }
+        if (rolACrear === UserRole.FACTURACION) {
+          throw new ForbiddenException(
+            'No puedes crear usuarios con rol FACTURACIÓN. Solo el administrador puede hacerlo.'
+          );
+        }
+        console.log(`[UsersService][create] ✅ Técnico puede crear rol ${rolACrear}`);
+      } else {
+        // Otros roles (Mayorista, Distribuidor) no pueden crear usuarios
+        throw new ForbiddenException('No tienes permisos para crear usuarios');
+      }
+    }
+
     // Validar CUIT
     if (!/^\d{11}$/.test(createUserDto.cuit)) {
       throw new BadRequestException('El CUIT debe tener 11 dígitos numéricos');
@@ -58,7 +84,15 @@ export class UsersService {
       if (!mayorista) {
         throw new NotFoundException('El mayorista especificado no existe o no es válido');
       }
-    }    // Hash de la contraseña
+    }
+
+    // ⭐ NUEVO: Los Técnicos siempre se crean con id_mayorista = 1 (SERSA)
+    if (createUserDto.rol === UserRole.TECNICO) {
+      createUserDto.id_mayorista = 1;
+      console.log('[UsersService][create] Técnico creado con id_mayorista = 1 (SERSA)');
+    }
+
+    // Hash de la contraseña
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(createUserDto.password, saltRounds);    
     const user = this.userRepository.create({
@@ -97,11 +131,11 @@ export class UsersService {
     const usuariosConMayorista = allUsers.map(u => ({
       ...u,
       nombreMayorista: u.id_mayorista ? mayoristaMap.get(u.id_mayorista) || null : null
-    }));
-    // Filtros y paginación sobre la lista plana
+    }));    // Filtros y paginación sobre la lista plana
     let filtered = usuariosConMayorista;
     // Si el usuario autenticado es mayorista, solo puede ver sus propios distribuidores (usuarios con id_mayorista igual a su id)
-    if ((currentUser?.rol === 2 || currentUser?.rol === 2)) {
+    // Técnico (rol 5) y Admin (rol 1) ven todos los usuarios
+    if (currentUser?.rol === 2) {
       filtered = filtered.filter(u => u.id_mayorista === (currentUser.id_mayorista));
     }
     if (rol !== undefined) filtered = filtered.filter(u => u.rol === +rol);
@@ -196,25 +230,46 @@ export class UsersService {
     console.log('[UsersService][update] Entrada:', id, updateUserDto, currentUser);
     const user = await this.findOne(id);
 
-    // ⭐ VALIDACIÓN POR ROL - Si es mayorista, validar permisos
-    if (currentUser && currentUser.rol === 2) { // Mayorista
-      // 1. Solo puede editar si el usuario tiene el mismo id_mayorista
-      if (user.id_mayorista !== currentUser.id_mayorista) {
-        throw new BadRequestException('No tienes permisos para editar usuarios de otro mayorista');
+    // ⭐ VALIDACIÓN POR ROL
+    if (currentUser) {
+      // Mayorista (rol 2): Solo puede editar distribuidores del mismo mayorista
+      if (currentUser.rol === 2) { // Mayorista
+        // 1. Solo puede editar si el usuario tiene el mismo id_mayorista
+        if (user.id_mayorista !== currentUser.id_mayorista) {
+          throw new BadRequestException('No tienes permisos para editar usuarios de otro mayorista');
+        }
+        
+        // 2. Solo puede editar si el usuario es distribuidor (rol 3)
+        if (user.rol !== 3) {
+          throw new BadRequestException('Los mayoristas solo pueden editar distribuidores');
+        }
+        
+        // 3. Solo puede editar estos campos: limiteDescargas y tipo_descarga
+        const allowedFields = ['limiteDescargas', 'tipo_descarga'];
+        const attemptedFields = Object.keys(updateUserDto).filter(key => updateUserDto[key] !== undefined);
+        const unallowedFields = attemptedFields.filter(field => !allowedFields.includes(field));
+        
+        if (unallowedFields.length > 0) {
+          throw new BadRequestException(`No tienes permisos para editar los campos: ${unallowedFields.join(', ')}`);
+        }      }
+      // Técnico (rol 5): Puede editar todos los usuarios, excepto el campo ROL
+      else if (currentUser.rol === 5) {
+        if (updateUserDto.rol !== undefined) {
+          throw new BadRequestException('No tienes permisos para cambiar el rol de un usuario');
+        }
+        console.log(`[UsersService][update] ✅ Técnico editando usuario`);
       }
-      
-      // 2. Solo puede editar si el usuario es distribuidor (rol 3)
-      if (user.rol !== 3) {
-        throw new BadRequestException('Los mayoristas solo pueden editar distribuidores');
+      // Admin (rol 1): Puede editar todo
+      else if (currentUser.rol === 1) {
+        console.log(`[UsersService][update] ✅ Admin editando usuario`);
       }
-      
-      // 3. Solo puede editar estos campos: limiteDescargas y tipo_descarga
-      const allowedFields = ['limiteDescargas', 'tipo_descarga'];
-      const attemptedFields = Object.keys(updateUserDto).filter(key => updateUserDto[key] !== undefined);
-      const unallowedFields = attemptedFields.filter(field => !allowedFields.includes(field));
-      
-      if (unallowedFields.length > 0) {
-        throw new BadRequestException(`No tienes permisos para editar los campos: ${unallowedFields.join(', ')}`);
+      // Facturación (rol 4): Puede editar algunos campos
+      else if (currentUser.rol === 4) {
+        console.log(`[UsersService][update] ✅ Facturación editando usuario`);
+      }
+      // Otros roles no pueden editar
+      else {
+        throw new BadRequestException('No tienes permisos para editar usuarios');
       }
     }
 
@@ -450,13 +505,13 @@ export class UsersService {
 
     return this.findOne(usuarioId);
   }
-
   private getRolText(rol: number): string {
     const roles = {
       1: 'Administrador',
       2: 'Mayorista', 
       3: 'Distribuidor',
       4: 'Facturación',
+      5: 'Técnico',
     };
     return roles[rol] || 'Desconocido';
   }

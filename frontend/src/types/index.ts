@@ -3,7 +3,8 @@ export enum UserRole {
   ADMIN = 1,
   MAYORISTA = 2,
   DISTRIBUIDOR = 3,
-  FACTURACION = 4
+  FACTURACION = 4,
+  TECNICO = 5
 }
 
 // Estados de descarga

@@ -64,7 +64,6 @@ export default function UsuariosPage() {
   useEffect(() => {
     setMounted(true);
   }, []);
-
   // funcion para agregar un nuevo usuario
   const openAddUser = () => {
     setEditingUser(null);
@@ -73,8 +72,12 @@ export default function UsuariosPage() {
     if (isMayorista) {
       form.setFieldsValue({ rol: 3, id_mayorista: idMayorista });
     }
+    // Si es técnico, setear id_mayorista = 1 automáticamente
+    if (currentUser?.rol === 5) {
+      form.setFieldsValue({ id_mayorista: 1 });
+    }
     setModalVisible(true);
-  };  // Mapea los campos del usuario a los nombres esperados por el formulario
+  };// Mapea los campos del usuario a los nombres esperados por el formulario
   const mapUserToForm = (user: any) => ({
     nombre: user.nombre,
     email: user.mail,
@@ -109,10 +112,20 @@ export default function UsuariosPage() {
         message.error('No tienes permisos para editar este usuario');
       }
     }
-  };
-
-  // Validaciones frontend para crear usuario
+  };  // Validaciones frontend para crear usuario
   const validateUserForm = (values: any) => {
+    // ⭐ Validar restricciones de creación de roles
+    // Solo Técnico tiene restricciones: NO puede crear Admin ni Facturación
+    if (!editingUser && currentUser?.rol === 5) {
+      if (values.rol === 1) {
+        return 'Como técnico, no puedes crear usuarios con rol ADMINISTRADOR.';
+      }
+      if (values.rol === 4) {
+        return 'Como técnico, no puedes crear usuarios con rol FACTURACIÓN.';
+      }
+    }
+    // Admin puede crear CUALQUIER rol (sin restricciones)
+    
     if (!/^\d{11}$/.test(values.cuit)) {
       return 'El CUIT debe tener 11 dígitos numéricos';
     }
@@ -162,8 +175,7 @@ export default function UsuariosPage() {
         if (!confirmacion) {
           return;
         }
-      }
-      console.log('Valores validados para enviar al backend:', values);
+      }      console.log('Valores validados para enviar al backend:', values);
       console.log('Usuario en edición:', editingUser);
       if (editingUser) {
         // ⭐ Filtrar campos según el rol
@@ -176,6 +188,11 @@ export default function UsuariosPage() {
             tipo_descarga: values.tipo_descarga
           };
           console.log('[Mayorista Edit] Campos filtrados:', dataToSend);
+        } else if (currentUser?.rol === 5) {
+          // Técnico editando: puede editar todo EXCEPTO rol
+          const { rol, ...dataSinRol } = values;
+          dataToSend = dataSinRol;
+          console.log('[Técnico Edit] Campos filtrados (sin rol):', dataToSend);
         } else if (!isMayorista && editingUser.rol === 2) {
           // Admin editando Mayorista: puede editar notification_limit, limiteDescargas y tipo_descarga
           dataToSend = {
@@ -199,6 +216,10 @@ export default function UsuariosPage() {
         if (isMayorista) {
           values.rol = 3;
           values.id_mayorista = idMayorista;
+        }
+        // Si es técnico, asegurar id_mayorista = 1
+        if (currentUser?.rol === 5) {
+          values.id_mayorista = 1;
         }
         await api.post('/users', values);
         message.success('Usuario creado');
@@ -264,7 +285,7 @@ export default function UsuariosPage() {
     { title: 'Nombre', dataIndex: 'nombre', key: 'nombre', sorter: (a: any, b: any) => a.nombre.localeCompare(b.nombre) },
     { title: 'Email', dataIndex: 'mail', key: 'mail', sorter: (a: any, b: any) => a.mail.localeCompare(b.mail) },
     { title: 'CUIT', dataIndex: 'cuit', key: 'cuit', sorter: (a: any, b: any) => a.cuit.localeCompare(b.cuit) },
-    { title: 'Rol', dataIndex: 'rol', key: 'rol', render: (rol: number) => rol === 1 ? 'Admin' : rol === 2 ? 'Mayorista' : rol === 3 ? 'Distribuidor' : rol === 4 ? 'Facturación' : 'Usuario' },
+    { title: 'Rol', dataIndex: 'rol', key: 'rol', render: (rol: number) => rol === 1 ? 'Admin' : rol === 2 ? 'Mayorista' : rol === 3 ? 'Distribuidor' : rol === 4 ? 'Facturación' : rol === 5 ? 'Técnico' : 'Usuario' },
     { title: 'Estado', dataIndex: 'status', key: 'status', render: (s: number) => s === 1 ? 'Activo' : s === 2 ? 'Suspendido' : 'Inactivo', sorter: (a: any, b: any) => a.status - b.status },
     {
       title: 'Mayorista',
@@ -353,13 +374,14 @@ export default function UsuariosPage() {
     u.nombre?.toLowerCase().includes(search.toLowerCase()) ||
     u.mail?.toLowerCase().includes(search.toLowerCase()) ||
     u.cuit?.toLowerCase().includes(search.toLowerCase())
-  );
-  // Obtener nombre del rol
+  );  // Obtener nombre del rol
   const getRoleName = (rol: number) => {
     switch (rol) {
       case 1: return 'Administrador';
       case 2: return 'Mayorista';
       case 3: return 'Distribuidor';
+      case 4: return 'Facturación';
+      case 5: return 'Técnico';
       default: return 'Usuario';
     }
   };
@@ -460,8 +482,7 @@ export default function UsuariosPage() {
                   okButtonProps={{ style: { background: '#6366f1', borderColor: '#6366f1', color: '#fff' }, className: 'hover:bg-indigo-700 hover:border-indigo-700' }}
                   cancelButtonProps={{ style: { background: '#6366f1', borderColor: '#6366f1', color: '#fff' }, className: 'hover:bg-indigo-700 hover:border-indigo-700' }}
                   destroyOnClose
-                >
-                  {/* ⭐ Mostrar info si es mayorista editando */}
+                >                  {/* ⭐ Mostrar info si es mayorista editando */}
                   {isMayorista && editingUser && (
                     <div style={{ 
                       backgroundColor: '#f0f9ff', 
@@ -474,7 +495,21 @@ export default function UsuariosPage() {
                         ℹ️ Como mayorista, solo puedes editar: Límite de Descargas y Tipo de Descarga
                       </p>
                     </div>
-                  )}                  <Form
+                  )}
+                  {/* ⭐ Mostrar info si es técnico editando */}
+                  {currentUser?.rol === 5 && editingUser && (
+                    <div style={{ 
+                      backgroundColor: '#fef3c7', 
+                      border: '1px solid #f59e0b', 
+                      borderRadius: '6px',
+                      padding: '12px',
+                      marginBottom: '16px'
+                    }}>
+                      <p style={{ margin: 0, fontSize: '14px', color: '#b45309', fontWeight: 500 }}>
+                        ℹ️ Como técnico, no puedes cambiar el rol de los usuarios
+                      </p>
+                    </div>
+                  )}<Form
                     form={form}
                     layout="vertical"
                     initialValues={editingUser || { status: 1, id_rol: 3, tipo_descarga: 'CUENTA_CORRIENTE', notification_limit: 100 }}
@@ -490,17 +525,26 @@ export default function UsuariosPage() {
                     </Form.Item>
                     <Form.Item name="celular" label="Celular" rules={[{ required: true, message: 'Ingrese el número de celular' }]}>
                       <Input type="tel" disabled={isMayorista} />
-                    </Form.Item>
-                    <Form.Item name="rol" label="Rol" rules={[{ required: true }]}>
+                    </Form.Item>                    <Form.Item name="rol" label="Rol" rules={[{ required: true }]}>
                       <Select 
-                        disabled={isMayorista}
+                        disabled={isMayorista || (currentUser?.rol === 5 && editingUser)}
                         options={isMayorista 
                           ? [{ value: 3, label: 'Distribuidor' }]
+                          : !editingUser && currentUser?.rol === 5
+                          ? [
+                              // Técnico creando: NO puede crear Admin ni Facturación
+                              { value: 2, label: 'Mayorista' },
+                              { value: 3, label: 'Distribuidor' },
+                              { value: 5, label: 'Técnico' }
+                            ]
                           : [
+                              // Admin creando: Puede crear CUALQUIER rol
+                              // Al editar o si eres otro rol: mostrar todos (excepto si eres mayorista)
                               { value: 1, label: 'Admin' },
                               { value: 2, label: 'Mayorista' },
                               { value: 3, label: 'Distribuidor' },
-                              { value: 4, label: 'Facturación' }
+                              { value: 4, label: 'Facturación' },
+                              { value: 5, label: 'Técnico' }
                             ]
                         }
                       />

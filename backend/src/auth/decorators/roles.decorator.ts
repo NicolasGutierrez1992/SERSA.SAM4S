@@ -17,6 +17,7 @@ const UserRole = {
   MAYORISTA: 2,
   DISTRIBUIDOR: 3,
   FACTURACION: 4,
+  TECNICO: 5,
 };
 
 // Decoradores específicos para roles
@@ -47,4 +48,6 @@ export function RequireAuthenticated() {
 export const RequireMayorista = () => RequireRoles(2); // MAYORISTA  
 export const RequireDistribuidor = () => RequireRoles(3); // DISTRIBUIDOR
 export const RequireFacturacion = () => RequireRoles(4); // FACTURACION
+export const RequireTecnico = () => RequireRoles(5); // TECNICO
 export const RequireMayoristaOrDistribuidor = () => RequireRoles(2, 3); // MAYORISTA o DISTRIBUIDOR
+export const RequireAdminOrTecnico = () => RequireRoles(1, 5); // ADMIN o TECNICO

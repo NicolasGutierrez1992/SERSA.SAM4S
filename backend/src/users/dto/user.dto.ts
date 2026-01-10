@@ -8,6 +8,7 @@ export enum UserRole {
   MAYORISTA = 2,
   DISTRIBUIDOR = 3,
   FACTURACION = 4,
+  TECNICO = 5,
 }
 
 export enum UserStatus {
@@ -56,11 +57,10 @@ export class CreateUserDto {
   @IsNotEmpty({ message: 'La contraseña temporal es obligatoria' })
   @Length(6, 100, { message: 'La contraseña debe tener entre 6 y 100 caracteres' })
   password: string;
-
   @ApiProperty({
     example: 2,
     enum: UserRole,
-    description: 'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación)',
+    description: 'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación, 5=Técnico)',
   })
   @IsEnum(UserRole, { message: 'El rol debe ser válido' })
   @Type(() => Number)
@@ -169,11 +169,10 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsString()
   @Length(6, 100, { message: 'La contraseña debe tener entre 6 y 100 caracteres' })
   password?: string;
-
   @ApiPropertyOptional({
     example: 1,
     enum: UserRole,
-    description: 'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación)',
+    description: 'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación, 5=Técnico)',
   })
   @IsOptional()
   @IsEnum(UserRole, { message: 'El rol debe ser válido' })

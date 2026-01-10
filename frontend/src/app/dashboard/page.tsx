@@ -29,13 +29,13 @@ export default function DashboardPage() {
   const handleLogout = () => {
     authApi.logout();
   };
-
   const getRoleName = (rol: number) => {
     switch (rol) {
       case 1: return 'Administrador';
       case 2: return 'Mayorista';
       case 3: return 'Distribuidor';
       case 4: return 'Facturación';
+      case 5: return 'Técnico';
       default: return 'Usuario';
     }
   };
@@ -119,9 +119,8 @@ export default function DashboardPage() {
             </div>
           </div>
           {/* Navigation Cards */}
-          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-2">
-            {/* Usuarios - Solo Admin y Mayorista */}
-            {(user?.rol === 1 || user?.rol === 2) && (
+          <div className="mt-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-2">            {/* Usuarios - Solo Admin, Mayorista y Técnico */}
+            {(user?.rol === 1 || user?.rol === 2 || user?.rol === 5) && (
               <div className="relative group bg-white p-6 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-500 rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer"
                    onClick={() => router.push('/usuarios')}>
                 <div>

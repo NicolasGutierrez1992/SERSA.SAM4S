@@ -403,6 +403,12 @@ export default function CertificadosPage() {
     try {
       // ⭐ NUEVA LÓGICA SIMPLIFICADA
       
+      // Técnico (5): No puede cambiar nada
+      if (rol === 5) {
+        alert('Los técnicos no pueden cambiar estados de descargas.');
+        return;
+      }
+      
       // Admin (1) y Facturación (4): Cambiar estadoMayorista
       if (rol === 1 || rol === 4) {
        
@@ -500,16 +506,16 @@ export default function CertificadosPage() {
       setFacturaLoading(false);
     }
   };
-
   const getRoleName = (rol: number) => {
     switch (rol) {
       case 1: return 'Administrador';
       case 2: return 'Mayorista';
       case 3: return 'Distribuidor';
       case 4: return 'Facturación';
+      case 5: return 'Técnico';
       default: return 'Usuario';
     }
-  };  const getEstadoColor = (estado: string) => {
+  };const getEstadoColor = (estado: string) => {
     switch (estado) {
       case 'PREPAGO': return 'bg-red-100 text-red-800';
       case 'Pendiente de Facturar': return 'bg-yellow-100 text-yellow-800';
@@ -805,9 +811,8 @@ export default function CertificadosPage() {
         {/* Tabs */}
         <div className="bg-white shadow rounded-lg">
           <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-              {/* Solo mostrar el tab de descarga si el usuario NO es mayorista ni facturación */}
-              {user?.rol !== 4 && (
+            <nav className="-mb-px flex space-x-8" aria-label="Tabs">              {/* Solo mostrar el tab de descarga si el usuario NO es mayorista ni facturación ni técnico */}
+              {user?.rol !== 4 && user?.rol !== 5 && (
                 <button
                   onClick={() => setActiveTab('descarga')}
                   className={`${
@@ -835,9 +840,8 @@ export default function CertificadosPage() {
             </nav>
           </div>
 
-          <div className="p-6">
-            {/* Solo mostrar el formulario de descarga si el usuario NO es mayorista ni facturación */}
-            {activeTab === 'descarga' && user?.rol !== 4 && (
+          <div className="p-6">            {/* Solo mostrar el formulario de descarga si el usuario NO es mayorista ni facturación */}
+            {activeTab === 'descarga' && user?.rol !== 4 && user?.rol !== 5 && (
               <div className="max-w-md mx-auto">
                 <h3 className="text-lg font-medium text-gray-900 mb-6">
                   Descargar Nuevo Certificado
@@ -960,8 +964,7 @@ export default function CertificadosPage() {
                   className="mb-4 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded shadow"
                 >                  Exportar a Excel
                 </button>
-                {/* Botón de cambio masivo de estado - solo para Admin y Facturación */}
-                {(user?.rol === 1 || user?.rol === 4) && (
+                {/* Botón de cambio masivo de estado - solo para Admin y Facturación */}                {(user?.rol === 1 || user?.rol === 4) && (
                   <button
                     onClick={handleBulkStatusChange}
                     disabled={validSelectedCount === 0}
@@ -969,6 +972,11 @@ export default function CertificadosPage() {
                   >
                     Cambio de Estado Masivo ({validSelectedCount})
                   </button>
+                )}
+                {user?.rol === 5 && (
+                  <div className="ml-2 inline-block p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-700">
+                    ℹ️ Como técnico, tienes permiso para ver todas las descargas, pero no puedes cambiar estados.
+                  </div>
                 )}
                 {/* Filtros */}
                 <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-4">
@@ -1092,8 +1100,7 @@ export default function CertificadosPage() {
                             <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
                             {user?.rol === 4 && (
                               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>
-                            )}
-                            {(user?.rol === 1 || user?.rol === 4) && (
+                            )}                            {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                               <>
                                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>
                                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Fecha de Facturación</th>
@@ -1118,8 +1125,7 @@ export default function CertificadosPage() {
                           {historial.map((descarga) => {
                             const esUltimo = descarga.controladorId && ultimosPorControlador[descarga.controladorId] === descarga.id;
                             return (
-                              <tr key={descarga.id}>
-                                {(user?.rol === 1 || user?.rol === 4) && (
+                              <tr key={descarga.id}>                                {(user?.rol === 1 || user?.rol === 4) && (
                                   <td className="px-3 py-4 whitespace-nowrap text-sm">
                                     <input
                                       type="checkbox"
@@ -1130,17 +1136,16 @@ export default function CertificadosPage() {
                                       title={descarga.tipoDescarga === 'PREPAGO' ? 'PREPAGO no puede ser seleccionado' : 'Seleccionar para cambio masivo'}
                                     />
                                   </td>
-                                )}                                <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.controladorId || descarga.certificadoNombre}</td>
+                                )}<td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.controladorId || descarga.certificadoNombre}</td>
                                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.usuario ? descarga.usuario.nombre : descarga.usuarioId}</td>
                                 {user?.rol === 4 && (
                                   <td className="px-3 py-4 whitespace-nowrap">
                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full `}>{descarga.usuario?.cuit}</span>
                                   </td>
-                                )}
-                                {(user?.rol === 1 || user?.rol === 4) && (
+                                )}                                {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                                   <td className="px-3 py-4 whitespace-nowrap">
                                     <div className="space-y-2">
-                                      {/* Collapsible row header - ADMIN/FACTURACIÓN ven EstadoMayorista */}
+                                      {/* Collapsible row header - ADMIN/FACTURACIÓN/TÉCNICO ven EstadoMayorista */}
                                       <button
                                         onClick={() => toggleRowExpanded(descarga.id)}
                                         className="flex items-center gap-2 w-full hover:opacity-80"
@@ -1160,7 +1165,7 @@ export default function CertificadosPage() {
                                       
                                       {/* Expanded content */}
                                       {expandedRows.has(descarga.id) && (
-                                        <div className="pl-6 space-y-2 border-l-2 border-gray-300">                                          {/* Estado change dropdown */}
+                                        <div className="pl-6 space-y-2 border-l-2 border-gray-300">                                          {/* Estado change dropdown - Solo para Admin/Facturación, NO para Técnico */}
                                           {(user?.rol === 1 || user?.rol === 4) && (
                                             <div>
                                               {(descarga.usuario?.id_mayorista === 1 && descarga.tipoDescarga === "PREPAGO") ? (
@@ -1199,6 +1204,18 @@ export default function CertificadosPage() {
                                             </div>
                                           )}
                                           
+                                          {/* Mensaje para Técnico */}
+                                          {user?.rol === 5 && (
+                                            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
+                                              <p className="text-xs font-semibold text-yellow-700">
+                                                ℹ️ Técnico - Solo lectura
+                                              </p>
+                                              <p className="text-xs text-yellow-600 mt-1">
+                                                No tienes permisos para cambiar estados de descargas.
+                                              </p>
+                                            </div>
+                                          )}
+                                          
                                           {/* Invoice and payment reference fields */}
                                           <div className="space-y-1 pt-2">
                                             {descarga.numero_factura && (
@@ -1223,8 +1240,7 @@ export default function CertificadosPage() {
                                       )}
                                     </div>
                                   </td>
-                                )}
-                                {(user?.rol === 1 || user?.rol === 4) && (
+                                )}                                {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                                   <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{
                                     !descarga.fechaFacturacion
                                       ? 'Sin facturar'

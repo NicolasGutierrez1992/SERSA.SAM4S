@@ -430,14 +430,13 @@ export class DescargasService {
     });    
     if (!descarga) {
       throw new Error('Descarga no encontrada');
-    }
-
-    const idMayorista = await this.obtenerIdMayoristaPorUsuario(descarga.id_usuario);
+    }    const idMayorista = await this.obtenerIdMayoristaPorUsuario(descarga.id_usuario);
 
     // ⭐ NUEVA LÓGICA: Validar permisos según rol
-    // Distribuidor (3) nunca puede cambiar estados
-    if (userRole === 3) {
-      throw new ForbiddenException('Distribuidores no pueden cambiar estados de descargas');
+    // Distribuidor (3) y Técnico (5) nunca pueden cambiar estados
+    if (userRole === 3 || userRole === 5) {
+      const rolName = userRole === 3 ? 'Distribuidores' : 'Técnicos';
+      throw new ForbiddenException(`${rolName} no pueden cambiar estados de descargas`);
     }
 
     // ⭐ NUEVA LÓGICA: Bloqueo selectivo de PREPAGO

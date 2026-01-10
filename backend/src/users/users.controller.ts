@@ -27,20 +27,19 @@ import { AuthGuard } from '@nestjs/passport';
 @Controller('users')
 @ApiBearerAuth()
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
-  @Post()
+  constructor(private readonly usersService: UsersService) {}  @Post()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @SetMetadata('roles', [1]) // 1: Admin
-  @ApiOperation({ summary: 'Crear nuevo usuario (solo admin)' })
+  @SetMetadata('roles', [1, 5]) // 1: Admin, 5: Técnico
+  @ApiOperation({ summary: 'Crear nuevo usuario (admin y técnico)' })
   @ApiResponse({ status: 201, description: 'Usuario creado exitosamente', type: User })
   @ApiResponse({ status: 400, description: 'Datos inválidos' })
   @ApiResponse({ status: 409, description: 'CUIT o email ya existe' })
-  async create(@Body() createUserDto: CreateUserDto): Promise<User> {
-    return await this.usersService.create(createUserDto);
-  }
-  @Get()
+  async create(@Body() createUserDto: CreateUserDto, @Req() req: any): Promise<User> {
+    const creatorUser = req.user;
+    return await this.usersService.create(createUserDto, creatorUser);
+  }  @Get()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @SetMetadata('roles', [1, 2, 4]) // 1: Admin, 2: Mayorista, 4: Facturación
+  @SetMetadata('roles', [1, 2, 4, 5]) // 1: Admin, 2: Mayorista, 4: Facturación, 5: Técnico
   @ApiOperation({ summary: 'Obtener lista de usuarios con filtros y paginación' })
   @ApiResponse({ status: 200, description: 'Lista de usuarios obtenida exitosamente' })
   @ApiQuery({ name: 'rol', required: false, description: 'Filtrar por rol' })
@@ -119,15 +118,13 @@ export class UsersController {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="usuarios.csv"');
     res.send(csv);
-  }
-  @Get(':id')
+  }  @Get(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @SetMetadata('roles', [1, 2, 4]) // 1: Admin, 2: Mayorista, 4: Facturación
+  @SetMetadata('roles', [1, 2, 4, 5]) // 1: Admin, 2: Mayorista, 4: Facturación, 5: Técnico
   @ApiOperation({ summary: 'Obtener usuario por ID (y validar permisos de edición)' })
   @ApiResponse({ status: 200, description: 'Usuario encontrado con info de permisos' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  @ApiResponse({ status: 403, description: 'No tienes permisos para editar este usuario' })
-  async findOne(
+  @ApiResponse({ status: 403, description: 'No tienes permisos para editar este usuario' })  async findOne(
     @Param('id', ParseIntPipe) id: number,
     @Req() req: any
   ): Promise<any> {
@@ -142,13 +139,17 @@ export class UsersController {
       canEdit = user.id_mayorista === currentUser.id_mayorista && user.rol === 3; // Solo distribuidores
     }
     
+    if (currentUser.rol === 5) {
+      // Técnico puede editar a cualquier usuario
+      canEdit = true;
+    }
+    
     return {
       ...user,
       canEdit,
       editableFields: canEdit ? this.getEditableFields(currentUser.rol) : []
     };
   }
-
   // Método privado para determinar qué campos puede editar cada rol
   private getEditableFields(rol: number): string[] {
     switch (rol) {
@@ -158,14 +159,15 @@ export class UsersController {
         return ['limiteDescargas', 'tipo_descarga']; // Solo estos dos
       case 4: // Facturación
         return ['nombre', 'email', 'status', 'limiteDescargas', 'id_mayorista', 'celular', 'tipo_descarga'];
+      case 5: // Técnico
+        return ['nombre', 'email', 'cuit', 'status', 'limiteDescargas', 'id_mayorista', 'celular', 'tipo_descarga']; // Todo EXCEPTO rol
       default:
         return [];
     }
-  }
-  @Patch(':id')
+  }@Patch(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @SetMetadata('roles', [1, 2, 4]) // 1: Admin, 2: Mayorista, 4: Facturación
-  @ApiOperation({ summary: 'Actualizar usuario (admin, mayoristas y facturación)' })
+  @SetMetadata('roles', [1, 2, 4, 5]) // 1: Admin, 2: Mayorista, 4: Facturación, 5: Técnico
+  @ApiOperation({ summary: 'Actualizar usuario (admin, técnico, mayoristas y facturación)' })
   @ApiResponse({ status: 200, description: 'Usuario actualizado exitosamente', type: User })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
   @ApiResponse({ status: 403, description: 'No tienes permisos para editar este usuario' })
