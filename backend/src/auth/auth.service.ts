@@ -23,8 +23,16 @@ export class AuthService {
       throw new UnauthorizedException('Usuario inactivo');
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
+    try {
+      // Logs adicionales para depuración de comparación de passwords (sin datos sensibles)
+      console.log('[AuthService][validateUser] Comparando contraseña recibida con hash almacenado.');
+      const isPasswordValid = await bcrypt.compare(password, user.password);
+      console.log('[AuthService][validateUser] Resultado bcrypt.compare:', isPasswordValid ? 'MATCH' : 'NO_MATCH');
+      if (!isPasswordValid) {
+        return null;
+      }
+    } catch (err) {
+      console.error('[AuthService][validateUser] Error en bcrypt.compare:', err);
       return null;
     }
 

@@ -112,20 +112,10 @@ export default function UsuariosPage() {
         message.error('No tienes permisos para editar este usuario');
       }
     }
-  };  // Validaciones frontend para crear usuario
+  };
+
+  // Validaciones frontend para crear usuario
   const validateUserForm = (values: any) => {
-    // ⭐ Validar restricciones de creación de roles
-    // Solo Técnico tiene restricciones: NO puede crear Admin ni Facturación
-    if (!editingUser && currentUser?.rol === 5) {
-      if (values.rol === 1) {
-        return 'Como técnico, no puedes crear usuarios con rol ADMINISTRADOR.';
-      }
-      if (values.rol === 4) {
-        return 'Como técnico, no puedes crear usuarios con rol FACTURACIÓN.';
-      }
-    }
-    // Admin puede crear CUALQUIER rol (sin restricciones)
-    
     if (!/^\d{11}$/.test(values.cuit)) {
       return 'El CUIT debe tener 11 dígitos numéricos';
     }
@@ -353,7 +343,7 @@ export default function UsuariosPage() {
 
               Tu contraseña fue reseteada correctamente
               Usuario: ${user.cuit}
-              Contraseña: ceritificados
+              Contraseña: certificados
 
               link de acceso: https://sersa-certs-frontend.vercel.app/
 
@@ -530,16 +520,15 @@ export default function UsuariosPage() {
                         disabled={isMayorista || (currentUser?.rol === 5 && editingUser)}
                         options={isMayorista 
                           ? [{ value: 3, label: 'Distribuidor' }]
-                          : !editingUser && currentUser?.rol === 5
+                          : !editingUser && (currentUser?.rol === 1 || currentUser?.rol === 5)
                           ? [
-                              // Técnico creando: NO puede crear Admin ni Facturación
+                              // Al crear usuario: Admin y Técnico NO pueden crear Admin ni Facturación
                               { value: 2, label: 'Mayorista' },
                               { value: 3, label: 'Distribuidor' },
                               { value: 5, label: 'Técnico' }
                             ]
                           : [
-                              // Admin creando: Puede crear CUALQUIER rol
-                              // Al editar o si eres otro rol: mostrar todos (excepto si eres mayorista)
+                              // Al editar usuario o si eres otro rol: mostrar todos (excepto si eres mayorista)
                               { value: 1, label: 'Admin' },
                               { value: 2, label: 'Mayorista' },
                               { value: 3, label: 'Distribuidor' },

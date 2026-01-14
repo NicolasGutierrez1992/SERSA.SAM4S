@@ -124,7 +124,8 @@ export class UsersController {
   @ApiOperation({ summary: 'Obtener usuario por ID (y validar permisos de edición)' })
   @ApiResponse({ status: 200, description: 'Usuario encontrado con info de permisos' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  @ApiResponse({ status: 403, description: 'No tienes permisos para editar este usuario' })  async findOne(
+  @ApiResponse({ status: 403, description: 'No tienes permisos para editar este usuario' })
+  async findOne(
     @Param('id', ParseIntPipe) id: number,
     @Req() req: any
   ): Promise<any> {
@@ -137,11 +138,6 @@ export class UsersController {
     if (currentUser.rol === 2) {
       // Mayorista solo puede editar si el usuario a editar tiene el mismo id_mayorista
       canEdit = user.id_mayorista === currentUser.id_mayorista && user.rol === 3; // Solo distribuidores
-    }
-    
-    if (currentUser.rol === 5) {
-      // Técnico puede editar a cualquier usuario
-      canEdit = true;
     }
     
     return {

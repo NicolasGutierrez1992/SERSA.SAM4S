@@ -812,7 +812,7 @@ export default function CertificadosPage() {
         <div className="bg-white shadow rounded-lg">
           <div className="border-b border-gray-200">
             <nav className="-mb-px flex space-x-8" aria-label="Tabs">              {/* Solo mostrar el tab de descarga si el usuario NO es mayorista ni facturación ni técnico */}
-              {user?.rol !== 4 && user?.rol !== 5 && (
+              {user?.rol !== 4 && (
                 <button
                   onClick={() => setActiveTab('descarga')}
                   className={`${
@@ -841,7 +841,7 @@ export default function CertificadosPage() {
           </div>
 
           <div className="p-6">            {/* Solo mostrar el formulario de descarga si el usuario NO es mayorista ni facturación */}
-            {activeTab === 'descarga' && user?.rol !== 4 && user?.rol !== 5 && (
+            {activeTab === 'descarga' && user?.rol !== 4 && (
               <div className="max-w-md mx-auto">
                 <h3 className="text-lg font-medium text-gray-900 mb-6">
                   Descargar Nuevo Certificado
@@ -1368,7 +1368,7 @@ export default function CertificadosPage() {
                                       title={!esUltimo ? 'Solo se puede descargar el último certificado generado por controlador' : 'Descargar certificado'}
                                     >
                                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 01-2-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                                       </svg>
                                     </button>
                                   )}
@@ -1726,7 +1726,7 @@ export default function CertificadosPage() {
                 ) : (
                   <span className="flex items-center gap-2">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 01-2-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
                     Descargar Certificado
                   </span>

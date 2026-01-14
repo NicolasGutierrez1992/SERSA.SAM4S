@@ -29,6 +29,18 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
   async login(@Body() loginDto: LoginDto, @Req() req: Request): Promise<LoginResponse> {
     const ip = req.ip || req.connection.remoteAddress;
+    try {
+      // Logs de depuración (sin datos sensibles)
+      console.log('[AuthController][login] Request login recibida', {
+        cuit: loginDto.cuit,
+        passwordLength: typeof loginDto.password === 'string' ? loginDto.password.length : 'n/a',
+        ip,
+        contentType: req.headers['content-type']
+      });
+    } catch (err) {
+      console.warn('[AuthController][login] Error al loguear request:', err);
+    }
+
     return await this.authService.login(loginDto, ip);
   }
 

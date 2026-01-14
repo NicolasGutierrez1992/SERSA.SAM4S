@@ -20,29 +20,23 @@ export class UsersService {
 
   async create(createUserDto: CreateUserDto, creatorUser?: any): Promise<User> {
     console.log('[UsersService][create] Entrada:', createUserDto);
-    console.log('[UsersService][create] Usuario creador:', creatorUser?.rol);    // ⭐ VALIDACIÓN: Verificar qué roles puede crear el usuario actual
+    console.log('[UsersService][create] Usuario creador:', creatorUser?.rol);
+
+    // ⭐ VALIDACIÓN: Verificar qué roles puede crear el usuario actual
     if (creatorUser) {
       const rolACrear = createUserDto.rol;
       
-      // Solo Admin (rol 1) y Técnico (rol 5) pueden crear usuarios
-      if (creatorUser.rol === 1) {
-        // Admin puede crear CUALQUIER rol (incluyendo otros Admin)
-        console.log(`[UsersService][create] ✅ Admin puede crear rol ${rolACrear}`);
-      } else if (creatorUser.rol === 5) {
-        // Técnico puede crear cualquier rol EXCEPTO Admin y Facturación
-        if (rolACrear === UserRole.ADMINISTRADOR) {
+      // Admin (rol 1) y Técnico (rol 5) pueden crear cualquier usuario
+      // EXCEPTO Admin y Facturación
+      if (creatorUser.rol === 1 || creatorUser.rol === 5) {
+        if (rolACrear === UserRole.ADMINISTRADOR || rolACrear === UserRole.FACTURACION) {
           throw new ForbiddenException(
-            'No puedes crear usuarios con rol ADMINISTRADOR. Solo el administrador puede hacerlo.'
+            `No puedes crear usuarios con rol ${rolACrear === UserRole.ADMINISTRADOR ? 'ADMINISTRADOR' : 'FACTURACIÓN'}`
           );
         }
-        if (rolACrear === UserRole.FACTURACION) {
-          throw new ForbiddenException(
-            'No puedes crear usuarios con rol FACTURACIÓN. Solo el administrador puede hacerlo.'
-          );
-        }
-        console.log(`[UsersService][create] ✅ Técnico puede crear rol ${rolACrear}`);
+        console.log(`[UsersService][create] ✅ Admin/Técnico pueden crear rol ${rolACrear}`);
       } else {
-        // Otros roles (Mayorista, Distribuidor) no pueden crear usuarios
+        // Otros roles no pueden crear usuarios
         throw new ForbiddenException('No tienes permisos para crear usuarios');
       }
     }
@@ -251,7 +245,8 @@ export class UsersService {
         
         if (unallowedFields.length > 0) {
           throw new BadRequestException(`No tienes permisos para editar los campos: ${unallowedFields.join(', ')}`);
-        }      }
+        }
+      }
       // Técnico (rol 5): Puede editar todos los usuarios, excepto el campo ROL
       else if (currentUser.rol === 5) {
         if (updateUserDto.rol !== undefined) {
@@ -263,12 +258,8 @@ export class UsersService {
       else if (currentUser.rol === 1) {
         console.log(`[UsersService][update] ✅ Admin editando usuario`);
       }
-      // Facturación (rol 4): Puede editar algunos campos
-      else if (currentUser.rol === 4) {
-        console.log(`[UsersService][update] ✅ Facturación editando usuario`);
-      }
       // Otros roles no pueden editar
-      else {
+      else if (currentUser.rol !== 1 && currentUser.rol !== 4) {
         throw new BadRequestException('No tienes permisos para editar usuarios');
       }
     }
@@ -367,7 +358,7 @@ export class UsersService {
     const user = await this.userRepository.findOne({ where: { id_usuario: id } });
     if (!user) throw new Error('Usuario no encontrado');
     // Usar contraseña por defecto del .env
-    const nuevaPassword = process.env.DEFAULT_USER_PASSWORD || 'ceritificados';
+    const nuevaPassword = process.env.DEFAULT_USER_PASSWORD || 'certificados';
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(nuevaPassword, saltRounds);
     user.password = hashedPassword;
