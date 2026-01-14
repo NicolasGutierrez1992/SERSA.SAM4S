@@ -237,13 +237,16 @@ export default function CertificadosPage() {
     // Construir filtrosFinal con tipos correctos
     let filtrosFinal: any = { ...filtros, page: 1, limit: 50 };
     
+    // Si es Distribuidor (3) limitar por CUIT y mayorista correspondiente
     if (user?.rol === 3) {
       filtrosFinal.cuit = user.cuit;
       filtrosFinal.idMayorista = String(user.id_mayorista);
     }
+    // Mayorista (2) ver solo descargas de su propio mayorista
     if (user?.rol === 2) {
       filtrosFinal.idMayorista = String(user.id_mayorista);
     }
+    // IMPORTANTE: Facturación (4) y Técnico (5) deben ver TODAS las descargas -> no forzar idMayorista aquí
     
     // Validar CUIT antes de hacer la petición
     if (filtrosFinal.cuit && !/^\d{8,}$/.test(filtrosFinal.cuit)) {
@@ -281,7 +284,14 @@ export default function CertificadosPage() {
     
     // Siempre usar getHistorialDescargas con los filtros
     const response = await certificadosApi.getHistorialDescargas(filtrosFinal);
-    setHistorial(response.descargas || []);
+    let descargas = response.descargas || [];
+    // Solo filtrar por id_mayorista en frontend cuando el usuario sea Mayorista (rol 2).
+    // Facturación (4) y Técnico (5) deben ver TODAS las descargas (la fuente de la verdad debe ser el backend).
+    if (user?.rol === 2) {
+      descargas = descargas.filter(d => d.usuario?.id_mayorista === user.id_mayorista);
+      console.log('[CertificadosPage] Filtrando descargas por id_mayorista en frontend (mayorista):', user.id_mayorista, 'result:', descargas.length);
+    }
+    setHistorial(descargas);
     setHistorialLoading(false);
   };   // Validar límite de descargas (ahora función reutilizable)
   // ⭐ VALIDACIÓN CENTRALIZADA EN BACKEND - Elimina fallback defectuoso
@@ -549,8 +559,9 @@ export default function CertificadosPage() {
   });
 
   useEffect(() => {
-    // Solo ejecutar si user existe y no es null
-    if (user && user.id_mayorista !== undefined && user.rol !== 1) {
+    // Solo prefill idMayorista para Mayoristas (2) y Distribuidores (3).
+    // Facturación (4) y Técnicos (5) NO deben recibir un idMayorista por defecto.
+    if (user && user.id_mayorista !== undefined && (user.rol === 2 || user.rol === 3)) {
       setFiltros(f => ({ ...f, idMayorista: String(user.id_mayorista) }));
     }
   }, [user]);
@@ -998,7 +1009,7 @@ export default function CertificadosPage() {
                           value={filtros.idMayorista}
                           onChange={e => setFiltros(f => ({ ...f, idMayorista: e.target.value }))}
                           className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                          disabled={user?.rol !== 1 && user?.rol !== 4}
+                          disabled={user?.rol !== 1 && user?.rol !== 4 && user?.rol !== 5}
                         >
                           <option value="">Todos</option>
                           <option value="1">SERSA</option>
