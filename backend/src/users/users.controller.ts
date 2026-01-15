@@ -22,6 +22,7 @@ import { CreateUserDto, UpdateUserDto, QueryUsersDto } from './dto/user.dto';
 import { User } from './entities/user.entity';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AuthGuard } from '@nestjs/passport';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @ApiTags('usuarios')
 @Controller('users')
@@ -37,7 +38,8 @@ export class UsersController {
   async create(@Body() createUserDto: CreateUserDto, @Req() req: any): Promise<User> {
     const creatorUser = req.user;
     return await this.usersService.create(createUserDto, creatorUser);
-  }  @Get()
+  }  
+  @Get()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @SetMetadata('roles', [1, 2, 4, 5]) // 1: Admin, 2: Mayorista, 4: Facturación, 5: Técnico
   @ApiOperation({ summary: 'Obtener lista de usuarios con filtros y paginación' })
@@ -46,7 +48,8 @@ export class UsersController {
   @ApiQuery({ name: 'status', required: false, description: 'Filtrar por estado' })
   @ApiQuery({ name: 'id_mayorista', required: false, description: 'Filtrar por mayorista' })
   @ApiQuery({ name: 'page', required: false, description: 'Página (por defecto 1)' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Elementos por página (por defecto 10)' })  async findAll(@Query() query: QueryUsersDto, @Req() req: any) {
+  @ApiQuery({ name: 'limit', required: false, description: 'Elementos por página (por defecto 10)' })
+  async findAll(@Query() query: QueryUsersDto, @Req() req: any) {
     const currentUser = req.user;
     console.log('\n========== [UsersController][findAll] INICIANDO ==========');
     console.log('[UsersController][findAll] Query recibido:', query);
@@ -118,7 +121,9 @@ export class UsersController {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="usuarios.csv"');
     res.send(csv);
-  }  @Get(':id')
+  }
+
+  @Get(':id')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @SetMetadata('roles', [1, 2, 4, 5]) // 1: Admin, 2: Mayorista, 4: Facturación, 5: Técnico
   @ApiOperation({ summary: 'Obtener usuario por ID (y validar permisos de edición)' })
@@ -180,11 +185,14 @@ export class UsersController {
   @Patch(':id/reset-password')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @SetMetadata('roles', [1, 2, 5]) // 1: Admin, 2: Mayorista, 5: Técnico
-  @ApiOperation({ summary: 'Resetear contraseña de usuario (solo admin o técnico)' })
+  @ApiOperation({ summary: 'Resetear contraseña de usuario (solo admin o Mayorista o técnico)' })
   @ApiResponse({ status: 200, description: 'Contraseña reseteada' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  async resetPassword(@Param('id', ParseIntPipe) id: number): Promise<void> {
-    await this.usersService.resetPassword(id);
+  async resetPassword(
+    @Param('id', ParseIntPipe)  id: number,
+    @CurrentUser('rol') rol: number
+  ): Promise<void> {
+    await this.usersService.resetPassword(id, rol);
   }
 
   @Delete(':id')

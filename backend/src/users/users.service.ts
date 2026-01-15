@@ -353,14 +353,25 @@ export class UsersService {
     console.log('[UsersService][updateLastLogin] Salida: OK');
   }
 
-  async resetPassword(id: number): Promise<void> {
-    console.log('[UsersService][resetPassword] Entrada:', id);
+  async resetPassword(id: number, rol: number): Promise<void> {
+    console.log('[UsersService][resetPassword] UserEditable:', id);
+    console.log('[UsersService][resetPassword] rolCurrentUser:', rol);
+
     const user = await this.userRepository.findOne({ where: { id_usuario: id } });
     if (!user) throw new Error('Usuario no encontrado');
+    // ADMIN puede resetear a cualquier usuario 
+    if(rol !== UserRole.ADMINISTRADOR ){
+      //A los usuarios Administradores y Facturacion No se le puede resetar la contraseña
+      if (user.rol === UserRole.ADMINISTRADOR || user.rol === UserRole.FACTURACION) {
+        throw new BadRequestException('No se puede resetear la contraseña de este usuario');
+      }
+    }
     // Usar contraseña por defecto del .env
     const nuevaPassword = process.env.DEFAULT_USER_PASSWORD || 'certificados';
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(nuevaPassword, saltRounds);
+    
+
     user.password = hashedPassword;
     user.must_change_password = true;
     await this.userRepository.save(user);
