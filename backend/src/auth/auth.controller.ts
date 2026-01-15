@@ -15,7 +15,7 @@ import { AuthService } from './auth.service';
 import { LoginDto, ChangePasswordDto, ResetPasswordDto, LoginResponse } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/auth.guards';
 import { CurrentUser } from './decorators/current-user.decorator';
-import { RequireAdmin } from './decorators/roles.decorator';
+import { RequireAdmin, RequireAdminOrTecnico } from './decorators/roles.decorator';
 
 @ApiTags('autenticacion')
 @Controller('auth')
@@ -60,10 +60,10 @@ export class AuthController {
   }
   // utilizada para el seteo de contraseña en primer login
   @Post('reset-password/:userId')
-  @RequireAdmin()
+  @RequireAdminOrTecnico()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Resetear contraseña de usuario (solo admin)' })
+  @ApiOperation({ summary: 'Resetear contraseña de usuario (solo admin o técnico)' })
   @ApiResponse({ status: 204, description: 'Contraseña reseteada exitosamente' })
   @ApiResponse({ status: 401, description: 'No autorizado' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })

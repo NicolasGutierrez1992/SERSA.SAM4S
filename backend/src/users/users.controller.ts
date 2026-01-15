@@ -133,8 +133,8 @@ export class UsersController {
     const currentUser = req.user;
     
     // Determinar si el usuario actual puede editar este usuario
-    let canEdit = currentUser.rol === 1; // Admin siempre puede
-    
+    let canEdit = (currentUser.rol === 1 || currentUser.rol === 5); // Admin o Tecnico siempre puede
+
     if (currentUser.rol === 2) {
       // Mayorista solo puede editar si el usuario a editar tiene el mismo id_mayorista
       canEdit = user.id_mayorista === currentUser.id_mayorista && user.rol === 3; // Solo distribuidores
@@ -179,8 +179,8 @@ export class UsersController {
   //Se utiliza en el blanqueo de contraseña desde el panel de administración
   @Patch(':id/reset-password')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @SetMetadata('roles', [1, 2]) // 1: Admin, 2: Mayorista
-  @ApiOperation({ summary: 'Resetear contraseña de usuario (solo admin)' })
+  @SetMetadata('roles', [1, 2, 5]) // 1: Admin, 2: Mayorista, 5: Técnico
+  @ApiOperation({ summary: 'Resetear contraseña de usuario (solo admin o técnico)' })
   @ApiResponse({ status: 200, description: 'Contraseña reseteada' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
   async resetPassword(@Param('id', ParseIntPipe) id: number): Promise<void> {
