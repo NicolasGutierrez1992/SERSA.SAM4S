@@ -168,6 +168,7 @@ export class UsersService {
         updated_at: true,
         celular: true,
         tipo_descarga: true,
+        notification_limit: true,
       },
     });
 
@@ -177,7 +178,8 @@ export class UsersService {
 
     console.log('[UsersService][findOne] Salida:', user);
     return user;
-  }async findByCuit(cuit: string): Promise<User | null> {
+  }
+  async findByCuit(cuit: string): Promise<User | null> {
     console.log('\n========================================');
     console.log('[UsersService][findByCuit] INICIANDO BÚSQUEDA');
     console.log('========================================');
@@ -213,14 +215,16 @@ export class UsersService {
     
     console.log('========================================\n');
     return user;
-  }  async findByMail(mail: string): Promise<User | null> {
+  }  
+  async findByMail(mail: string): Promise<User | null> {
     console.log('[UsersService][findByMail] Entrada:', mail);
     const user = await this.userRepository.findOne({
       where: { mail },
     });
     console.log('[UsersService][findByMail] Salida:', user);
     return user;
-  }  async update(id: number, updateUserDto: UpdateUserDto, currentUser?: any): Promise<User> {
+  } 
+   async update(id: number, updateUserDto: UpdateUserDto, currentUser?: any): Promise<User> {
     console.log('[UsersService][update] Entrada:', id, updateUserDto, currentUser);
     const user = await this.findOne(id);
 

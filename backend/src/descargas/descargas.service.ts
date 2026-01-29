@@ -15,7 +15,7 @@ import {
   NotFoundException, 
   BadRequestException 
 } from '@nestjs/common';
-
+import { AppSettingsService } from '../common/services/app-settings.service';
 interface RegistrarDescargaData {
   usuarioId: number;
   controladorId?: string;
@@ -47,6 +47,7 @@ export class DescargasService {
     private certificadoRepository: Repository<Certificado>,
     private auditoriaService: AuditoriaService,
     private timezoneService: TimezoneService,
+    private readonly appSettingsService: AppSettingsService,
   ) {
     this.logger.log('DescargasService initialized with PostgreSQL');
   }
@@ -104,8 +105,12 @@ export class DescargasService {
     
     // Si no existe el usuario mayorista o no tiene límite asignado, usar default 100
     if (!mayorista || mayorista.notification_limit === null || mayorista.notification_limit === undefined) {
-      this.logger.warn(`No se encontró notification_limit para mayorista ${mayoristaId}, usando default 100`);
-      return 100;
+      this.logger.warn(`No se encontró notification_limit para mayorista ${mayoristaId}, usando default`);
+      //obtengo la app-seting configurada para notification_limit en la base de datos
+      const notificationLimit = await this.appSettingsService.obtenerSetting('DEFAULT_NOTIFICATION_LIMIT').catch(() => undefined);
+      const parsed = notificationLimit !== undefined ? parseInt(notificationLimit, 10) : NaN;
+      if (Number.isNaN(parsed)) return 100;
+      return parsed;
     }
     
     return mayorista.notification_limit;
@@ -489,9 +494,9 @@ export class DescargasService {
         descarga.estadoMayorista = nuevoEstado.estadoMayorista;
         this.logger.log(`[updateEstadoDescarga] Admin/Facturación cambió estadoMayorista`);
       }
-      // Si es SERSA (mayorista = 1), también pueden cambiar distribuidor
-      if (idMayorista === 1 && nuevoEstado.estadoDistribuidor !== undefined) {
-        descarga.estadoDistribuidor = nuevoEstado.estadoDistribuidor;
+      //Si es distribuidor de SERSA (id_mayorista = 1), puede cambiar tambien estadoDistribuidor con el mismo valor del estado mayorista
+      if (idMayorista === 1  ) {
+        descarga.estadoDistribuidor = nuevoEstado.estadoMayorista;
         this.logger.log(`[updateEstadoDescarga] Admin/Facturación cambió estadoDistribuidor (SERSA)`);
       }
     }

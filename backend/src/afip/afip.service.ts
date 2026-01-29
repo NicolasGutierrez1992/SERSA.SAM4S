@@ -131,8 +131,10 @@ export class AfipService {
       this.loggerService.error('AFIP-generarCertificado', 'Faltan parámetros requeridos', request);
       throw new BadRequestException('Todos los parámetros son requeridos');
     }
+    
 
     try {
+      /*Descomentar para produccion
       logs.push({ timestamp: new Date().toISOString(), step: 'inicio', message: `CUIT: ${this.cuit}, Fabricante: ${this.fabricante}, Marca: ${request.marca}, Modelo: ${request.modelo}, Número de Serie: ${request.numeroSerie}` });
       // 1. Login WSAA para obtener token y sign
       this.loggerService.debug('AFIP-generarCertificado', 'Llamando a loginWsaa...');
@@ -161,8 +163,10 @@ export class AfipService {
       this.loggerService.info('AFIP-generarCertificado', 'Resultado de renovarCertificadoResponse', result);
       logs.push({ timestamp: new Date().toISOString(), step: 'wscert_result', message: 'Resultado de renovarCertificadoResponse', result });
 
-      let buffer = '';      if (result && result.return) {
-        const rta = result.return;        this.loggerService.info('AFIP-generarCertificado', 'Procesando respuesta del WS', rta);
+      let buffer = '';   
+      if (result && result.return) {
+        const rta = result.return;        
+        this.loggerService.info('AFIP-generarCertificado', 'Procesando respuesta del WS', rta);
         logs.push({ timestamp: new Date().toISOString(), step: 'wscert_response', message: 'Procesando respuesta del WS', rta });
         
         // Leer root RTI desde BD (migrado de filesystem)
@@ -228,6 +232,13 @@ export class AfipService {
         nombreArchivo,
         checksum,
         tamaño,
+        logs
+      };*/
+      return {
+        certificadoPem: 'PRODUCCIÓN DESHABILITADA',
+        nombreArchivo: this.generarNombreArchivo(request),
+        checksum: 'PRODUCCIÓN DESHABILITADA',
+        tamaño: 0,
         logs
       };
     } catch (error) {

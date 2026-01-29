@@ -431,17 +431,24 @@ export class CertificadosController {
         userRole: user.rol
         // SIN usuarioId: para ver TODAS las descargas pendientes
       });
-      
+      // Obtener descargas facturadas
+      const facturadosResult = await this.descargasService.getDescargas({
+        limit: 1000,
+        estadoMayorista: EstadoDescarga.FACTURADO,
+        userRole: user.rol
+      });
       const descargasTotales = descargasTotalesResult.descargas.length;
       const descargasSemana = descargasSemanaResult.descargas.length;
       const pendienteFacturar = pendienteFacturarResult.descargas.length;
-      
-      this.logger.log(`[Métricas Admin/Facturador] Totales=${descargasTotales}, Semana=${descargasSemana}, Pendiente=${pendienteFacturar}`);
-      
+      const pendienteCobrar = facturadosResult.descargas.length;
+
+      this.logger.log(`[Métricas Admin/Facturador] Totales=${descargasTotales}, Semana=${descargasSemana}, Pendiente=${pendienteFacturar}, Cobrar=${pendienteCobrar}`);
+
       return {
         descargasTotales,
         descargasSemana,
         pendienteFacturar,
+        pendienteCobrar,
         rol: user.rol
       };
       

@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { Auditoria } from './entities/auditoria.entity';
 import { CreateAuditoriaDto } from './dto/create-auditoria.dto';
 import * as nodemailer from 'nodemailer';
+import { AppSettingsService } from '../common/services/app-settings.service';
 
 export enum AuditoriaAccion {
   CREAR = 'CREAR',
@@ -32,6 +33,7 @@ export class AuditoriaService {
   constructor(
     @InjectRepository(Auditoria)
     private readonly auditoriaRepository: Repository<Auditoria>,
+    private readonly appSettingsService: AppSettingsService,
   ) {}
 
   async create(createAuditoriaDto: CreateAuditoriaDto): Promise<Auditoria> {
@@ -177,48 +179,54 @@ export class AuditoriaService {
     // Lógica para enviar notificación al administrador
     console.log(`Notificación: El mayorista ${mayorista} tiene ${totalPendientes} descargas pendientes de facturar.`);
 
-    // Configuración de nodemailer usando variables de entorno
-    const adminMailUser = process.env.ADMIN_MAIL_USER ;
-    const adminMailPass = process.env.ADMIN_MAIL_PASS;
-    const adminMailTo = process.env.ADMIN_MAIL_TO;
-
-    if (!adminMailUser || !adminMailPass || !adminMailTo) {
-      console.error('Faltan variables de entorno para el envío de correo de administración');
-      return;
-    }
-
-    const transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: adminMailUser,
-        pass: adminMailPass,
-      },
-    });
-
-    const mailOptions = {
-      from: `SERSA Notificaciones Certificados <${adminMailUser}>`,
-      to: adminMailTo,
-      subject: '⚠️ Alerta: Exceso de descargas pendientes',
-      text: `ALERTA DE DESCARGAS PENDIENTES\n\nEstimado administrador,\n\nEl mayorista ${mayorista} ha superado el límite de descargas pendientes de facturar.\n\nTotal de descargas pendientes: ${totalPendientes}\n\nPor favor, revise la situación en el sistema de gestión de certificados.\n\nSaludos,\nSistema SERSA`,
-      html: `
-        <div style="font-family: Arial, sans-serif; color: #222;">
-          <h2 style="color: #b91c1c;">⚠️ Alerta de Descargas Pendientes</h2>
-          <p>Estimado administrador,</p>
-          <p>El <b>mayorista </b> <span style="color:#2563eb; font-weight:bold;">${mayorista}</span> ha superado el límite de descargas pendientes de facturar.</p>
-          <p><b>Total de descargas pendientes:</b> <span style="color:#b91c1c; font-size:1.2em;">${totalPendientes}</span></p>
-          <p style="margin-top:20px;">Por favor, revise la situación en el sistema de gestión de certificados.</p>
-          <p style="margin-top:20px;">https://sersa-certs-frontend.vercel.app/.</p>
-          <hr style="margin:24px 0;"/>
-          <p style="font-size:0.95em; color:#555;">Saludos,<br/>Sistema SERSA</p>
-        </div>
-      `
-    };
-
+    // Obtener settings desde BD usando AppSettingsService en lugar de process.env
     try {
-      await transporter.sendMail(mailOptions);
-      console.log('Correo de notificación enviado al administrador.');
-    } catch (error) {
-      console.error('Error enviando correo de notificación:', error);
-    }
+      const adminMailUser = process.env.ADMIN_MAIL_USER;
+      const adminMailPass = process.env.ADMIN_MAIL_PASS;
+      const adminMailTo = await this.appSettingsService.obtenerSetting('ADMIN_MAIL_TO');
+
+      if (!adminMailUser || !adminMailPass || !adminMailTo) {
+        console.error('Faltan settings de administración (ADMIN_MAIL_USER/ADMIN_MAIL_PASS/ADMIN_MAIL_TO) en la base de datos');
+        return;
+      }
+
+      const transporter = nodemailer.createTransport({
+          service: 'gmail',
+          auth: {
+            user: adminMailUser,
+            pass: adminMailPass,
+          },
+        });
+
+        const mailOptions = {
+          from: `SERSA Notificaciones Certificados <${adminMailUser}>`,
+          to: adminMailTo,
+          subject: '⚠️ Alerta: Exceso de descargas pendientes',
+          text: `ALERTA DE DESCARGAS PENDIENTES\n\nEstimado administrador,\n\nEl mayorista ${mayorista} ha superado el límite de descargas pendientes de facturar.\n\nTotal de descargas pendientes: ${totalPendientes}\n\nPor favor, revise la situación en el sistema de gestión de certificados.\n\nSaludos,\nSistema SERSA`,
+          html: `
+            <div style="font-family: Arial, sans-serif; color: #222;">
+              <h2 style="color: #b91c1c;">⚠️ Alerta de Descargas Pendientes</h2>
+              <p>Estimado administrador,</p>
+              <p>El <b>mayorista </b> <span style="color:#2563eb; font-weight:bold;">${mayorista}</span> ha superado el límite de descargas pendientes de facturar.</p>
+              <p><b>Total de descargas pendientes:</b> <span style="color:#b91c1c; font-size:1.2em;">${totalPendientes}</span></p>
+              <p style="margin-top:20px;">Por favor, revise la situación en el sistema de gestión de certificados.</p>
+              <p style="margin-top:20px;">https://sersa-certs-frontend.vercel.app/.</p>
+              <hr style="margin:24px 0;"/>
+              <p style="font-size:0.95em; color:#555;">Saludos,<br/>Sistema SERSA</p>
+            </div>
+          `
+        };
+
+        try {
+          await transporter.sendMail(mailOptions);
+          console.log('Correo de notificación enviado al administrador.');
+        } 
+        catch (error) {
+          console.error('Error enviando correo de notificación:', error);
+        }      
+      } 
+      catch (error) {
+        console.error('Error obteniendo settings desde la BD para notificación:', error);
+      }
   }
 }

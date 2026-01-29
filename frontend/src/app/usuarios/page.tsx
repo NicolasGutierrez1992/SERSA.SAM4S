@@ -83,7 +83,8 @@ export default function UsuariosPage() {
     email: user.mail,
     cuit: user.cuit,
     rol: user.rol,
-    status: user.status,    limiteDescargas: user.limite_descargas,
+    status: user.status,    
+    limiteDescargas: user.limite_descargas,
     id_mayorista: user.id_mayorista,
     celular: user.celular,
     tipo_descarga: user.tipo_descarga || 'CUENTA_CORRIENTE',
@@ -389,7 +390,7 @@ export default function UsuariosPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
               <button
@@ -439,7 +440,7 @@ export default function UsuariosPage() {
           </div>
         </div>
       </header>
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <main className="w-full mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="bg-white overflow-hidden shadow rounded-lg mb-6 p-6">
             <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between">

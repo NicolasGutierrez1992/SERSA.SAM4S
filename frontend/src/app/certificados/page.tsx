@@ -440,7 +440,7 @@ export default function CertificadosPage() {
         }
          // ÚNICA restricción: Si mayorista = 1 (SERSA), al ser Admin o Facturación, permitir cambio de ambos estados)
         if (idMayorista === 1) {
-          await certificadosApi.cambiarEstado(downloadId, { estadoMayorista: nuevoEstado, estadoDistribuidor: nuevoEstado });
+          await certificadosApi.cambiarEstado(downloadId, { estadoMayorista: nuevoEstado });
           console.log('cambio de estado ambos (admin/facturación, mayorista 1):', { estadoMayorista: nuevoEstado, estadoDistribuidor: nuevoEstado }); 
         } else {
           await certificadosApi.cambiarEstado(downloadId, { estadoMayorista: nuevoEstado });
@@ -476,7 +476,8 @@ export default function CertificadosPage() {
       console.error('Error cambiando estado:', error);
       alert('Error al cambiar estado');
     }
-  };const handleConfirmarFacturacion = async () => {
+  };
+  const handleConfirmarFacturacion = async () => {
     if (!pendingEstadoChange) return;
     if (facturaLoading) return; // Prevenir múltiples clics
 
@@ -485,7 +486,6 @@ export default function CertificadosPage() {
       // Si tipo es 'ambos', actualizar ambos estados
       const updateData: any = {};
       if (pendingEstadoChange.tipo === 'ambos') {
-        updateData.estadoDistribuidor = pendingEstadoChange.nuevoEstado;
         updateData.estadoMayorista = pendingEstadoChange.nuevoEstado;
       } else if (pendingEstadoChange.tipo === 'mayorista') {
         updateData.estadoMayorista = pendingEstadoChange.nuevoEstado;
@@ -685,6 +685,24 @@ export default function CertificadosPage() {
                     </div>
                   </div>
                 </div>
+                {/* 4. Pendiente de Cobrar (Estado Mayorista) */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente Cobrar</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.pendienteCobrar}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </>
             )}
 
@@ -769,27 +787,26 @@ export default function CertificadosPage() {
                     </div>
                   </div>
                 </div>
-
-                {/* 2. Pendiente de Cobrar (Facturado) *
-                <div className="bg-white overflow-hidden shadow rounded-lg">
-                  <div className="p-5">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0">
-                        <svg className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
-                        </svg>
-                      </div>
-                      <div className="ml-5 w-0 flex-1">
-                        <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">Pendiente de Pago</dt>
-                          <dd className="text-lg font-medium text-gray-900">{metricas.pendienteCobrar || 0}</dd>
-                        </dl>
+                {/* 2. Pendiente de Cobrar (Facturado) mostrar solo si el usuario pertenece al distribuidor SERSA (idmayorista = 1) */}
+                {user?.id_mayorista === 1 && (
+                  <div className="bg-white overflow-hidden shadow rounded-lg">
+                    <div className="p-5">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0">
+                          <svg className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                          </svg>
+                        </div>
+                        <div className="ml-5 w-0 flex-1">
+                          <dl>
+                            <dt className="text-sm font-medium text-gray-500 truncate">Pendiente de Pago</dt>
+                            <dd className="text-lg font-medium text-gray-900">{metricas.pendienteCobrar || 0}</dd>
+                          </dl>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-                */}
-
+                )}
                 {/* 3. Uso del Límite */}
                 <div className="bg-white overflow-hidden shadow rounded-lg">
                   <div className="p-5">
@@ -807,7 +824,8 @@ export default function CertificadosPage() {
                         <dl>
                           <dt className="text-sm font-medium text-gray-500 truncate">Uso del Límite</dt>
                           <dd className="text-lg font-medium text-gray-900">
-                            {(metricas.pendienteFacturar || 0)}/{metricas.limiteDescargas != 0 ? metricas.limiteDescargas : '∞'}
+                            {/*Si el es distribuidor de SERSA (id_mayorista = 1), se debe contar tambien las descargas pendietes de cobro*/}
+                            {(metricas.pendienteFacturar || 0) + (user?.id_mayorista === 1 ? (metricas.pendienteCobrar || 0) : 0)}/{metricas.limiteDescargas != 0 ? metricas.limiteDescargas : '∞'}
                           </dd>
                         </dl>
                       </div>
@@ -823,7 +841,8 @@ export default function CertificadosPage() {
         {/* Tabs */}
         <div className="bg-white shadow rounded-lg">
           <div className="border-b border-gray-200">
-            <nav className="-mb-px flex space-x-8" aria-label="Tabs">              {/* Solo mostrar el tab de descarga si el usuario NO es mayorista ni facturación ni técnico */}
+            <nav className="-mb-px flex space-x-8" aria-label="Tabs">             
+              {/* Solo mostrar el tab de descarga si el usuario NO es mayorista ni facturación ni técnico */}
               {user?.rol !== 4 && (
                 <button
                   onClick={() => setActiveTab('descarga')}
@@ -852,23 +871,26 @@ export default function CertificadosPage() {
             </nav>
           </div>
 
-          <div className="p-6">            {/* Solo mostrar el formulario de descarga si el usuario NO es mayorista ni facturación */}
+          <div className="p-6">            
+            {/* Solo mostrar el formulario de descarga si el usuario NO es mayorista ni facturación */}
             {activeTab === 'descarga' && user?.rol !== 4 && (
               <div className="max-w-md mx-auto">
                 <h3 className="text-lg font-medium text-gray-900 mb-6">
                   Descargar Nuevo Certificado
-                </h3>                {downloadMessage && (
+                </h3>
+                {downloadMessage && (
                   <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded mb-6">
                     {downloadMessage}
-                  </div>                )}
-                  {(downloadUserType === 'PREPAGO') && metricas && (
+                  </div>
+                )}
+                {(downloadUserType === 'PREPAGO') && metricas && (
                   <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
                     <strong>Sistema PREPAGO Activo:</strong> Tienes {metricas.limiteDescargas} descargas disponibles.
                   </div>
                 )}
                 {(downloadUserType === 'CUENTA_CORRIENTE') && metricas && user?.rol === 3 && (
                   <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
-                    <strong>Sistema CUENTA CORRIENTE Activo:</strong> Tienes {metricas.limiteDescargas! - (metricas.pendienteFacturar||0) } de {metricas.limiteDescargas} descargas disponibles.
+                    <strong>Sistema CUENTA CORRIENTE Activo:</strong> Tienes {metricas.limiteDescargas! - (metricas.pendienteFacturar||0 + (user?.id_mayorista === 1 ? (metricas.pendienteCobrar || 0) : 0)) } de {metricas.limiteDescargas} descargas disponibles.
                   </div>
                 )}
 

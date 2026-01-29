@@ -6,11 +6,13 @@ import { User } from '../users/entities/user.entity';
 import { AuditoriaModule } from '../auditoria/auditoria.module';
 import { Certificado } from '../certificados/entities/certificado.entity';
 import { TimezoneService } from '../common/timezone.service';
+import { CommonModule } from '../common/common.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Descarga, User, Certificado]),
     AuditoriaModule,
+    CommonModule,
   ],
   controllers: [],
   providers: [DescargasService, TimezoneService],
