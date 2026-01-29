@@ -770,7 +770,7 @@ export default function CertificadosPage() {
                   </div>
                 </div>
 
-                {/* 2. Pendiente de Cobrar (Facturado) */}
+                {/* 2. Pendiente de Cobrar (Facturado) *
                 <div className="bg-white overflow-hidden shadow rounded-lg">
                   <div className="p-5">
                     <div className="flex items-center">
@@ -788,6 +788,7 @@ export default function CertificadosPage() {
                     </div>
                   </div>
                 </div>
+                */}
 
                 {/* 3. Uso del Límite */}
                 <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -806,7 +807,7 @@ export default function CertificadosPage() {
                         <dl>
                           <dt className="text-sm font-medium text-gray-500 truncate">Uso del Límite</dt>
                           <dd className="text-lg font-medium text-gray-900">
-                            {(metricas.pendienteFacturar || 0) + (metricas.pendienteCobrar || 0)}/{metricas.limiteDescargas != 0 ? metricas.limiteDescargas : '∞'}
+                            {(metricas.pendienteFacturar || 0)}/{metricas.limiteDescargas != 0 ? metricas.limiteDescargas : '∞'}
                           </dd>
                         </dl>
                       </div>
@@ -867,7 +868,7 @@ export default function CertificadosPage() {
                 )}
                 {(downloadUserType === 'CUENTA_CORRIENTE') && metricas && user?.rol === 3 && (
                   <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
-                    <strong>Sistema CUENTA CORRIENTE Activo:</strong> Tienes {metricas.limiteDescargas! - ((metricas.pendienteFacturar||0) + (metricas.pendienteCobrar || 0))} de {metricas.limiteDescargas} descargas disponibles.
+                    <strong>Sistema CUENTA CORRIENTE Activo:</strong> Tienes {metricas.limiteDescargas! - (metricas.pendienteFacturar||0) } de {metricas.limiteDescargas} descargas disponibles.
                   </div>
                 )}
 

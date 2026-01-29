@@ -176,7 +176,7 @@ export class DescargasService {
     // Solo COBRADO libera el límite
     const estadoField = user.rol === 3 ? 'estadoDistribuidor' : 'estadoMayorista';
     
-    const descargasPendientes = await this.descargaRepository.count({
+    let descargasPendientes = await this.descargaRepository.count({
       where: [
         {
           id_usuario: userId,
@@ -189,8 +189,20 @@ export class DescargasService {
       ]
     });
 
+    if(user.rol === 3){
+      this.logger.log(`[canUserDownload] Usuario rol 3, contando estadoDistribuidor`);
+      descargasPendientes = await this.descargaRepository.count({
+        where: [
+          {
+            id_usuario: userId,
+            estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR
+          }
+        ]
+      });
+      this.logger.log(`[canUserDownload] Distribuidor ${userId}, descargas pendientes: ${descargasPendientes}`);
+    }
     const limite = user.limite_descargas;
-    
+
     // Si descargas pendientes >= límite, bloquear (opción A)
     if (descargasPendientes >= limite) {
       return {
