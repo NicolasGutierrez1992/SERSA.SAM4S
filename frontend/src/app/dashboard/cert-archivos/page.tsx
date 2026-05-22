@@ -16,23 +16,27 @@ interface AppSetting {
 
 export default function CertArchivosPage() {
   const [activeTab, setActiveTab] = useState<Tab>('upload');
-  const [certificado, setCertificado] = useState<File | null>(null);
-  const [pwrCst, setPwrCst] = useState<File | null>(null);
+  const [pfxFile, setPfxFile] = useState<File | null>(null);
+  const [pfxPassword, setPfxPassword] = useState('');
+  const [pfxLoading, setPfxLoading] = useState(false);
+  const [pfxMessage, setPfxMessage] = useState('');
   const [rootRti, setRootRti] = useState<File | null>(null);
-  const [message, setMessage] = useState('');
+  const [rootRtiLoading, setRootRtiLoading] = useState(false);
+  const [rootRtiMessage, setRootRtiMessage] = useState('');
   const [settings, setSettings] = useState<AppSetting[]>([]);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState('');
   const [loadingSettings, setLoadingSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState('');
   const router = useRouter();
 
-  // Cargar configuraciones al montar o cambiar a tab de settings
   useEffect(() => {
     if (activeTab === 'settings') {
       loadSettings();
     }
   }, [activeTab]);
+
   const loadSettings = async () => {
     setLoadingSettings(true);
     try {
@@ -40,7 +44,7 @@ export default function CertArchivosPage() {
       setSettings(data);
     } catch (err: any) {
       console.error('Error loading settings:', err);
-      setMessage('❌ Error al cargar configuraciones');
+      setSettingsMessage('Error al cargar configuraciones');
     } finally {
       setLoadingSettings(false);
     }
@@ -50,42 +54,59 @@ export default function CertArchivosPage() {
     setSavingSettings(true);
     try {
       await appSettingsApi.update(key, editingValue);
-      setMessage('✅ Configuración actualizada correctamente');
+      setSettingsMessage('Configuracion actualizada correctamente');
       setEditingKey(null);
       loadSettings();
     } catch (err: any) {
       console.error('Error updating setting:', err);
-      setMessage('❌ Error al actualizar configuración');
+      setSettingsMessage('Error al actualizar configuracion');
     } finally {
       setSavingSettings(false);
     }
   };
-    
-  const handleSubmit = async (e: React.FormEvent) => {
+
+  const handleSubmitPfx = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!certificado && !pwrCst && !rootRti) {
-      setMessage('Debe seleccionar al menos un archivo.');
-      return;
-    }
-    setMessage('Enviando...');
+    if (!pfxFile) { setPfxMessage('Debe seleccionar un archivo .pfx'); return; }
+    if (!pfxPassword.trim()) { setPfxMessage('Debe ingresar la contrasena del certificado'); return; }
+    setPfxLoading(true);
+    setPfxMessage('Enviando...');
     try {
-      // Usar la función del api
-      const res = await certificadosApi.postUploadCertificado({
-        certificado,
-        pwrCst,
-        rootRti,
-      });
-      setMessage(res.message || 'Archivos actualizados correctamente');
+      const res = await certificadosApi.uploadPfx(pfxFile, pfxPassword);
+      setPfxMessage((res as any).message || 'Certificado PFX cargado correctamente');
+      setPfxFile(null);
+      setPfxPassword('');
     } catch (err: any) {
-      setMessage('Error al actualizar archivos');
+      const msg = err?.response?.data?.message || err?.message || 'Error al cargar el certificado PFX';
+      setPfxMessage(`Error: ${msg}`);
+    } finally {
+      setPfxLoading(false);
     }
   };
+
+  const handleSubmitRootRti = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!rootRti) { setRootRtiMessage('Debe seleccionar el archivo Root_RTI.txt'); return; }
+    setRootRtiLoading(true);
+    setRootRtiMessage('Enviando...');
+    try {
+      const res = await certificadosApi.uploadRootRti(rootRti);
+      setRootRtiMessage(res.message || 'Root_RTI cargado correctamente');
+      setRootRti(null);
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || err?.message || 'Error al cargar Root_RTI';
+      setRootRtiMessage(`Error: ${msg}`);
+    } finally {
+      setRootRtiLoading(false);
+    }
+  };
+
   return (
     <div className="container mx-auto max-w-4xl mt-10 mb-10">
       <div className="bg-white rounded-lg shadow overflow-hidden">
         {/* Header */}
         <div className="p-8 border-b border-gray-200">
-          <h1 className="text-3xl font-bold text-gray-800">🔐 Gestión de Certificados</h1>
+          <h1 className="text-3xl font-bold text-gray-800">Gestion de Certificados</h1>
           <p className="text-gray-600 mt-2">Administra los archivos de certificados y configuraciones del sistema</p>
         </div>
 
@@ -99,7 +120,7 @@ export default function CertArchivosPage() {
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            📁 Cargar Archivos
+            Cargar Archivos
           </button>
           <button
             onClick={() => setActiveTab('settings')}
@@ -109,7 +130,7 @@ export default function CertArchivosPage() {
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            ⚙️ Configuraciones
+            Configuraciones
           </button>
         </div>
 
@@ -117,78 +138,109 @@ export default function CertArchivosPage() {
         <div className="p-8">
           {/* TAB 1: UPLOAD ARCHIVOS */}
           {activeTab === 'upload' && (
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+            <div className="space-y-8">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <p className="text-sm text-blue-800">
-                  ℹ️ <strong>Nota:</strong> Los archivos se almacenan en la base de datos. Puedes actualizar cada archivo de forma independiente.
+                  <strong>Nota:</strong> Los archivos se almacenan encriptados en la base de datos. Cada seccion se sube de forma independiente.
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  📜 certificado.pfx <span className="text-gray-500">(Certificado digital)</span>
-                </label>
-                <input
-                  type="file"
-                  accept=".pfx"
-                  onChange={e => setCertificado(e.target.files?.[0] || null)}
-                  className="block w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                {certificado && <p className="text-xs text-gray-500 mt-1">✓ {certificado.name}</p>}
+              {/* Seccion PFX */}
+              <div className="border border-gray-200 rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Certificado PFX</h2>
+                <form onSubmit={handleSubmitPfx} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Archivo certificado.pfx
+                    </label>
+                    <input
+                      type="file"
+                      accept=".pfx"
+                      onChange={e => setPfxFile(e.target.files?.[0] || null)}
+                      className="block w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    {pfxFile && <p className="text-xs text-gray-500 mt-1">{pfxFile.name}</p>}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Contrasena del certificado
+                    </label>
+                    <input
+                      type="password"
+                      value={pfxPassword}
+                      onChange={e => setPfxPassword(e.target.value)}
+                      placeholder="Ingrese la contrasena del archivo .pfx"
+                      className="block w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="flex items-center gap-4 pt-2">
+                    <button
+                      type="submit"
+                      disabled={pfxLoading}
+                      className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold px-6 py-2 rounded shadow transition-colors"
+                    >
+                      {pfxLoading ? 'Cargando...' : 'Cargar PFX'}
+                    </button>
+                  </div>
+                  {pfxMessage && (
+                    <div className={`p-3 rounded text-sm ${
+                      pfxMessage.toLowerCase().startsWith('error') ? 'bg-red-50 border border-red-200 text-red-800' :
+                      pfxMessage === 'Enviando...' ? 'bg-blue-50 border border-blue-200 text-blue-800' :
+                      'bg-green-50 border border-green-200 text-green-800'
+                    }`}>
+                      {pfxMessage}
+                    </div>
+                  )}
+                </form>
+              </div>
+
+              {/* Seccion Root_RTI */}
+              <div className="border border-gray-200 rounded-lg p-6">
+                <h2 className="text-lg font-semibold text-gray-800 mb-4">Root_RTI.txt</h2>
+                <form onSubmit={handleSubmitRootRti} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Archivo Root_RTI.txt <span className="text-gray-500">(Certificado raiz AFIP)</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept=".txt"
+                      onChange={e => setRootRti(e.target.files?.[0] || null)}
+                      className="block w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                    {rootRti && <p className="text-xs text-gray-500 mt-1">{rootRti.name}</p>}
+                  </div>
+                  <div className="flex items-center gap-4 pt-2">
+                    <button
+                      type="submit"
+                      disabled={rootRtiLoading}
+                      className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white font-semibold px-6 py-2 rounded shadow transition-colors"
+                    >
+                      {rootRtiLoading ? 'Cargando...' : 'Cargar Root_RTI'}
+                    </button>
+                  </div>
+                  {rootRtiMessage && (
+                    <div className={`p-3 rounded text-sm ${
+                      rootRtiMessage.toLowerCase().startsWith('error') ? 'bg-red-50 border border-red-200 text-red-800' :
+                      rootRtiMessage === 'Enviando...' ? 'bg-blue-50 border border-blue-200 text-blue-800' :
+                      'bg-green-50 border border-green-200 text-green-800'
+                    }`}>
+                      {rootRtiMessage}
+                    </div>
+                  )}
+                </form>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  🔑 pwrCst.txt <span className="text-gray-500">(Contraseña cifrada)</span>
-                </label>
-                <input
-                  type="file"
-                  accept=".txt"
-                  onChange={e => setPwrCst(e.target.files?.[0] || null)}
-                  className="block w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                {pwrCst && <p className="text-xs text-gray-500 mt-1">✓ {pwrCst.name}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  🌳 Root_RTI.txt <span className="text-gray-500">(Certificado raíz)</span>
-                </label>
-                <input
-                  type="file"
-                  accept=".txt"
-                  onChange={e => setRootRti(e.target.files?.[0] || null)}
-                  className="block w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-                {rootRti && <p className="text-xs text-gray-500 mt-1">✓ {rootRti.name}</p>}
-              </div>
-
-              <div className="flex items-center gap-4 pt-4">
-                <button
-                  type="submit"
-                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-6 py-2 rounded shadow transition-colors"
-                >
-                  ✓ Enviar Archivos
-                </button>
                 <button
                   type="button"
                   className="text-indigo-600 hover:text-indigo-700 underline font-medium"
                   onClick={() => router.back()}
                 >
-                  ← Volver
+                  Volver
                 </button>
               </div>
-
-              {message && (
-                <div className={`mt-6 p-4 rounded ${
-                  message.includes('✅') ? 'bg-green-50 border border-green-200 text-green-800' :
-                  message.includes('❌') ? 'bg-red-50 border border-red-200 text-red-800' :
-                  'bg-blue-50 border border-blue-200 text-blue-800'
-                }`}>
-                  {message}
-                </div>
-              )}
-            </form>
+            </div>
           )}
 
           {/* TAB 2: CONFIGURACIONES */}
@@ -196,7 +248,7 @@ export default function CertArchivosPage() {
             <div className="space-y-6">
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-6">
                 <p className="text-sm text-amber-800">
-                  ℹ️ <strong>Configuraciones en tiempo real:</strong> Los cambios se aplican inmediatamente sin necesidad de reiniciar el servidor.
+                  <strong>Configuraciones en tiempo real:</strong> Los cambios se aplican inmediatamente sin necesidad de reiniciar el servidor.
                 </p>
               </div>
 
@@ -231,13 +283,13 @@ export default function CertArchivosPage() {
                                   disabled={savingSettings}
                                   className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded font-medium transition-colors"
                                 >
-                                  ✓ Guardar
+                                  Guardar
                                 </button>
                                 <button
                                   onClick={() => setEditingKey(null)}
                                   className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded font-medium transition-colors"
                                 >
-                                  ✕ Cancelar
+                                  Cancelar
                                 </button>
                               </div>
                             ) : (
@@ -252,7 +304,7 @@ export default function CertArchivosPage() {
                                   }}
                                   className="ml-4 text-indigo-600 hover:text-indigo-700 font-medium text-sm"
                                 >
-                                  ✎ Editar
+                                  Editar
                                 </button>
                               </div>
                             )}
@@ -264,13 +316,12 @@ export default function CertArchivosPage() {
                 </div>
               )}
 
-              {message && (
+              {settingsMessage && (
                 <div className={`mt-6 p-4 rounded ${
-                  message.includes('✅') ? 'bg-green-50 border border-green-200 text-green-800' :
-                  message.includes('❌') ? 'bg-red-50 border border-red-200 text-red-800' :
-                  'bg-blue-50 border border-blue-200 text-blue-800'
+                  settingsMessage.toLowerCase().startsWith('error') ? 'bg-red-50 border border-red-200 text-red-800' :
+                  'bg-green-50 border border-green-200 text-green-800'
                 }`}>
-                  {message}
+                  {settingsMessage}
                 </div>
               )}
 
@@ -279,7 +330,7 @@ export default function CertArchivosPage() {
                   onClick={() => router.back()}
                   className="text-indigo-600 hover:text-indigo-700 underline font-medium"
                 >
-                  ← Volver
+                  Volver
                 </button>
               </div>
             </div>

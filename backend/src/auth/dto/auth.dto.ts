@@ -1,12 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, Length, Matches, MinLength, MaxLength } from 'class-validator';
+import { IsString, IsNotEmpty, Length, Matches, MinLength } from 'class-validator';
+
 
 export class LoginDto {
   @ApiProperty({
     example: '20366299913',
-    description: 'CUIT del usuario',
+    description: 'CUIT del usuario (11 dígitos numéricos)',
     minLength: 11,
-    maxLength: 11
+    maxLength: 11,
   })
   @IsString()
   @IsNotEmpty({ message: 'El CUIT es obligatorio' })
@@ -15,9 +16,9 @@ export class LoginDto {
   cuit: string;
 
   @ApiProperty({
-    example: 'mi_contraseña_segura',
+    example: 'MiPassword1!',
     description: 'Contraseña del usuario',
-    minLength: 6
+    minLength: 6,
   })
   @IsString()
   @IsNotEmpty({ message: 'La contraseña es obligatoria' })
@@ -26,29 +27,27 @@ export class LoginDto {
 }
 
 export class ChangePasswordDto {
- 
+  @ApiProperty({ description: 'Contraseña actual del usuario' })
+  @IsString()
+  @IsNotEmpty({ message: 'La contraseña actual es obligatoria' })
+  currentPassword: string;
+
   @ApiProperty({
-    example: 'nueva_contraseña_segura',
-    description: 'Nueva contraseña',
-    minLength: 6
+    example: 'NuevaPassword1!',
+    description:
+      'Nueva contraseña (mín. 10 caracteres, al menos una mayúscula, minúscula y número)',
+    minLength: 10,
   })
   @IsString()
   @IsNotEmpty({ message: 'La nueva contraseña es obligatoria' })
-  @Length(6, 100, { message: 'La contraseña debe tener entre 6 y 100 caracteres' })
+  @Length(10, 100, { message: 'La contraseña debe tener entre 10 y 100 caracteres' })
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/, {
+    message:
+      'La contraseña debe contener al menos una mayúscula, una minúscula y un número',
+  })
   newPassword: string;
 }
 
-export class ResetPasswordDto {
-  @ApiProperty({
-    example: 'contraseña_temporal_123',
-    description: 'Nueva contraseña para el usuario',
-    minLength: 6
-  })
-  @IsString()
-  @IsNotEmpty({ message: 'La nueva contraseña es obligatoria' })
-  @Length(6, 100, { message: 'La contraseña debe tener entre 6 y 100 caracteres' })
-  newPassword: string;
-}
 
 export interface JwtPayload {
   id: number;
@@ -60,25 +59,12 @@ export interface JwtPayload {
 }
 
 export class LoginResponse {
-  @ApiProperty({ 
-    description: 'Token JWT de acceso',
-    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
-  })
+  // Token used internally by the controller to set the httpOnly cookie; not sent in the response body
   access_token: string;
 
-  @ApiProperty({ 
-    description: 'Información del usuario logueado',
+  @ApiProperty({
+    description: 'Información del usuario logueado (el token viaja en cookie httpOnly)',
     type: Object,
-    example: {
-      id: 1,
-      cuit: '20366299913',
-      nombre: 'Usuario Admin',
-      email: 'admin@sersa.com',
-      rol: 1,
-      must_change_password: false,
-      last_login: '2024-10-28T10:30:00Z',
-      limite_descargas: 5
-    }
   })
   user: {
     id: number;

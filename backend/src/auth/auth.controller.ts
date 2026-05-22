@@ -6,16 +6,17 @@ import {
   Req,
   HttpCode,
   HttpStatus,
-  Param,
-  ParseIntPipe,
+  Get,
+  Res,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
-import { LoginDto, ChangePasswordDto, ResetPasswordDto, LoginResponse } from './dto/auth.dto';
+import { LoginDto, ChangePasswordDto, LoginResponse } from './dto/auth.dto';
 import { JwtAuthGuard } from './guards/auth.guards';
 import { CurrentUser } from './decorators/current-user.decorator';
-import { RequireAdmin, RequireAdminOrTecnico } from './decorators/roles.decorator';
 
 @ApiTags('autenticacion')
 @Controller('auth')
@@ -23,25 +24,47 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Iniciar sesión' })
-  @ApiResponse({ status: 200, description: 'Login exitoso', type: Object })
+  @ApiResponse({ status: 200, description: 'Login exitoso' })
   @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
-  async login(@Body() loginDto: LoginDto, @Req() req: Request): Promise<LoginResponse> {
-    const ip = req.ip || req.connection.remoteAddress;
-    try {
-      // Logs de depuración (sin datos sensibles)
-      console.log('[AuthController][login] Request login recibida', {
-        cuit: loginDto.cuit,
-        passwordLength: typeof loginDto.password === 'string' ? loginDto.password.length : 'n/a',
-        ip,
-        contentType: req.headers['content-type']
-      });
-    } catch (err) {
-      console.warn('[AuthController][login] Error al loguear request:', err);
-    }
+  @ApiResponse({ status: 429, description: 'Demasiados intentos — esperar 1 minuto' })
+  async login(
+    @Body() loginDto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ user: LoginResponse['user'] }> {
+    const ip = (req as any).ip || (req as any).connection?.remoteAddress;
+    const result = await this.authService.login(loginDto, ip);
 
-    return await this.authService.login(loginDto, ip);
+    // El token JWT viaja en cookie httpOnly para protección XSS
+    res.cookie('auth_token', (result as any).access_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 60 * 60 * 1000, // 1 hora
+      path: '/',
+    });
+
+    return { user: result.user };
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Cerrar sesión (limpia cookie)' })
+  @ApiResponse({ status: 204, description: 'Sesión cerrada' })
+  async logout(@Res({ passthrough: true }) res: Response): Promise<void> {
+    res.clearCookie('auth_token', { path: '/' });
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Obtener usuario autenticado desde token/cookie' })
+  @ApiResponse({ status: 200, description: 'Datos del usuario autenticado' })
+  async me(@CurrentUser() user: any) {
+    return user;
   }
 
   @Post('change-password')
@@ -57,20 +80,5 @@ export class AuthController {
     @Body() changePasswordDto: ChangePasswordDto
   ): Promise<void> {
     await this.authService.changePassword(userId, changePasswordDto);
-  }
-  // utilizada para el seteo de contraseña en primer login
-  @Post('reset-password/:userId')
-  @RequireAdminOrTecnico()
-  @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Resetear contraseña de usuario (solo admin o técnico)' })
-  @ApiResponse({ status: 204, description: 'Contraseña reseteada exitosamente' })
-  @ApiResponse({ status: 401, description: 'No autorizado' })
-  @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
-  async resetPassword(
-    @Param('userId', ParseIntPipe) userId: number,
-    @Body() resetPasswordDto: ResetPasswordDto
-  ): Promise<void> {
-    await this.authService.resetPassword(userId, resetPasswordDto.newPassword);
   }
 }

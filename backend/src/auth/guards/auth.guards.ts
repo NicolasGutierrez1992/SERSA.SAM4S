@@ -8,23 +8,28 @@ export class JwtAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const token = this.extractTokenFromHeader(request);
-    
+    const token = this.extractTokenFromRequest(request);
+
     if (!token) {
       throw new UnauthorizedException('Token de acceso requerido');
     }
-    
+
     try {
       const payload = await this.jwtService.verifyAsync(token);
       request['user'] = payload;
     } catch (error) {
       throw new UnauthorizedException('Token inválido');
     }
-    
+
     return true;
   }
 
-  private extractTokenFromHeader(request: Request): string | undefined {
+  private extractTokenFromRequest(request: Request): string | undefined {
+    // Prioridad 1: cookie httpOnly (flujo web normal)
+    const cookieToken = (request as any)?.cookies?.['auth_token'];
+    if (cookieToken) return cookieToken;
+
+    // Prioridad 2: Authorization: Bearer (API / Swagger)
     const [type, token] = request.headers.authorization?.split(' ') ?? [];
     return type === 'Bearer' ? token : undefined;
   }

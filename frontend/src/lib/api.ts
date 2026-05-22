@@ -1,16 +1,16 @@
 import axios, { AxiosResponse } from 'axios';
+import Cookies from 'js-cookie';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
 
+// ─── Interfaces ──────────────────────────────────────────────────────────────
 
-// Interfaces
 export interface LoginRequest {
   cuit: string;
   password: string;
 }
 
 export interface LoginResponse {
-  access_token: string;
   user: {
     id: number;
     cuit: string;
@@ -35,12 +35,14 @@ export interface ApiError {
   statusCode: number;
   error?: string;
 }
+
 export interface CreateDescargaRequest {
   controladorId?: string;
   marca: 'SH';
   modelo: 'IA' | 'RA';
   numeroSerie: string;
 }
+
 export interface getUserResponse {
   id_usuario: number;
   status: number;
@@ -54,7 +56,6 @@ export interface getUserResponse {
   created_at: Date;
   updated_at: Date;
   ultimo_login: Date;
-  
 }
 
 export interface DownloadResponse {
@@ -65,7 +66,7 @@ export interface DownloadResponse {
 }
 
 export interface DescargaHistorial {
-  id: string; // id_descarga del backend
+  id: string;
   usuarioId: number;
   controladorId?: string;
   certificadoNombre?: string;
@@ -89,16 +90,13 @@ export interface DescargaHistorial {
 
 export interface MetricasPersonales {
   rol: number;
-  // Admin (Rol 1) y Facturador (Rol 4)
   descargasTotales?: number;
   descargasSemana?: number;
-  // Mayorista (Rol 2)
   pendienteFacturarMayorista?: number;
   pendienteFacturarDistribuidor?: number;
   descargasPropiasTotal?: number;
-  // Distribuidor (Rol 3) - y Admin/Mayorista también pueden tener estos campos
   pendienteFacturar?: number;
-  pendienteCobrar?: number; // ⭐ NUEVO: Descargas en estado FACTURADO
+  pendienteCobrar?: number;
   limiteDescargas?: number;
   porcentajeLimite?: number;
 }
@@ -110,149 +108,122 @@ export interface ValidacionDescargaDto {
   limiteDisponible: number;
 }
 
-// Configurar axios
+// ─── Cliente Axios ────────────────────────────────────────────────────────────
+
 const api = axios.create({
   baseURL: API_URL,
+  // Envía la cookie auth_token automáticamente en cada request
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Interceptor para agregar token JWT a las requests
-api.interceptors.request.use(
-  (config) => {
-    const token = getStorageItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-    return config;
-  },
-  (error) => {
-    return Promise.reject(error);
-  }
-);
-
-// Interceptor para manejar respuestas y errores
+// Interceptor de respuesta — manejo de 401
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error) => {
-    const errorInfo = {
-      status: error.response?.status,
-      statusText: error.response?.statusText,
-      data: error.response?.data,
-      message: error.message,
-      url: error.config?.url,
-      method: error.config?.method,
-      timestamp: new Date().toISOString()
-    };
-
-    console.error('[API Interceptor] Error completo:', errorInfo);
-    
     if (error.response?.status === 401) {
-      console.error('[API Interceptor] ⚠️ ERROR 401 - Token inválido o expirado');
-      console.error('[API Interceptor] Respuesta del servidor:', error.response?.data);
-      console.error('[API Interceptor] Limpiando sesión y redirigiendo a login...');
-      
-      removeStorageItem('token');
-      removeStorageItem('user');
-      if (typeof window !== 'undefined') {
-        // Solo redirigir si NO estamos en /login
-        if (window.location.pathname !== '/login') {
-          console.warn('[API Interceptor] Redirigiendo a /login en 2 segundos...');
-          // Agregar delay mayor para permitir que los logs se capturen
-          setTimeout(() => {
-            console.log('[API Interceptor] Ejecutando redirección a /login');
-            window.location.href = '/login';
-          }, 2000);
-        }
-      }
-    } else {
-      // Log de otros errores para debugging
-      console.error('[API Interceptor] Error HTTP (no es 401):', errorInfo);
+      clearUserInfo();
+      // No redirigir con window.location.href (causa hard refresh completo).
+      // El middleware de Next.js protege las rutas via auth_token.
+      // Cada componente maneja su propio estado de error 401.
     }
     return Promise.reject(error);
-  }
+  },
 );
 
-// Funciones auxiliares para localStorage
-const getStorageItem = (key: string): string | null => {
-  if (typeof window === 'undefined') return null;
-  return localStorage.getItem(key);
-};
+// ─── Cookie helpers (user_info — no httpOnly, solo datos de display) ─────────
 
-const setStorageItem = (key: string, value: string): void => {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(key, value);
-};
+const USER_COOKIE = 'user_info';
 
-const removeStorageItem = (key: string): void => {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(key);
-};
+// Detect HTTPS at runtime — process.env.NODE_ENV is always 'production' in Next.js builds
+// so it can't be used to distinguish HTTP localhost from HTTPS production.
+// A Secure cookie is silently dropped by the browser on HTTP, breaking the auth flow.
+const isSecureContext = (): boolean =>
+  typeof window !== 'undefined' && window.location.protocol === 'https:';
 
-
-// Servicios de autenticación
-export const authApi = {
-  login: async (credentials: LoginRequest): Promise<LoginResponse> => {
-      const response = await api.post<LoginResponse>('/auth/login', credentials);
-      return response.data;
-  },
-
-  changePassword: async (data: ChangePasswordRequest): Promise<void> => {
-    await api.post('/auth/change-password', data);
-  },
-  
-  logout: () => {
-    removeStorageItem('token');
-    removeStorageItem('user');
-    if (typeof window !== 'undefined') {
-      window.location.href = '/login';
-    }
-  },
-};
-
-// Utilidades
-export const setAuthToken = (token: string) => {
-  setStorageItem('token', token);
-};
-
-export const setUser = (user: LoginResponse['user']) => {
-  setStorageItem('user', JSON.stringify(user));
+export const setUser = (user: LoginResponse['user']): void => {
+  Cookies.set(USER_COOKIE, JSON.stringify(user), {
+    sameSite: 'lax',
+    secure: isSecureContext(),
+    expires: 1 / 24,
+  });
 };
 
 export const getUser = (): LoginResponse['user'] | null => {
   try {
-    const userStr = getStorageItem('user');
-    return userStr ? JSON.parse(userStr) : null;
+    const raw = Cookies.get(USER_COOKIE);
+    return raw ? JSON.parse(raw) : null;
   } catch {
     return null;
   }
 };
 
-export const isAuthenticated = (): boolean => {
-  return !!getStorageItem('token');
+const clearUserInfo = (): void => {
+  Cookies.remove(USER_COOKIE);
 };
-// Obtener usuario por ID de mayorista
+
+export const isAuthenticated = (): boolean => {
+  return !!getUser();
+};
+
+// ─── Auth API ─────────────────────────────────────────────────────────────────
+
+export const authApi = {
+  login: async (credentials: LoginRequest): Promise<LoginResponse> => {
+    const response = await api.post<LoginResponse>('/auth/login', credentials);
+    // El JWT viaja en cookie httpOnly establecida por el backend.
+    // Aquí solo guardamos el objeto usuario para display.
+    if (response.data.user) {
+      setUser(response.data.user);
+    }
+    return response.data;
+  },
+
+  logout: async (): Promise<void> => {
+    try {
+      await api.post('/auth/logout');
+    } finally {
+      clearUserInfo();
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login';
+      }
+    }
+  },
+
+  changePassword: async (data: ChangePasswordRequest): Promise<void> => {
+    await api.post('/auth/change-password', data);
+  },
+
+  me: async (): Promise<LoginResponse['user']> => {
+    const response = await api.get<LoginResponse['user']>('/auth/me');
+    return response.data;
+  },
+};
+
+// ─── Funciones de usuario ─────────────────────────────────────────────────────
+
 export const getUserById = async (id: number): Promise<getUserResponse> => {
   const response = await api.get<getUserResponse>(`/users/${id}`);
   return response.data;
 };
 
-// Servicios de certificados
+// ─── Certificados API ─────────────────────────────────────────────────────────
+
 export const certificadosApi = {
-  // Generar certificado
   descargarCertificado: async (data: CreateDescargaRequest): Promise<DownloadResponse> => {
     const response = await api.post<DownloadResponse>('/certificados/descargar', data);
     return response.data;
   },
 
-  // Descargar archivo PEM
   descargarArchivo: async (downloadId: string): Promise<Blob> => {
     const response = await api.get(`/certificados/descargar/${downloadId}/archivo`, {
       responseType: 'blob',
     });
-    return response.data;  },
-  // Obtener historial de descargas
+    return response.data;
+  },
+
   getHistorialDescargas: async (params?: {
     page?: number;
     limit?: number;
@@ -260,76 +231,52 @@ export const certificadosApi = {
     fechaHasta?: string;
     controladorId?: string;
     estadoMayorista?: string;
-    estadoDistribuidor?: string; // ⭐ NUEVO: Filtro por estado distribuidor
+    estadoDistribuidor?: string;
     marca?: string;
     cuit?: string;
     idMayorista?: string;
     mes?: number;
     anio?: number;
-    userRole?: number; // ⭐ NUEVO: Rol del usuario para filtrado inteligente
-  }): Promise<{
-    descargas: DescargaHistorial[];
-    total: number;
-    totalPages?: number;
-  }> => {
-    // Filtrar parámetros undefined y vacíos para evitar errores de validación
-    const filteredParams: any = {};
-    
+    userRole?: number;
+  }): Promise<{ descargas: DescargaHistorial[]; total: number; totalPages?: number }> => {
+    const filteredParams: Record<string, unknown> = {};
     if (params) {
       Object.entries(params).forEach(([key, value]) => {
-        // Solo incluir si no es undefined, null, o string vacío
         if (value !== undefined && value !== null && value !== '') {
           filteredParams[key] = value;
         }
       });
     }
-    
-    console.log('🔍 getHistorialDescargas - params enviados:', filteredParams);
-    
-    try {
-      const response = await api.get('/certificados/descargas', { params: filteredParams });
-      console.log('✅ getHistorialDescargas - respuesta:', response.data);
-      
-      // Si el backend no envía totalPages, lo calculamos
-      const { descargas, total, totalPages } = response.data;
-      const limit = filteredParams.limit || 50;
-      return {
-        descargas,
-        total,
-        totalPages: totalPages ?? Math.ceil(total / limit)
-      };
-    } catch (error: any) {
-      console.error('❌ getHistorialDescargas error:', error.response?.status, error.response?.data);
-      throw error;
-    }
+
+    const response = await api.get('/certificados/descargas', { params: filteredParams });
+    const { descargas, total, totalPages } = response.data;
+    const limit = (filteredParams.limit as number) || 50;
+    return { descargas, total, totalPages: totalPages ?? Math.ceil(total / limit) };
   },
-  // Cambiar estado de descarga
+
   cambiarEstado: async (
     downloadId: string,
-    estado: { 
-      estadoMayorista?: string; 
+    estado: {
+      estadoMayorista?: string;
       estadoDistribuidor?: string;
       numero_factura?: string;
       referencia_pago?: string;
-    }
+    },
   ): Promise<DescargaHistorial> => {
     const response = await api.put(`/certificados/descargas/${downloadId}/estado`, estado);
     return response.data;
   },
 
-  // Obtener métricas personales
   getMetricas: async (): Promise<MetricasPersonales> => {
     const response = await api.get<MetricasPersonales>('/certificados/metricas');
     return response.data;
   },
 
-  // Validar si usuario puede descargar (PREPAGO)
   validarDescarga: async (): Promise<ValidacionDescargaDto> => {
     const response = await api.get<ValidacionDescargaDto>('/certificados/validar-descarga');
     return response.data;
   },
 
-  // Verificar estado AFIP
   getAfipStatus: async (): Promise<{
     wsaa: string;
     wscert: string;
@@ -341,61 +288,66 @@ export const certificadosApi = {
     return response.data;
   },
 
-  // Obtener descargas por usuario
   getDescargasPorUsuario: async (usuarioId: number) => {
     const response = await api.get(`/certificados/descargas/usuario/${usuarioId}`);
     return response.data;
   },
 
-  // Obtener descargas por mayorista
   getDescargasPorMayorista: async (mayoristaId: number) => {
     const response = await api.get(`/certificados/descargas/mayorista/${mayoristaId}`);
     return response.data;
   },
 
-  postUploadCertificado: async (
-    files: { certificado?: File | null; pwrCst?: File | null; rootRti?: File | null }
-  ): Promise<{ message: string }> => {
+  uploadPfx: async (
+    pfxFile: File,
+    password: string,
+    identificador?: string,
+  ): Promise<{ message: string; certificado_identificador?: string }> => {
     const formData = new FormData();
-    if (files.certificado) formData.append('certificado', files.certificado);
-    if (files.pwrCst) formData.append('pwrCst', files.pwrCst);
-    if (files.rootRti) formData.append('rootRti', files.rootRti);
-    const response = await api.post('/certificados/upload', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+    formData.append('pfxFile', pfxFile);
+    formData.append('password', password);
+    if (identificador) formData.append('certificado_identificador', identificador);
+    const response = await api.post('/certificados-maestro/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+
+  uploadRootRti: async (file: File): Promise<{ success: boolean; message: string }> => {
+    const formData = new FormData();
+    formData.append('rootRtiFile', file);
+    const response = await api.post('/certificados-maestro/upload-root-rti', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
   },
 };
 
-// App Settings API (Admin only)
+// ─── App Settings API ─────────────────────────────────────────────────────────
+
 export const appSettingsApi = {
-  // Obtener todas las configuraciones
-  getAll: async (): Promise<Array<{ id: string; value: string; description?: string; data_type?: string }>> => {
+  getAll: async (): Promise<
+    Array<{ id: string; value: string; description?: string; data_type?: string }>
+  > => {
     const response = await api.get('/app-settings');
     return response.data;
   },
 
-  // Obtener una configuración específica
   getByKey: async (key: string): Promise<{ id: string; value: string }> => {
     const response = await api.get(`/app-settings/${key}`);
     return response.data;
   },
 
-  // Actualizar una configuración
   update: async (key: string, value: string): Promise<{ message: string }> => {
     const response = await api.put(`/app-settings/${key}`, { value });
     return response.data;
   },
 
-  // Obtener estadísticas del caché (debug)
-  getCacheStats: async (): Promise<any> => {
+  getCacheStats: async (): Promise<unknown> => {
     const response = await api.get('/app-settings/debug/cache-stats');
     return response.data;
   },
 
-  // Forzar actualización del caché
   refreshCache: async (): Promise<{ message: string }> => {
     const response = await api.put('/app-settings/debug/refresh-cache', {});
     return response.data;

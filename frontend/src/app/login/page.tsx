@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { authApi, setAuthToken, setUser, type LoginRequest } from '@/lib/api';
+import { authApi, type LoginRequest } from '@/lib/api';
 
 export default function LoginPage() {
   const [formData, setFormData] = useState<LoginRequest>({
@@ -48,11 +48,8 @@ export default function LoginPage() {
     }
 
     try {
+      // authApi.login ya guarda user_info en cookie y el backend setea auth_token httpOnly
       const response = await authApi.login(formData);
-
-      // Guardar token y usuario
-      setAuthToken(response.access_token);
-      setUser(response.user);
 
       // Redirigir según el estado del usuario
       if ('must_change_password' in response.user && response.user.must_change_password) {

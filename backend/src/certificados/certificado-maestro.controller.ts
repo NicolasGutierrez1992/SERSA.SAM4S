@@ -8,17 +8,19 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { 
-  ApiBearerAuth, 
-  ApiTags, 
-  ApiOperation, 
-  ApiResponse, 
-  ApiConsumes 
+import {
+  ApiBearerAuth,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiConsumes
 } from '@nestjs/swagger';
 import type { Multer } from 'multer';
 import { CertificadoMaestroService } from './certificado-maestro.service';
+import { AfipFilesService } from '../afip/services/afip-files.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guards';
 import { RequireAdmin } from '../auth/decorators/roles.decorator';
 import {
@@ -30,7 +32,10 @@ import {
 @Controller('certificados-maestro')
 @ApiBearerAuth()
 export class CertificadoMaestroController {
-  constructor(private readonly certificadoMaestroService: CertificadoMaestroService) {}
+  constructor(
+    private readonly certificadoMaestroService: CertificadoMaestroService,
+    private readonly afipFilesService: AfipFilesService,
+  ) {}
 
   /**
    * Subir/actualizar certificado maestro .pfx
@@ -102,5 +107,30 @@ export class CertificadoMaestroController {
   })
   async getInfo(): Promise<CertificadoMaestroInfoDto> {
     return await this.certificadoMaestroService.obtenerInfoCertificadoMaestro();
+  }
+
+  @Post('upload-root-rti')
+  @UseGuards(JwtAuthGuard)
+  @RequireAdmin()
+  @UseInterceptors(FileInterceptor('rootRtiFile', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  @ApiConsumes('multipart/form-data')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Cargar archivo Root_RTI.txt',
+    description: 'Carga el archivo Root_RTI.txt encriptado en base de datos. Solo administradores.',
+  })
+  @ApiResponse({ status: 201, description: 'Root_RTI cargado correctamente' })
+  @ApiResponse({ status: 400, description: 'Archivo inválido o faltante' })
+  async uploadRootRti(
+    @UploadedFile() file: Multer.File,
+  ): Promise<{ success: boolean; message: string }> {
+    if (!file) {
+      throw new BadRequestException('Se requiere el archivo rootRtiFile');
+    }
+    if (!file.originalname.toLowerCase().endsWith('.txt')) {
+      throw new BadRequestException('El archivo Root_RTI debe tener extensión .txt');
+    }
+    await this.afipFilesService.cargarArchivoRootRTI(file.buffer, file.originalname);
+    return { success: true, message: 'Root_RTI cargado y encriptado correctamente en base de datos' };
   }
 }

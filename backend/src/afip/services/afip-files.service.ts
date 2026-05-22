@@ -2,6 +2,7 @@ import { Injectable, Logger, BadRequestException, NotFoundException } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AfipFile } from '../entities/afip-file.entity';
+import { EncryptionService } from '../../common/encryption.service';
 
 export interface AfipFileInfo {
   id: string;
@@ -22,6 +23,7 @@ export class AfipFilesService {
   constructor(
     @InjectRepository(AfipFile)
     private readonly afipFileRepository: Repository<AfipFile>,
+    private readonly encryptionService: EncryptionService,
   ) {}
 
   /**
@@ -40,7 +42,7 @@ export class AfipFilesService {
       }
 
       this.logger.debug(`Root_RTI obtenido exitosamente (${archivo.file_size} bytes)`);
-      return archivo.file_data;
+      return this.encryptionService.decryptToBuffer(archivo.file_data);
     } catch (error) {
       this.logger.error('Error obteniendo Root_RTI', error);
       throw error;
@@ -63,6 +65,8 @@ export class AfipFilesService {
 
       this.logger.log(`Cargando Root_RTI (${fileBuffer.length} bytes)`);
 
+      const fileDataEncriptada = this.encryptionService.encrypt(fileBuffer);
+
       // Buscar si ya existe
       const archivoExistente = await this.afipFileRepository.findOne({
         where: { id: this.ROOT_RTI_ID },
@@ -70,25 +74,25 @@ export class AfipFilesService {
 
       if (archivoExistente) {
         // Actualizar existente
-        archivoExistente.file_data = fileBuffer;
+        archivoExistente.file_data = fileDataEncriptada;
         archivoExistente.file_name = fileName;
         archivoExistente.file_size = fileBuffer.length;
         archivoExistente.updated_at = new Date();
         await this.afipFileRepository.save(archivoExistente);
-        this.logger.log('Root_RTI actualizado exitosamente en BD');
+        this.logger.log('Root_RTI actualizado exitosamente en BD (encriptado)');
       } else {
         // Crear nuevo
         const nuevoArchivo = this.afipFileRepository.create({
           id: this.ROOT_RTI_ID,
           file_type: 'ROOT_RTI',
-          file_data: fileBuffer,
+          file_data: fileDataEncriptada,
           file_name: fileName,
           file_size: fileBuffer.length,
           activo: true,
           uploaded_at: new Date(),
         });
         await this.afipFileRepository.save(nuevoArchivo);
-        this.logger.log('Root_RTI cargado exitosamente en BD');
+        this.logger.log('Root_RTI cargado exitosamente en BD (encriptado)');
       }
     } catch (error) {
       this.logger.error('Error cargando Root_RTI', error);

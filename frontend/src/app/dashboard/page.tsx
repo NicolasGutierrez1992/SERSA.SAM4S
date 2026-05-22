@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
-import { getUser, authApi } from '@/lib/api';
+import { authApi } from '@/lib/api';
 import { CertificateStatusCard } from '@/components/CertificateStatusCard';
 
 export default function DashboardPage() {
@@ -12,18 +12,18 @@ export default function DashboardPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const userData = getUser();
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
-    // Si el usuario es distribuidor o facturación, redirigir a certificados
-    if (userData.rol === 3 || userData.rol === 4) {
-      router.push('/certificados');
-      return;
-    }
-    setUser(userData);
-    setLoading(false);
+    authApi.me()
+      .then((userData: any) => {
+        if (userData.rol === 3 || userData.rol === 4) {
+          router.push('/certificados');
+          return;
+        }
+        setUser(userData);
+        setLoading(false);
+      })
+      .catch(() => {
+        router.push('/login');
+      });
   }, [router]);
 
   const handleLogout = () => {

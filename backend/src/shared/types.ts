@@ -4,7 +4,9 @@ export enum EstadoDescarga {
   PREPAGO = 'PREPAGO',
   PENDIENTE_FACTURAR = 'Pendiente de Facturar',
   FACTURADO = 'Facturado',
-  COBRADO = 'Cobrado'
+  COBRADO = 'Cobrado',
+  GARANTIA = 'Garantia',
+  BONIFICADO = 'Bonificado'
 }
 
 // Interface base para Descarga que funciona tanto en servicios como controladores

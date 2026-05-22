@@ -10,11 +10,11 @@ export class CertificadoMaestro {
   @PrimaryColumn({ type: 'varchar', length: 50 })
   id: string;
 
-  @ApiProperty({ 
-    description: 'Archivo PFX encriptado (almacenado en base64 encriptado)',
+  @ApiProperty({
+    description: 'Archivo PFX encriptado con AES-256 y codificado en base64',
   })
-  @Column({ type: 'bytea' })
-  pfx_data: Buffer;
+  @Column({ type: 'text' })
+  pfx_data: string;
 
   @ApiProperty({ 
     description: 'Contraseña encriptada del certificado PFX'
