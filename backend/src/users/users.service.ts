@@ -1,21 +1,21 @@
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, FindOptionsWhere, In } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { Injectable, BadRequestException, ConflictException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Injectable, BadRequestException, ConflictException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { User } from './entities/user.entity';
 import { Mayorista } from './entities/mayorista.entity';
 import { CreateUserDto, UpdateUserDto, QueryUsersDto, UserRole, UserStatus } from './dto/user.dto';
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger(UsersService.name);
+
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     @InjectRepository(Mayorista)
     private readonly mayoristaRepository: Repository<Mayorista>,
-  ) {
-    console.log('TEST LOG: UsersService constructor ejecutado');
-  }
+  ) {}
   // ✅ Running in PRODUCTION mode with real AFIP integration
 
   async create(createUserDto: CreateUserDto, creatorUser?: any): Promise<User> {
@@ -26,15 +26,16 @@ export class UsersService {
     if (creatorUser) {
       const rolACrear = createUserDto.rol;
       
-      // Admin (rol 1) y Técnico (rol 5) pueden crear cualquier usuario
-      // EXCEPTO Admin y Facturación
+      // Admin (rol 1) puede crear cualquier rol incluido otro Admin y Facturación
+      // Técnico (rol 5) puede crear Mayorista, Distribuidor, Técnico — NO Admin ni Facturación
       if (creatorUser.rol === 1 || creatorUser.rol === 5) {
-        if (rolACrear === UserRole.ADMINISTRADOR || rolACrear === UserRole.FACTURACION) {
-          throw new ForbiddenException(
-            `No puedes crear usuarios con rol ${rolACrear === UserRole.ADMINISTRADOR ? 'ADMINISTRADOR' : 'FACTURACIÓN'}`
-          );
+        if (creatorUser.rol === 5 && rolACrear === UserRole.ADMINISTRADOR) {
+          throw new ForbiddenException('Solo un administrador puede crear otro administrador');
         }
-        console.log(`[UsersService][create] ✅ Admin/Técnico pueden crear rol ${rolACrear}`);
+        if (creatorUser.rol === 5 && rolACrear === UserRole.FACTURACION) {
+          throw new ForbiddenException('Solo un administrador puede crear usuarios de Facturación');
+        }
+        this.logger.log(`[create] creador rol=${creatorUser.rol} crea usuario rol=${rolACrear}`);
       } else {
         // Otros roles no pueden crear usuarios
         throw new ForbiddenException('No tienes permisos para crear usuarios');
@@ -45,9 +46,8 @@ export class UsersService {
     if (!/^\d{11}$/.test(createUserDto.cuit)) {
       throw new BadRequestException('El CUIT debe tener 11 dígitos numéricos');
     }
-        // Validar longitud de contraseña
-    if (!createUserDto.password || createUserDto.password.length < 6) {
-      throw new BadRequestException('La contraseña debe tener al menos 6 caracteres');
+        if (!createUserDto.password || createUserDto.password.length < 10) {
+      throw new BadRequestException('La contraseña debe tener al menos 10 caracteres');
     }
 
     // Verificar si el CUIT ya existe
@@ -97,57 +97,58 @@ export class UsersService {
       rol: createUserDto.rol,
       status: createUserDto.status || UserStatus.ACTIVO,
       id_mayorista: createUserDto.id_mayorista,
-      limite_descargas: createUserDto.limiteDescargas || 5,
+      limite_descargas: createUserDto.limiteDescargas !== undefined ? createUserDto.limiteDescargas : 0,
       must_change_password: true,
       celular: createUserDto.celular,
-      tipo_descarga: createUserDto.tipo_descarga || 'CUENTA_CORRIENTE',
+      tipo_descarga: createUserDto.tipo_descarga || 'PREPAGO',
     });
     const savedUser = await this.userRepository.save(user);
     console.log('[UsersService][create] Salida:', savedUser);
     return savedUser;
   }
   async findAll(queryDto: QueryUsersDto = {}, currentUser?: any) {
-    console.log('[UsersService][findAll] Entrada:', queryDto, currentUser);
-    const { page = 10, limit = 100, rol, status, id_mayorista } = queryDto;    // Obtener todos los usuarios para armar jerarquía y nombreMayorista
-    const allUsers = await this.userRepository.find({
+    const { page = 1, limit = 100, rol, status, id_mayorista } = queryDto;
+
+    const where: FindOptionsWhere<User> = {};
+    // Mayoristas only see users belonging to their own mayorista
+    if (currentUser?.rol === 2) where.id_mayorista = currentUser.id_mayorista;
+    if (rol !== undefined) where.rol = +rol as UserRole;
+    if (status !== undefined) where.status = +status;
+    if (id_mayorista !== undefined) where.id_mayorista = +id_mayorista;
+
+    const [data, total] = await this.userRepository.findAndCount({
+      where,
       select: [
         'id_usuario', 'cuit', 'nombre', 'mail', 'rol', 'status', 'limite_descargas',
-        'must_change_password', 'ultimo_login', 'id_mayorista', 'created_at', 'updated_at', 'celular', 'tipo_descarga', 'notification_limit'
-      ]
+        'must_change_password', 'ultimo_login', 'id_mayorista', 'created_at', 'updated_at',
+        'celular', 'tipo_descarga', 'notification_limit',
+      ],
+      skip: (page - 1) * limit,
+      take: limit,
+      order: { nombre: 'ASC' },
     });
-   
-    // Mapeo id_usuario -> nombre para lookup rápido
+
+    // Resolve mayorista names with a single targeted query (only the page's unique ids)
+    const mayoristaIds = [...new Set(data.map(u => u.id_mayorista).filter(Boolean))] as number[];
     const mayoristaMap = new Map<number, string>();
-    allUsers.filter(u => ( u.rol === 3) && (u.id_mayorista === currentUser.id_mayorista)).forEach(m => {
-      mayoristaMap.set(m.id_usuario, m.nombre);
-    });
-    // Lista plana con nombreMayorista
-    const usuariosConMayorista = allUsers.map(u => ({
-      ...u,
-      nombreMayorista: u.id_mayorista ? mayoristaMap.get(u.id_mayorista) || null : null
-    }));    // Filtros y paginación sobre la lista plana
-    let filtered = usuariosConMayorista;
-    // Si el usuario autenticado es mayorista, solo puede ver sus propios distribuidores (usuarios con id_mayorista igual a su id)
-    // Técnico (rol 5) y Admin (rol 1) ven todos los usuarios
-    if (currentUser?.rol === 2) {
-      filtered = filtered.filter(u => u.id_mayorista === (currentUser.id_mayorista));
+    if (mayoristaIds.length > 0) {
+      const mayoristas = await this.userRepository.find({
+        where: { id_usuario: In(mayoristaIds), rol: UserRole.MAYORISTA },
+        select: ['id_usuario', 'nombre'],
+      });
+      mayoristas.forEach(m => mayoristaMap.set(m.id_usuario, m.nombre));
     }
-    if (rol !== undefined) filtered = filtered.filter(u => u.rol === +rol);
-    if (status !== undefined) filtered = filtered.filter(u => u.status === +status);
-    if (id_mayorista !== undefined) filtered = filtered.filter(u => u.id_mayorista === +id_mayorista);
-    // Paginación
-    const total = filtered.length;
-    const paged = filtered.slice((page - 1) * limit, (page - 1) * limit + limit);
-    
-    const result = {
-      data: paged,
+
+    return {
+      data: data.map(u => ({
+        ...u,
+        nombreMayorista: u.id_mayorista ? (mayoristaMap.get(u.id_mayorista) ?? null) : null,
+      })),
       total,
       page,
       limit,
-      totalPages: Math.ceil(total / limit)
+      totalPages: Math.ceil(total / limit),
     };
-    console.log('[UsersService][findAll] Salida:', result);
-    return result;
   }
   async findOne(id: number): Promise<User> {
     console.log('[UsersService][findOne] Entrada:', id);
@@ -180,40 +181,13 @@ export class UsersService {
     return user;
   }
   async findByCuit(cuit: string): Promise<User | null> {
-    console.log('\n========================================');
-    console.log('[UsersService][findByCuit] INICIANDO BÚSQUEDA');
-    console.log('========================================');
-    console.log('Entrada CUIT:', cuit);
-    console.log('Tipo:', typeof cuit, '| Longitud:', cuit.length);
-      // Buscar con trim y conversión a string
     const trimmedCuit = String(cuit).trim();
-    console.log('CUIT trimmed:', trimmedCuit);
-    console.log('Buscando en tabla "users" con condición: cuit = "' + trimmedCuit + '"');    
     const user = await this.userRepository.findOne({
       where: { cuit: trimmedCuit },
     });
-    
     if (!user) {
-      console.log('\n⚠️  USUARIO NO ENCONTRADO - Listando todos los usuarios en la BD:');
-      const allUsers = await this.userRepository.find({
-        select: ['id_usuario', 'cuit', 'nombre', 'mail', 'rol', 'status'],
-      });
-      console.log('Total de usuarios en BD:', allUsers.length);
-      console.log('Usuarios registrados:');
-      allUsers.forEach(u => {
-        console.log(`  - ID: ${u.id_usuario}, CUIT: "${u.cuit}", Nombre: ${u.nombre}, Email: ${u.mail}, Rol: ${u.rol}, Status: ${u.status}`);
-      });
-    } else {
-      console.log('\n✅ USUARIO ENCONTRADO');
-      console.log(`ID: ${user.id_usuario}`);
-      console.log(`CUIT: ${user.cuit}`);
-      console.log(`Nombre: ${user.nombre}`);
-      console.log(`Email: ${user.mail}`);
-      console.log(`Rol: ${user.rol}`);
-      console.log(`Status: ${user.status}`);
+      this.logger.warn('[findByCuit] Usuario no encontrado para el CUIT proporcionado');
     }
-    
-    console.log('========================================\n');
     return user;
   }  
   async findByMail(mail: string): Promise<User | null> {
@@ -342,7 +316,7 @@ export class UsersService {
     const user = await this.userRepository.findOne({ where: { id_usuario: id } });
     if (!user) return;
     // Si el usuario tiene la contraseña por defecto, debe cambiarla
-    const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'sersa2025';
+    const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'certificados';
     const isDefault = await bcrypt.compare(defaultPassword, user.password);
     if (isDefault) {
       user.must_change_password = true;

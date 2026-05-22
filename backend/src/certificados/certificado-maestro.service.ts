@@ -58,11 +58,12 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
       // Validar que el certificado no esté expirado
       this.validarExpirationCertificado(certificado.metadata);
 
-      // Desencriptar la contraseña
+      // Desencriptar contraseña y PFX
       const password = this.encryptionService.decrypt(certificado.password_encriptada);
+      const pfx = this.encryptionService.decryptToBuffer(certificado.pfx_data);
 
       return {
-        pfx: certificado.pfx_data,
+        pfx,
         password,
         metadata: certificado.metadata,
       };
@@ -110,8 +111,9 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
       // Parsear y validar el archivo PFX
       const metadata = await this.extraerMetadatos(pfxFile.buffer, password);
 
-      // Encriptar la contraseña
+      // Encriptar contraseña y PFX
       const passwordEncriptada = this.encryptionService.encrypt(password);
+      const pfxEncriptado = this.encryptionService.encrypt(pfxFile.buffer);
 
       // Buscar si ya existe un certificado maestro
       let certificado = await this.certificadoMaestroRepository.findOne({
@@ -119,12 +121,11 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
       });      if (certificado) {
         // Actualizar certificado existente
         this.logger.log('Actualizando certificado maestro existente');
-        certificado.pfx_data = pfxFile.buffer;
+        certificado.pfx_data = pfxEncriptado;
         certificado.password_encriptada = passwordEncriptada;
         certificado.metadata = metadata;
         certificado.certificado_identificador = certificado_identificador;
         certificado.activo = true;
-        // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
         certificado.uploaded_at = new Date();
         certificado.updated_at = new Date();
       } else {
@@ -132,12 +133,11 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
         this.logger.log('Creando nuevo certificado maestro');
         certificado = this.certificadoMaestroRepository.create({
           id: this.CERTIFICADO_ID,
-          pfx_data: pfxFile.buffer,
+          pfx_data: pfxEncriptado,
           password_encriptada: passwordEncriptada,
           metadata,
           certificado_identificador,
           activo: true,
-          // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
           uploaded_at: new Date(),
         });
       }

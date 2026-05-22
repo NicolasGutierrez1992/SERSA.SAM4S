@@ -1,22 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
-import api from '@/lib/api';
+import api, { getUser } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { Table, Input, Spin,  Modal, Button, Form, Select, message } from 'antd';
 import Image from 'next/image';
 import { EditOutlined, ReloadOutlined } from '@ant-design/icons';
 
-// Obtener usuario autenticado del localStorage
-const getCurrentUser = () => {
-  if (typeof window !== 'undefined') {
-    try {
-      return JSON.parse(localStorage.getItem('user') || '{}');
-    } catch {
-      return {};
-    }
-  }
-  return {};
-};
+const getCurrentUser = () => getUser();
 
 export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<any[]>([]);
@@ -68,6 +58,7 @@ export default function UsuariosPage() {
   const openAddUser = () => {
     setEditingUser(null);
     form.resetFields();
+    form.setFieldsValue({ password: 'certificados' });
     // Si es mayorista, setear id_mayorista automáticamente
     if (isMayorista) {
       form.setFieldsValue({ rol: 3, id_mayorista: idMayorista });
@@ -293,7 +284,7 @@ export default function UsuariosPage() {
         const label = tipo === 'PREPAGO' ? 'Prepago' : 'Cuenta Corriente';
         return <span style={{ color, fontWeight: 500 }}>{label}</span>;
       }
-    },    ...(currentUser.rol === 1 ? [{
+    },    ...(currentUser?.rol === 1 ? [{
       title: 'Límite Notificación',
       dataIndex: 'notification_limit',
       key: 'notification_limit',
@@ -394,7 +385,7 @@ export default function UsuariosPage() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
               <button
-                disabled={currentUser.rol === 3}
+                disabled={currentUser?.rol === 3}
                 onClick={() => router.push('/dashboard')}
                 className="mr-4 p-2 rounded-md hover:bg-gray-100"
               >
@@ -422,7 +413,7 @@ export default function UsuariosPage() {
                       {currentUser?.nombre}
                     </p>
                     <p className="text-xs text-gray-500">
-                      {getRoleName(currentUser?.rol)} • CUIT: {currentUser?.cuit}
+                      {currentUser?.rol != null ? getRoleName(currentUser.rol) : ''} • CUIT: {currentUser?.cuit}
                     </p>
                   </>
                 )}
@@ -503,7 +494,7 @@ export default function UsuariosPage() {
                   )}<Form
                     form={form}
                     layout="vertical"
-                    initialValues={editingUser || { status: 1, id_rol: 3, tipo_descarga: 'CUENTA_CORRIENTE', notification_limit: 100 }}
+                    initialValues={editingUser || { status: 1, id_rol: 3, tipo_descarga: 'PREPAGO', limiteDescargas: 0, notification_limit: 100 }}
                   >
                     <Form.Item name="cuit" label="CUIT" rules={[{ required: true, message: 'Ingrese el CUIT' }]}>
                       <Input disabled={isMayorista} />
@@ -522,8 +513,17 @@ export default function UsuariosPage() {
                         options={isMayorista 
                           ? [{ value: 3, label: 'Distribuidor' }]
                           : !editingUser && (currentUser?.rol === 1 || currentUser?.rol === 5)
+                          ? currentUser?.rol === 1
                           ? [
-                              // Al crear usuario: Admin y Técnico NO pueden crear Admin ni Facturación
+                              // Admin puede crear cualquier rol incluyendo otro Admin y Facturación
+                              { value: 1, label: 'Administrador' },
+                              { value: 2, label: 'Mayorista' },
+                              { value: 3, label: 'Distribuidor' },
+                              { value: 4, label: 'Facturación' },
+                              { value: 5, label: 'Técnico' }
+                            ]
+                          : [
+                              // Técnico solo puede crear Mayorista, Distribuidor, Técnico
                               { value: 2, label: 'Mayorista' },
                               { value: 3, label: 'Distribuidor' },
                               { value: 5, label: 'Técnico' }
@@ -548,8 +548,8 @@ export default function UsuariosPage() {
                           { value: 3, label: 'Inactivo' }
                         ]}
                       />
-                    </Form.Item>                    <Form.Item name="limiteDescargas" label="Límite de Descargas" rules={[{ required: true }]}> 
-                      <Input type="number" min={1} />
+                    </Form.Item>                    <Form.Item name="limiteDescargas" label="Límite de Descargas" rules={[{ required: true }]}>
+                      <Input type="number" min={0} />
                     </Form.Item>
                       <Form.Item name="tipo_descarga" label="Tipo de Descarga" rules={[{ required: true, message: 'Seleccione el tipo de descarga' }]}>
                       <Select 
@@ -566,7 +566,7 @@ export default function UsuariosPage() {
                         allowClear 
                         placeholder="Seleccionar mayorista"
                         options={isMayorista 
-                          ? [{ value: currentUser.id_mayorista, label: currentUser.nombre_mayorista }]
+                          ? [{ value: currentUser?.id_mayorista, label: currentUser?.nombre }]
                           : [
                               { value: 1, label: 'SERSA' },
                               { value: 2, label: 'OLICART' },

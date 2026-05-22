@@ -11,12 +11,20 @@ build/
 #certs/
 .next/
 
-# Environment variables
+# Environment variables — NUNCA commitear archivos .env con secretos reales
 .env
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+.env.production
+.env.docker
+.env.local.docker
+backend/.env
+backend/.env.production
+backend/.env.docker
+frontend/.env.local
+frontend/.env.local.docker
 
 # Logs
 logs/
@@ -89,4 +97,9 @@ config/secrets.json
 # Logs de auditoría local
 logs/auditoria/
 logs/downloads/
-*.md
+
+# Docker overrides locales
+docker-compose.override.yml
+
+# Documentación histórica de sesiones (mover a _docs_historicos/ o eliminar)
+_docs_historicos/

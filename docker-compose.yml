@@ -1,0 +1,74 @@
+version: '3.9'
+
+services:
+  # ============================================================
+  # Base de datos PostgreSQL local (solo para desarrollo Docker)
+  # ============================================================
+  db:
+    image: postgres:15-alpine
+    container_name: sersa_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: db_sersa
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: sersa_local_dev
+    ports:
+      - '5433:5432'     # Puerto local 5433 para no conflictar con Postgres local
+    volumes:
+      - sersa_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d db_sersa']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # Backend NestJS
+  # ============================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: sersa_backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env.docker
+    ports:
+      - '3011:3001'
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3001/api/health || exit 1']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================
+  # Frontend Next.js
+  # ============================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        # Browser calls go to /api/* on the same origin (proxied by Next.js rewrite)
+        NEXT_PUBLIC_API_URL: http://localhost:3010/api
+        # Next.js server uses this to forward /api/* rewrites to the backend container
+        BACKEND_INTERNAL_URL: http://backend:3001
+    container_name: sersa_frontend
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3010/api
+      # Next.js server uses this to forward /api/* rewrites to the backend container
+      BACKEND_INTERNAL_URL: http://backend:3001
+    ports:
+      - '3010:3000'
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  sersa_pgdata:
+    driver: local

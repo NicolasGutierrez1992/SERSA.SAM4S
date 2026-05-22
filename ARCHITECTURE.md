@@ -1,527 +1,211 @@
-# System Architecture & Components
+# Arquitectura del Sistema — SERSA SAM4S
 
-## High-Level System Architecture
+## Stack tecnológico
+
+| Capa | Tecnología | Versión |
+|------|-----------|---------|
+| Frontend | Next.js (App Router) | 15.x |
+| Frontend UI | Ant Design + Tailwind CSS | antd 5.x |
+| Frontend HTTP | Axios (con `withCredentials`) | 1.x |
+| Backend | NestJS | 10.x |
+| Backend ORM | TypeORM | 0.3.x |
+| Base de datos | PostgreSQL | 15 |
+| Autenticación | JWT via cookie httpOnly | — |
+| Seguridad | Helmet, ThrottlerModule, bcrypt | — |
+| Integración externa | AFIP WSAA + WSCert (SOAP) | — |
+| Deploy frontend | Vercel | — |
+| Deploy backend | Railway | — |
+
+---
+
+## Flujo de autenticación
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          CLIENT LAYER                                   │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  Web Browser (Chrome, Firefox, Edge, Safari)                    │  │
-│  │  ├─ Port: localhost:3000                                        │  │
-│  │  ├─ Protocol: HTTP/HTTPS                                       │  │
-│  │  └─ Auth: JWT Token (stored in localStorage)                   │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    ↕ HTTP/REST
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      FRONTEND LAYER                                      │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  Next.js Application Server (Node.js)                           │  │
-│  │  ├─ Port: 3000                                                  │  │
-│  │  ├─ Framework: Next.js 13+ (App Router)                         │  │
-│  │  ├─ Styling: Tailwind CSS                                      │  │
-│  │  ├─ State: React Context API                                   │  │
-│  │  ├─ HTTP Client: Axios                                         │  │
-│  │  └─ Routes:                                                     │  │
-│  │      ├─ /login                                                  │  │
-│  │      ├─ /certificados (Historial tab fixed)                   │  │
-│  │      ├─ /usuarios                                              │  │
-│  │      ├─ /dashboard                                             │  │
-│  │      └─ /change-password                                       │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    ↕ HTTP/REST
-┌─────────────────────────────────────────────────────────────────────────┐
-│                       API LAYER                                          │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  NestJS Backend Server (Node.js)                                │  │
-│  │  ├─ Port: 3001                                                  │  │
-│  │  ├─ Framework: NestJS (TypeScript)                              │  │
-│  │  ├─ Architecture: Modular, Decorator-based                      │  │
-│  │  ├─ Validation: Class-validator                                 │  │
-│  │  ├─ Documentation: Swagger/OpenAPI                              │  │
-│  │  │                                                              │  │
-│  │  ├─ Main Modules:                                               │  │
-│  │  │  ├─ AuthModule (JWT strategy, Login)                        │  │
-│  │  │  ├─ UsersModule (CRUD operations)                           │  │
-│  │  │  ├─ CertificadosModule                                      │  │
-│  │  │  │  ├─ POST /descargar (Generate cert)                     │  │
-│  │  │  │  ├─ GET /descargar/:id/archivo (Download file) ← FIXED │  │
-│  │  │  │  ├─ GET /descargas (List downloads) ← FIXED             │  │
-│  │  │  │  ├─ PUT /descargas/:id/estado (Update status)           │  │
-│  │  │  │  └─ GET /metricas (User metrics)                        │  │
-│  │  │  ├─ DescargasModule (Download management)                   │  │
-│  │  │  ├─ AuditoriaModule (Logging)                               │  │
-│  │  │  └─ AfipModule (External AFIP integration)                  │  │
-│  │  │                                                              │  │
-│  │  └─ Global Middleware:                                          │  │
-│  │     ├─ CORS (Cross-Origin Resource Sharing)                    │  │
-│  │     ├─ JWT Authentication                                      │  │
-│  │     ├─ Logging                                                 │  │
-│  │     └─ Error Handling                                          │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    ↕ TypeORM
-┌─────────────────────────────────────────────────────────────────────────┐
-│                      DATA ACCESS LAYER                                   │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  TypeORM (ORM - Object-Relational Mapping)                      │  │
-│  │  ├─ Database: PostgreSQL                                        │  │
-│  │  ├─ Port: 5432                                                  │  │
-│  │  ├─ Connection: pooled (max 10 connections)                     │  │
-│  │  ├─ Migrations: Auto-enabled                                    │  │
-│  │  │                                                              │  │
-│  │  └─ Entity Models:                                              │  │
-│  │     ├─ User (id_usuario, cuit, nombre, mail, etc)             │  │
-│  │     ├─ Descarga (id_descarga, id_usuario, estadoMayorista) ← FIXED │  │
-│  │     ├─ Certificado (id_certificado, metadata, etc)            │  │
-│  │     ├─ Auditoria (log entries)                                │  │
-│  │     └─ Notificacion (notifications)                           │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    ↕ SQL
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    DATABASE LAYER                                        │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  PostgreSQL Relational Database                                  │  │
-│  │  ├─ Version: 12+                                                │  │
-│  │  ├─ Tables:                                                     │  │
-│  │  │  ├─ usuarios (users)                                         │  │
-│  │  │  ├─ descargas (13 records visible in Historial) ← FIXED    │  │
-│  │  │  ├─ certificados_v2 (PEM content storage)                   │  │
-│  │  │  ├─ auditoria (audit logs)                                 │  │
-│  │  │  └─ notificaciones (notifications)                          │  │
-│  │  │                                                              │  │
-│  │  ├─ Extensions:                                                 │  │
-│  │  │  └─ uuid-ossp (UUID generation)                             │  │
-│  │  │                                                              │  │
-│  │  └─ Key Indexes:                                               │  │
-│  │     ├─ descargas.id_descarga (PRIMARY KEY, UUID)              │  │
-│  │     ├─ descargas.id_usuario (FOREIGN KEY)                     │  │
-│  │     └─ descargas.created_at (sorting/filtering)               │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
-                                    ↕ HTTPS
-┌─────────────────────────────────────────────────────────────────────────┐
-│                  EXTERNAL SERVICES                                       │
-│  ┌──────────────────────────────────────────────────────────────────┐  │
-│  │  AFIP Services (Argentina Federal Tax Authority)                │  │
-│  │  ├─ WSAA (Web Services Authorization)                           │  │
-│  │  │  └─ Purpose: Get authentication tokens                       │  │
-│  │  │                                                              │  │
-│  │  └─ WSCERT (Web Services Certificates)                          │  │
-│  │     └─ Purpose: Generate fiscal certificates                   │  │
-│  │                                                                 │  │
-│  │  Note: Currently in PRODUCTION mode (real AFIP calls)          │  │
-│  └──────────────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────────────┘
+Browser                   Frontend (Next.js)         Backend (NestJS)
+  │                              │                         │
+  │── POST /login (CUIT+pwd) ───►│                         │
+  │                              │── POST /api/auth/login ►│
+  │                              │                         │── bcrypt.compare
+  │                              │                         │── JWT.sign
+  │                              │◄── 200 { user } ────────│
+  │                              │    Set-Cookie: auth_token=...; HttpOnly; Secure; SameSite=None
+  │◄── user_info cookie ─────────│
+  │    (no httpOnly, solo UI)    │
+  │                              │
+  │── GET /dashboard ───────────►│
+  │                              │── middleware: cookie auth_token presente?
+  │                              │   Sí → next()
+  │◄── 200 HTML ─────────────────│
+  │                              │
+  │── GET /api/certificados ────►│── withCredentials: true (cookie se envía auto)
+  │                              │── GET /api/certificados ─────────────────────►│
+  │                              │                                                │── JwtStrategy: lee cookie
+  │                              │                                                │── valida JWT
+  │                              │◄─────────────────── 200 datos ────────────────│
+  │◄── datos ───────────────────│
+```
+
+**Cookies:**
+- `auth_token` (httpOnly, Secure, SameSite=None en prod): contiene el JWT. Solo el servidor puede leerla.
+- `user_info` (no httpOnly, SameSite=Strict): contiene `{ id, nombre, rol }` para mostrar en UI sin fetch. Se regenera en cada login.
+
+**Cross-domain (Vercel ↔ Railway):** se usa `SameSite=None; Secure` porque los dominios son distintos. El backend configura `Access-Control-Allow-Credentials: true` y `Access-Control-Allow-Origin` con el dominio de Vercel.
+
+---
+
+## Flujo de generacion de certificados CRS (AFIP)
+
+```
+Admin/Distribuidor          Backend (NestJS)              AFIP (externo)
+       │                          │                              │
+       │── POST /certificados ───►│                              │
+       │   { marca, modelo,       │── AfipService.loginWsaa() ──►│
+       │     nro_serie }          │   (usa PFX de BD, encriptado)│── WSAA.LoginCms
+       │                          │◄── { token, sign } (12 hs) ──│
+       │                          │── (cache en memoria 12 hs)   │
+       │                          │                              │
+       │                          │── AfipService.generarCert() ─►│
+       │                          │   (token + sign + datos ctrl)│── WSCert.renovarCertificado
+       │                          │◄── certificado PEM ───────────│
+       │                          │
+       │                          │── guarda PEM en BD (descargas)
+       │                          │── registra descarga con estado PENDIENTE_FACTURAR
+       │◄── .pem descargado ──────│
+```
+
+**Prerequisitos (configurables desde `/dashboard/cert-archivos`):**
+- Certificado PFX de SERSA + contrasena → almacenado AES-256 en `certificados_maestro`
+- Root_RTI.txt (certificado raiz AFIP) → almacenado AES-256 en `afip_files`
+- `AFIP_CUIT`, `AFIP_WSAA_URL`, `AFIP_WSCERT_WSDL`, `AFIP_FABRICANTE` → tabla `app_settings`
+
+**Nombre del archivo generado:** `SE{Marca}{Modelo}{NroSerie_10digits}-{fecha}.pem`
+Ejemplo: `SESHIA0000001371-2025-08-22.pem`
+
+---
+
+## Módulos del backend
+
+```
+src/
+├── main.ts              Bootstrap: Helmet, cookie-parser, CORS, ValidationPipe,
+│                        ThrottlerModule, validación de secretos requeridos
+├── app.module.ts        TypeORM (synchronize=false en prod, SSL configurable),
+│                        ConfigModule global
+│
+├── auth/
+│   ├── auth.controller.ts    POST /login (setea cookie), POST /logout (borra cookie),
+│   │                         GET /me (devuelve payload JWT)
+│   ├── auth.service.ts       Valida credenciales, genera JWT, valida contraseña actual
+│   │                         en changePassword
+│   ├── strategies/
+│   │   └── jwt.strategy.ts   Lee token de cookie auth_token primero, luego Bearer header
+│   ├── guards/
+│   │   ├── auth.guards.ts    JwtAuthGuard
+│   │   └── roles.guard.ts    Verifica rol requerido (sin logs de PII)
+│   └── decorators/
+│       ├── roles.decorator.ts    @RequireAuthenticated(), @RequireAdmin()
+│       └── current-user.decorator.ts  @CurrentUser()
+│
+├── users/
+│   ├── users.service.ts    findAll usa findAndCount con WHERE SQL (no carga todos en memoria),
+│   │                       findByCuit sin dump de usuarios, min password 10 chars
+│   └── entities/
+│       ├── user.entity.ts
+│       └── mayorista.entity.ts
+│
+├── certificados/
+│   ├── certificados.controller.ts        POST /certificados (genera CRS via AFIP),
+│   │                                     GET /afip/status (validarConfiguracion real),
+│   │                                     Content-Disposition sanitizado, fileFilter MIME
+│   ├── certificado-maestro.controller.ts POST /certificados-maestro/upload (PFX + password),
+│   │                                     POST /certificados-maestro/upload-root-rti (Root_RTI.txt),
+│   │                                     GET /certificados-maestro/admin/status
+│   └── certificados.service.ts
+│
+├── descargas/           Historial de descargas por usuario
+├── afip/                Cliente SOAP para WSAA y WSCert
+│   └── afip.service.ts  validateConfiguration() verifica archivos y env vars
+├── auditoria/           Registro de acciones
+└── common/
+    ├── timezone.service.ts    Fechas en zona horaria Argentina
+    └── interceptors/
+        └── audit.interceptor.ts
 ```
 
 ---
 
-## Component Details
-
-### Frontend Component Architecture
+## Módulos del frontend
 
 ```
-Next.js App (:3000)
-├─ Middleware
-│  └─ Protected routes (JWT validation)
-├─
-├─ Layout Components
-│  ├─ Header (Navigation, User Menu)
-│  ├─ Sidebar (Menu)
-│  └─ Footer (Info)
+src/
+├── app/                     App Router de Next.js 15
+│   ├── login/page.tsx        Login con CUIT, llama a authApi.login()
+│   ├── dashboard/page.tsx    Panel principal
+│   ├── usuarios/page.tsx     CRUD de usuarios (usa getUser() de lib/api)
+│   ├── certificados/page.tsx Descarga de CRS, export Excel (exceljs)
+│   └── change-password/      Cambio obligatorio de contraseña
 │
-├─ Pages (App Router)
-│  ├─ /login
-│  │  └─ Login form with JWT token handling
-│  │
-│  ├─ /certificados ← MAIN FOCUS
-│  │  ├─ Tab: Descargar (Generate certificates)
-│  │  ├─ Tab: Historial (Download history) ← FIXED
-│  │  │   ├─ Filter form (date, status, etc)
-│  │  │   ├─ Certificate table
-│  │  │   └─ Download button (calls descargarArchivo) ← FIXED
-│  │  └─ Tab: Estados (Status updates)
-│  │
-│  ├─ /usuarios
-│  │  ├─ User list
-│  │  ├─ Create user form
-│  │  └─ Edit user form
-│  │
-│  ├─ /dashboard
-│  │  ├─ Statistics cards
-│  │  ├─ Charts
-│  │  └─ Recent activities
-│  │
-│  └─ /change-password
-│     └─ Password change form
+├── middleware.ts             Protección de rutas: si no hay cookie auth_token → /login
 │
-├─ API Services (lib/api.ts)
-│  ├─ certificadosApi.descargar() → POST
-│  ├─ certificadosApi.descargarArchivo() → GET ← FIXED
-│  ├─ certificadosApi.getHistorialDescargas() → GET ← FIXED
-│  ├─ certificadosApi.getMetricas() → GET
-│  ├─ usersApi.login() → POST
-│  └─ usersApi.getProfile() → GET
+├── contexts/
+│   └── AuthContext.tsx       Estado de usuario via getUser() de lib/api
 │
-├─ Context (State Management)
-│  ├─ AuthContext (logged-in user)
-│  ├─ NotificationContext (toast messages)
-│  └─ FilterContext (page filters)
+├── lib/
+│   └── api.ts               Axios con withCredentials:true, interceptor 401 → logout,
+│                            authApi.{login,logout,me}, getUser/setUser via js-cookie
 │
-└─ Types (lib/api.ts)
-   ├─ DescargaHistorial ✓ (id: string)
-   ├─ LoginResponse
-   ├─ User
-   └─ Metricas
-```
-
-### Backend Module Architecture
-
-```
-NestJS App (:3001)
-│
-├─ App Module (Root)
-│  ├─ Imports all feature modules
-│  ├─ Global middleware/pipes
-│  └─ Error handling
-│
-├─ Auth Module
-│  ├─ AuthService
-│  │  └─ login(cuit, password) → JWT token
-│  ├─ JwtStrategy
-│  │  └─ Validates JWT tokens
-│  └─ AuthController
-│     └─ POST /login
-│        POST /change-password
-│
-├─ Users Module
-│  ├─ UsersService
-│  │  ├─ findOne(id)
-│  │  ├─ findAll()
-│  │  ├─ create()
-│  │  └─ update()
-│  ├─ User Entity
-│  │  └─ id_usuario, cuit, nombre, mail, id_rol, id_mayorista
-│  └─ UsersController
-│     └─ GET /users
-│        POST /users
-│        PATCH /users/:id
-│        DELETE /users/:id
-│
-├─ Certificados Module ← MAIN FIX HERE
-│  ├─ CertificadosService
-│  │  └─ generarCertificado() → calls AFIP
-│  ├─ CertificadosController
-│  │  ├─ POST /descargar (Generate)
-│  │  ├─ GET /descargar/:downloadId/archivo (Download) ← FIXED
-│  │  ├─ GET /descargas (List) ← FIXED
-│  │  ├─ PUT /descargas/:id/estado (Update status)
-│  │  └─ GET /metricas (Statistics)
-│  └─ Entities
-│     └─ Certificado (id_certificado, metadata, etc)
-│
-├─ Descargas Module
-│  ├─ DescargasService ← TYPE CONVERSIONS HERE
-│  │  ├─ getDescargas(params) → with filtering
-│  │  ├─ registrarDescarga() → record download
-│  │  ├─ getCertificadoPem(descargaId) ← SIGNATURE FIXED
-│  │  └─ updateEstadoDescarga()
-│  ├─ Descarga Entity ← TYPES FIXED
-│  │  ├─ id_descarga: string (UUID) ← KEY FIX
-│  │  ├─ id_usuario: number
-│  │  ├─ estadoMayorista: string
-│  │  └─ estadoDistribuidor: string
-│  └─ DTO Folder
-│     ├─ descarga.dto.ts
-│     ├─ query-descargas.dto.ts ← NEW FILE
-│     └─ Other DTOs
-│
-├─ AFIP Module
-│  ├─ AfipService
-│  │  ├─ getToken() → WSAA
-│  │  ├─ generateCertificate() → WSCERT
-│  │  └─ verifyCertificate()
-│  └─ AfipController
-│     └─ GET /afip/status
-│
-├─ Auditoria Module
-│  ├─ AuditoriaService
-│  │  └─ log() → record user actions
-│  └─ Auditoria Entity
-│     └─ id_usuario, accion, recurso, fecha, etc
-│
-└─ Health Check
-   └─ GET /health
-      GET /api (API info)
+└── services/
+    └── api.ts               Re-export/adapter de lib/api.ts (compatibilidad)
 ```
 
 ---
 
-## Data Flow: Certificate Download (FIXED)
+## Roles y permisos
 
-### Step 1: User Initiates Download
-```
-User clicks download icon in Historial tab
-    ↓
-descarga.id extracted (UUID string: "550e8400-e29b-41d4-a716-446655440000")
-    ↓
-descargarArchivo(downloadId: string) called
-```
+| Rol | Valor | Puede crear usuarios | Ve usuarios | Puede editar |
+|-----|-------|----------------------|-------------|--------------|
+| Administrador | 1 | Todos los roles | Todos | Todo |
+| Mayorista | 2 | No | Solo sus distribuidores | Límites y tipo_descarga |
+| Distribuidor | 3 | No | Solo propio | Solo su perfil |
+| Facturación | 4 | No | Historial y facturas | No |
+| Técnico | 5 | Mayorista, Distribuidor, Técnico | Todos | Todo excepto cambiar rol |
 
-### Step 2: Frontend API Call
-```
-axios.get('/certificados/descargar/{uuid}/archivo', {
-  responseType: 'blob',
-  headers: {
-    Authorization: 'Bearer {token}'
-  }
-})
-    ↓
-GET http://localhost:3001/api/certificados/descargar/550e8400-e29b-41d4-a716-446655440000/archivo
-```
-
-### Step 3: Backend Route Matching
-```
-@Get('descargar/:downloadId/archivo') ← DECORATOR (WAS MISSING) ✓ FIXED
-    ↓
-NestJS Router matches request to route
-    ↓
-descargarArchivoPem(@Param('downloadId') downloadId: string) ← TYPE (WAS number) ✓ FIXED
-```
-
-### Step 4: Service Execution
-```
-getCertificadoPem(descargaId: string | number) ← SIGNATURE (WAS number) ✓ FIXED
-    ↓
-Query database:
-  SELECT * FROM descargas 
-  WHERE id_descarga = String(descargaId)
-    ↓
-Find associated certificate:
-  SELECT * FROM certificados_v2 
-  WHERE id_certificado = String(descarga.id_certificado)
-    ↓
-Extract PEM content from metadata
-```
-
-### Step 5: Response Generation
-```
-Response headers:
-  Content-Type: application/x-pem-file
-  Content-Disposition: attachment; filename="Certificado_CTRL001234_20241209.pem"
-    ↓
-Response body: PEM file content
-    ↓
-HTTP 200 OK ✓ (was 404 ✗)
-```
-
-### Step 6: Browser Download
-```
-Browser receives blob data
-    ↓
-Save to Downloads folder
-    ↓
-User gets file successfully ✓
-```
+Los técnicos (rol 5) se crean siempre con `id_mayorista = 1` (SERSA).
 
 ---
 
-## Database Schema (Key Tables)
+## Base de datos
 
-### descargas Table
-```sql
-CREATE TABLE descargas (
-  id_descarga UUID PRIMARY KEY DEFAULT uuid_generate_v4(),  -- ✓ FIXED: UUID type
-  id_usuario INTEGER NOT NULL REFERENCES usuarios(id_usuario),
-  id_certificado UUID REFERENCES certificados_v2(id_certificado),
-  certificado_nombre TEXT,
-  estadoMayorista TEXT DEFAULT 'Pendiente de Facturar',
-  estadoDistribuidor TEXT DEFAULT 'Pendiente de Facturar',
-  fecha_facturacion TIMESTAMP,
-  tamaño INTEGER,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+TypeORM con `synchronize: false` en producción. Los cambios de esquema se manejan con migraciones:
 
--- Indexes
-CREATE INDEX idx_descargas_usuario ON descargas(id_usuario);
-CREATE INDEX idx_descargas_created ON descargas(created_at);
+```bash
+# Generar migración desde cambios en entidades
+cd backend
+npm run migration:generate -- src/migrations/NombreMigracion -d src/data-source.ts
+
+# Ejecutar migraciones pendientes
+npm run migration:run -- -d src/data-source.ts
+
+# Revertir última migración
+npm run migration:revert -- -d src/data-source.ts
 ```
 
-### usuarios Table
-```sql
-CREATE TABLE usuarios (
-  id_usuario SERIAL PRIMARY KEY,
-  cuit VARCHAR(11) UNIQUE NOT NULL,
-  nombre VARCHAR(255) NOT NULL,
-  mail VARCHAR(255),
-  contraseña VARCHAR(255),
-  id_rol INTEGER,
-  id_mayorista INTEGER,
-  limite_descargas INTEGER DEFAULT 5,
-  activo BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-### certificados_v2 Table
-```sql
-CREATE TABLE certificados_v2 (
-  id_certificado UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  metadata TEXT,  -- Contains PEM content
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+**Tablas principales:** `usuarios`, `mayoristas`, `descargas`, `auditoria`, `afip_files`
 
 ---
 
-## API Endpoints (Simplified View)
+## Seguridad por capa
 
-### Authentication
-```
-POST /api/auth/login
-POST /api/auth/change-password
-POST /api/auth/reset-password/:userId
-```
-
-### Certificate Management ← FOCUS AREA
-```
-POST   /api/certificados/descargar (Generate)
-GET    /api/certificados/descargar/:downloadId/archivo ← FIXED
-GET    /api/certificados/descargas ← FIXED
-GET    /api/certificados/descargas/usuario/:usuarioId
-GET    /api/certificados/descargas/mayorista/:mayoristaId
-PUT    /api/certificados/descargas/:downloadId/estado
-GET    /api/certificados/metricas
-GET    /api/certificados/afip/status
-```
-
-### User Management
-```
-GET    /api/users
-POST   /api/users
-GET    /api/users/:id
-PATCH  /api/users/:id
-DELETE /api/users/:id
-```
-
-### Audit & Monitoring
-```
-GET    /api/auditoria
-GET    /api/auditoria/statistics
-POST   /api/auditoria/cleanup
-```
-
----
-
-## Environment Configuration
-
-### Backend (.env)
-```
-DATABASE_HOST=localhost
-DATABASE_PORT=5432
-DATABASE_NAME=sersa
-DATABASE_USER=postgres
-DATABASE_PASSWORD=password
-
-JWT_SECRET=your-secret-key
-JWT_EXPIRATION=1h
-
-AFIP_MODE=PRODUCTION
-AFIP_CERT_PATH=./certs/certificado.pfx
-AFIP_CERT_PASS=password
-```
-
-### Frontend (.env.local)
-```
-NEXT_PUBLIC_API_URL=http://localhost:3001/api
-```
-
----
-
-## Technology Stack
-
-### Frontend
-- **Runtime:** Node.js 18+
-- **Framework:** Next.js 13+ (App Router)
-- **Language:** TypeScript
-- **Styling:** Tailwind CSS
-- **HTTP Client:** Axios
-- **State:** React Context API
-- **UI Components:** Custom + Tailwind
-
-### Backend
-- **Runtime:** Node.js 18+
-- **Framework:** NestJS
-- **Language:** TypeScript
-- **Database ORM:** TypeORM
-- **Database:** PostgreSQL 12+
-- **Validation:** class-validator
-- **API Docs:** Swagger/OpenAPI
-- **Authentication:** JWT
-
-### External
-- **AFIP Web Services:** WSAA + WSCERT
-- **Certificate:** X.509 (PKCS#12)
-
----
-
-## Deployment Architecture
-
-```
-┌─────────────────────────────────────┐
-│     Cloud/Server Environment        │
-├─────────────────────────────────────┤
-│                                     │
-│  ┌──────────────────────────────┐  │
-│  │  Frontend (Next.js)          │  │
-│  │  PORT: 3000                  │  │
-│  └──────────────────────────────┘  │
-│           ↕                         │
-│  ┌──────────────────────────────┐  │
-│  │  Backend (NestJS)            │  │
-│  │  PORT: 3001                  │  │
-│  └──────────────────────────────┘  │
-│           ↕                         │
-│  ┌──────────────────────────────┐  │
-│  │  PostgreSQL Database         │  │
-│  │  PORT: 5432                  │  │
-│  └──────────────────────────────┘  │
-│                                     │
-│  Plus external AFIP connectivity   │
-│                                     │
-└─────────────────────────────────────┘
-```
-
----
-
-## Key Improvements Made
-
-### 1. Route Registration ✓
-- **Before:** Route not registered in routing table
-- **After:** Properly registered with @Get decorator
-- **Impact:** Route now accessible to frontend
-
-### 2. Type Safety ✓
-- **Before:** Parameter typed as `number`
-- **After:** Parameter typed as `string` (matches UUID)
-- **Impact:** No type mismatches between layers
-
-### 3. Service Compatibility ✓
-- **Before:** Service expected `number` parameter
-- **After:** Service accepts `string | number`
-- **Impact:** Flexible input handling
-
-### 4. Error Handling ✓
-- **Before:** No specific error messages
-- **After:** Detailed error logging and messages
-- **Impact:** Easier debugging and support
-
----
-
-**Document Version:** 1.0  
-**Last Updated:** December 9, 2025  
-**Status:** ✅ Complete and Verified
+| Capa | Medida |
+|------|--------|
+| Red | HTTPS obligatorio en producción (Vercel + Railway) |
+| HTTP headers | Helmet (CSP, HSTS, X-Frame-Options, etc.) |
+| Auth | Cookie httpOnly, SameSite=None en prod |
+| Auth fuerza bruta | ThrottlerModule: 5 intentos/min en `/auth/login` |
+| Contraseñas | bcrypt rounds=12, mínimo 10 chars + complejidad |
+| Uploads | MIME filter (.pfx / .txt), límite 5 MB |
+| Logs | Sin PII (sin CUITs, emails ni tokens en logs) |
+| Secretos | Validación al arrancar: falla si JWT_SECRET / ENCRYPTION_KEY / DB_PASSWORD no están |
+| TypeORM | synchronize=false en producción |
+| Swagger | Solo disponible cuando NODE_ENV != production |
+| SSL DB | Configurable vía DB_SSL y DB_SSL_REJECT_UNAUTHORIZED |

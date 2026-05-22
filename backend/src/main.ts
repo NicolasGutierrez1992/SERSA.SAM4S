@@ -1,26 +1,41 @@
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { NestFactory, NestApplication } from '@nestjs/core';
+import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import helmet from 'helmet';
+import * as cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { TimezoneService } from './common/timezone.service';
 
+const logger = new Logger('Bootstrap');
+
+function validateRequiredEnv(): void {
+  const required = ['JWT_SECRET', 'ENCRYPTION_KEY', 'DB_PASSWORD'];
+  const missing = required.filter((key) => !process.env[key]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Variables de entorno requeridas no configuradas: ${missing.join(', ')}. ` +
+        'Configúralas en Railway (producción) o en backend/.env.docker (local).',
+    );
+  }
+}
+
 async function bootstrap() {
+  validateRequiredEnv();
+
   const app = await NestFactory.create(AppModule);
-  
-  // Inicializar TimezoneService para logs
   const timezoneService = new TimezoneService();
+  const isProduction = process.env.NODE_ENV === 'production';
 
-  // Configurar CORS - Usar variable de entorno o defaults
+  // Headers de seguridad HTTP
+  app.use(helmet());
+
+  // Parseo de cookies (requerido para auth httpOnly)
+  app.use(cookieParser());
+
+  // CORS
   const corsOrigins = process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map(url => url.trim())
-    : [
-        'http://localhost:3000',
-        'http://127.0.0.1:3000',
-        'https://sersa-certs-frontend.vercel.app',
-        process.env.FRONTEND_URL || 'http://localhost:3000'
-      ];
-
-  console.log('🔐 CORS origins configured:', corsOrigins);
+    ? process.env.CORS_ORIGINS.split(',').map((url) => url.trim())
+    : ['http://localhost:3000', 'http://127.0.0.1:3000'];
 
   app.enableCors({
     origin: corsOrigins,
@@ -30,50 +45,43 @@ async function bootstrap() {
     optionsSuccessStatus: 200,
   });
 
-  // Configurar prefijo global para todas las rutas
   app.setGlobalPrefix('api');
 
-  // Configurar validación global
-  app.useGlobalPipes(new ValidationPipe({
-    transform: true,
-    whitelist: true,
-    forbidNonWhitelisted: true,
-  }));
-  // Configurar Swagger
-  const config = new DocumentBuilder()
-    .setTitle('SERSA API')
-    .setDescription('Sistema de gestión de certificados CRS - PRODUCCIÓN')
-    .setVersion('1.0.0')
-    .addBearerAuth()
-    .addTag('Health Check', 'Endpoints de estado del sistema')
-    .addTag('Certificados CRS', 'Gestión de certificados AFIP')
-    .addTag('Usuarios', 'Gestión de usuarios y roles')
-    .addTag('Auditoría', 'Logs y trazabilidad del sistema')
-    .build();
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true,
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
+
+  // Swagger — solo en entornos no-productivos
+  if (!isProduction) {
+    const config = new DocumentBuilder()
+      .setTitle('SERSA API')
+      .setDescription('Sistema de gestión de certificados CRS')
+      .setVersion('1.0.0')
+      .addBearerAuth()
+      .addCookieAuth('auth_token')
+      .addTag('Health Check', 'Endpoints de estado del sistema')
+      .addTag('Certificados CRS', 'Gestión de certificados AFIP')
+      .addTag('Usuarios', 'Gestión de usuarios y roles')
+      .addTag('Auditoría', 'Logs y trazabilidad del sistema')
+      .build();
     const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, document, {
-    customSiteTitle: 'SERSA API Documentation',
-    explorer: true,
-  });
+    SwaggerModule.setup('api/docs', app, document, {
+      customSiteTitle: 'SERSA API Documentation',
+    });
+    logger.log('Swagger disponible en /api/docs (solo en desarrollo)');
+  }
+
   const port = process.env.PORT || 3001;
   await app.listen(port);
-  
-  // Obtener hora en zona horaria de Argentina para los logs
+
   const horaArgentina = timezoneService.formatDateTimeFull(new Date());
-  
-  console.log(`\n🚀 SERSA Backend running on: http://localhost:${port}/api`);
-  console.log(`📚 API Documentation: http://localhost:${port}/api/docs`);
-  console.log(`💡 Health Check: http://localhost:${port}/api/health`);
-  console.log(`✅ Running in PRODUCTION mode with real AFIP integration`);
-  console.log(`🕐 Hora del servidor (Argentina): ${horaArgentina}`);
-  
-  // Verificar conexión a BD
-  console.log('\n📊 DATABASE STATUS');
-  console.log('=====================================');
-  console.log(`✓ TypeORM synchronize is ENABLED`);
-  console.log(`✓ Tablas se crearán automáticamente en la BD`);
-  console.log(`✓ Esquema NO será eliminado (dropSchema: false)`);
-  console.log('=====================================\n');
+  logger.log(`Backend corriendo en puerto ${port}`);
+  logger.log(`Entorno: ${process.env.NODE_ENV}`);
+  logger.log(`Hora Argentina: ${horaArgentina}`);
 }
 
 bootstrap();

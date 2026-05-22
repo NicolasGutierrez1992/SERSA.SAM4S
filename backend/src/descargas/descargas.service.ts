@@ -107,7 +107,7 @@ export class DescargasService {
     if (!mayorista || mayorista.notification_limit === null || mayorista.notification_limit === undefined) {
       this.logger.warn(`No se encontró notification_limit para mayorista ${mayoristaId}, usando default`);
       //obtengo la app-seting configurada para notification_limit en la base de datos
-      const notificationLimit = await this.appSettingsService.obtenerSetting('DEFAULT_NOTIFICATION_LIMIT').catch(() => undefined);
+      const notificationLimit = await this.appSettingsService.obtenerSetting('NOTIFICATION_LIMIT').catch(() => undefined);
       const parsed = notificationLimit !== undefined ? parseInt(notificationLimit, 10) : NaN;
       if (Number.isNaN(parsed)) return 100;
       return parsed;
@@ -456,9 +456,13 @@ export class DescargasService {
       throw new ForbiddenException(`${rolName} no pueden cambiar estados de descargas`);
     }
 
+    // Estados que liberan deuda (garantia/bonificado): permiten modificar incluso PREPAGO SERSA
+    const esEstadoLibreDeuda = nuevoEstado.estadoMayorista === EstadoDescarga.GARANTIA
+      || nuevoEstado.estadoMayorista === EstadoDescarga.BONIFICADO;
+
     // ⭐ NUEVA LÓGICA: Bloqueo selectivo de PREPAGO
-    // Caso 1: PREPAGO de SERSA (mayorista = 1) - Bloquear AMBOS estados
-    if (descarga.tipo_descarga === 'PREPAGO' && idMayorista === 1) {
+    // Caso 1: PREPAGO de SERSA (mayorista = 1) - Bloquear AMBOS estados (excepto Garantia/Bonificado)
+    if (descarga.tipo_descarga === 'PREPAGO' && idMayorista === 1 && !esEstadoLibreDeuda) {
       throw new ForbiddenException(
         'No se puede modificar estados de descargas PREPAGO de SERSA. El estado PREPAGO es definitivo e inmutable.'
       );
@@ -530,6 +534,13 @@ export class DescargasService {
 
     // Guardar cambios
     const updatedDescarga = await this.descargaRepository.save(descarga);
+
+    // Restaurar límite para usuarios PREPAGO cuando se marca Garantia o Bonificado
+    if (esEstadoLibreDeuda && descarga.tipo_descarga === 'PREPAGO') {
+      const userRepository = this.descargaRepository.manager.getRepository(User);
+      await userRepository.increment({ id_usuario: descarga.id_usuario }, 'limite_descargas', 1);
+      this.logger.log(`[updateEstadoDescarga] Límite restaurado +1 para usuario PREPAGO ${descarga.id_usuario} (estado: ${nuevoEstado.estadoMayorista})`);
+    }
 
     // Registrar en auditoría
     await this.auditoriaService.log(

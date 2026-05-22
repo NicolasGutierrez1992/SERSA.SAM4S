@@ -20,11 +20,11 @@ export class AfipFile {
   @Column({ type: 'varchar', length: 20 })
   file_type: string;
 
-  @ApiProperty({ 
-    description: 'Datos del archivo en formato binario',
+  @ApiProperty({
+    description: 'Datos del archivo encriptados con AES-256 en base64',
   })
-  @Column({ type: 'bytea' })
-  file_data: Buffer;
+  @Column({ type: 'text' })
+  file_data: string;
 
   @ApiProperty({ 
     description: 'Nombre original del archivo',

@@ -12,8 +12,6 @@ import {
   HttpStatus,
   HttpCode,
   ForbiddenException,
-  UseInterceptors,
-  UploadedFiles,
   Logger
 } from '@nestjs/common';
 import { 
@@ -41,9 +39,6 @@ import { QueryDescargasDto } from '../descargas/dto/query-descargas.dto';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/dto/user.dto';
 import { EstadoDescarga, IDescarga } from '../shared/types';
-import { FileFieldsInterceptor } from '@nestjs/platform-express';
-import { memoryStorage } from 'multer';
-import * as path from 'path';
 
 @ApiTags('Certificados CRS')
 @Controller('certificados')
@@ -141,9 +136,10 @@ export class CertificadosController {
     );
 
    
+    const safeName = (archivo.filename ?? 'certificado').replace(/[^a-zA-Z0-9._-]/g, '_');
     res.set({
       'Content-Type': archivo.contentType,
-      'Content-Disposition': `attachment; filename="${archivo.filename}"`
+      'Content-Disposition': `attachment; filename="${safeName}"`,
     });
 
     res.send(archivo.content);
@@ -353,14 +349,14 @@ export class CertificadosController {
     }  
   })  @RequireAuthenticated()
   async getAfipStatus() {
-    // Implementar verificación real de estado AFIP
-    // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
+    const validation = await this.certificadosService.validarConfiguracion();
+    const statusValue = validation.valid ? 'configured' : 'error';
     return {
-      wsaa: 'online',
-      wscert: 'online', 
-      config_valid: true,
-      errors: [],
-      last_check: new Date().toISOString()
+      config_valid: validation.valid,
+      errors: validation.errors,
+      wsaa: statusValue,
+      wscert: statusValue,
+      last_check: new Date().toISOString(),
     };
   }
 
@@ -543,19 +539,4 @@ export class CertificadosController {
       };
     }
   }
-  @Post('upload')
-@ApiOperation({ summary: 'Actualizar archivos de certificados', description: 'Permite a un administrador subir los archivos certificado.pfx, pwrCst.txt y Root_RTI.txt' })
-@ApiResponse({ status: 200, description: 'Archivos actualizados correctamente' })
-@RequireAdmin()
-@UseInterceptors(FileFieldsInterceptor([
-  { name: 'certificado', maxCount: 1 },
-  { name: 'pwrCst', maxCount: 1 },
-  { name: 'rootRti', maxCount: 1 },
-], {
-  storage: memoryStorage(),
-}))
-async uploadCertFiles(@UploadedFiles() files: { certificado?: any[], pwrCst?: any[], rootRti?: any[] }) {
-  await this.certificadosService.guardarArchivosCert(files);
-  return { message: 'Archivos actualizados correctamente' };
-}
 }

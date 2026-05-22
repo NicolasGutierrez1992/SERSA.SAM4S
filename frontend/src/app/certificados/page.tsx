@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {authApi, getUser, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales } from '@/lib/api';
+import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales } from '@/lib/api';
 import Image from 'next/image';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 export default function CertificadosPage() {
   const [user, setUser] = useState<any>(null);
@@ -184,18 +184,18 @@ export default function CertificadosPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const userData = getUser();
-    if (!userData) {
-      router.push('/login');
-      return;
-    }
-    setUser(userData);
-    setLoading(false);
-    loadMetricas();
-    // Solo setFiltros si es distribuidor, sin llamar a loadHistorial aquí
-    if (activeTab === 'historial' && userData.rol === 3) {
-      setFiltros(f => ({ ...f, cuit: userData.cuit, idMayorista: String(userData.id_mayorista) }));
-    }
+    authApi.me()
+      .then((userData: any) => {
+        setUser(userData);
+        setLoading(false);
+        loadMetricas();
+        if (activeTab === 'historial' && userData.rol === 3) {
+          setFiltros(f => ({ ...f, cuit: userData.cuit, idMayorista: String(userData.id_mayorista) }));
+        }
+      })
+      .catch(() => {
+        router.push('/login');
+      });
   }, [router]);
 
   // ⭐ DEBUG: Verificar tipo_descarga del usuario
@@ -531,6 +531,8 @@ export default function CertificadosPage() {
       case 'Pendiente de Facturar': return 'bg-yellow-100 text-yellow-800';
       case 'Facturado': return 'bg-blue-100 text-blue-800';
       case 'Cobrado': return 'bg-green-100 text-green-800';
+      case 'Garantia': return 'bg-purple-100 text-purple-800';
+      case 'Bonificado': return 'bg-orange-100 text-orange-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -970,7 +972,7 @@ export default function CertificadosPage() {
                 <h3 className="text-lg font-medium text-gray-900 mb-6">
                   Historial de Descargas
                 </h3>                <button
-                  onClick={() => {                    // Generar datos para Excel
+                  onClick={async () => {                    // Generar datos para Excel
                     const data = historial.map((descarga) => {
                       const baseData: Record<string, any> = {
                         Controlador: descarga.controladorId || descarga.certificadoNombre || '',
@@ -990,10 +992,26 @@ export default function CertificadosPage() {
 
                       return baseData;
                     });
-                    const ws = XLSX.utils.json_to_sheet(data);
-                    const wb = XLSX.utils.book_new();
-                    XLSX.utils.book_append_sheet(wb, ws, 'Historial');
-                    XLSX.writeFile(wb, 'historial_certificados.xlsx');
+                    const workbook = new ExcelJS.Workbook();
+                    const sheet = workbook.addWorksheet('Historial');
+                    if (data.length > 0) {
+                      sheet.columns = Object.keys(data[0]).map(key => ({
+                        header: key,
+                        key,
+                        width: 20,
+                      }));
+                      data.forEach(row => sheet.addRow(row));
+                    }
+                    const buffer = await workbook.xlsx.writeBuffer();
+                    const blob = new Blob([buffer], {
+                      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'historial_certificados.xlsx';
+                    a.click();
+                    URL.revokeObjectURL(url);
                   }}
                   className="mb-4 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded shadow"
                 >                  Exportar a Excel
@@ -1092,6 +1110,8 @@ export default function CertificadosPage() {
                         <option value="Pendiente de Facturar">Pendiente de Facturar</option>
                         <option value="Facturado">Facturado</option>
                         <option value="Cobrado">Cobrado</option>
+                        <option value="Garantia">Garantia</option>
+                        <option value="Bonificado">Bonificado</option>
                       </select>
                     ) : (
                       // ROL 2 (Mayorista) y ROL 3 (Distribuidor): Filtrar por EstadoDistribuidor
@@ -1105,6 +1125,8 @@ export default function CertificadosPage() {
                         <option value="Pendiente de Facturar">Pendiente de Facturar</option>
                         <option value="Facturado">Facturado</option>
                         <option value="Cobrado">Cobrado</option>
+                        <option value="Garantia">Garantia</option>
+                        <option value="Bonificado">Bonificado</option>
                       </select>
                     )}
                   </div>
@@ -1203,14 +1225,26 @@ export default function CertificadosPage() {
                                           {(user?.rol === 1 || user?.rol === 4) && (
                                             <div>
                                               {(descarga.usuario?.id_mayorista === 1 && descarga.tipoDescarga === "PREPAGO") ? (
-                                                <div className="p-3 bg-red-50 border border-red-200 rounded">
-                                                  <p className="text-xs font-semibold text-red-700">
-                                                    ⚠️ Distri SERSA - PREPAGO - No modificable
-                                                  </p>
-                                                  <p className="text-xs text-red-600 mt-1">
-                                                    No se puede modificar el estado de descargas para PREPAGO DE SERSA.
-                                                  </p>
-                                                </div>
+                                                <>
+                                                  <label className="block text-xs font-semibold text-gray-700 mb-2">
+                                                    Cambiar Estado:
+                                                  </label>
+                                                  <select
+                                                    onChange={(e) => {
+                                                      const nuevoEstado = e.target.value;
+                                                      if (nuevoEstado !== descarga.estadoMayorista) {
+                                                        handleEstadoChange(descarga.id, nuevoEstado, user.rol, descarga.usuarioId, descarga.tipoDescarga || undefined, descarga.usuario?.id_mayorista);
+                                                        e.target.value = descarga.estadoMayorista;
+                                                      }
+                                                    }}
+                                                    className="mt-1 text-xs border border-gray-300 rounded px-2 py-1 w-full hover:border-indigo-500 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                                                    value={descarga.estadoMayorista}
+                                                  >
+                                                    <option value={descarga.estadoMayorista}>{descarga.estadoMayorista}</option>
+                                                    <option value="Garantia">Garantia</option>
+                                                    <option value="Bonificado">Bonificado</option>
+                                                  </select>
+                                                </>
                                               ) : (
                                                 <>
                                                   <label className="block text-xs font-semibold text-gray-700 mb-2">
@@ -1232,6 +1266,8 @@ export default function CertificadosPage() {
                                                     <option value="Pendiente de Facturar">Pendiente de Facturar</option>
                                                     <option value="Facturado">Facturado</option>
                                                     <option value="Cobrado">Cobrado</option>
+                                                    <option value="Garantia">Garantia</option>
+                                                    <option value="Bonificado">Bonificado</option>
                                                   </select>
                                                 </>
                                               )}

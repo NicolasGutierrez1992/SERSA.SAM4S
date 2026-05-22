@@ -31,10 +31,13 @@ export default function ChangePasswordPage() {
         <div className="bg-white rounded-lg shadow-lg p-8">
           <h2 className="text-2xl font-bold mb-6 text-center">Cambiar Contraseña</h2>
           <Form form={form} layout="vertical" onFinish={handleSubmit}>
-            <Form.Item name="newPassword" label="Nueva contraseña" rules={[{ required: true, message: 'Ingrese la nueva contraseña' }, { min: 6, message: 'Mínimo 6 caracteres' }]}> 
+            <Form.Item name="currentPassword" label="Contraseña actual" rules={[{ required: true, message: 'Ingrese su contraseña actual' }]}>
               <Input.Password />
             </Form.Item>
-            <Form.Item name="confirmPassword" label="Confirmar nueva contraseña" dependencies={["newPassword"]} rules={[{ required: true, message: 'Confirme la nueva contraseña' }, ({ getFieldValue }) => ({ validator(_, value) { if (!value || getFieldValue('newPassword') === value) { return Promise.resolve(); } return Promise.reject('Las contraseñas no coinciden'); } })]}> 
+            <Form.Item name="newPassword" label="Nueva contraseña" rules={[{ required: true, message: 'Ingrese la nueva contraseña' }, { min: 10, message: 'Mínimo 10 caracteres' }]}>
+              <Input.Password />
+            </Form.Item>
+            <Form.Item name="confirmPassword" label="Confirmar nueva contraseña" dependencies={["newPassword"]} rules={[{ required: true, message: 'Confirme la nueva contraseña' }, ({ getFieldValue }) => ({ validator(_, value) { if (!value || getFieldValue('newPassword') === value) { return Promise.resolve(); } return Promise.reject('Las contraseñas no coinciden'); } })]}>
               <Input.Password />
             </Form.Item>
             <Button type="primary" htmlType="submit" loading={loading} className="w-full mt-4" style={{ background: '#6366f1', borderColor: '#6366f1' }}>Cambiar contraseña</Button>

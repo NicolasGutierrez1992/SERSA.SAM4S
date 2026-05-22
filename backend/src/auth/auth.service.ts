@@ -24,15 +24,11 @@ export class AuthService {
     }
 
     try {
-      // Logs adicionales para depuración de comparación de passwords (sin datos sensibles)
-      console.log('[AuthService][validateUser] Comparando contraseña recibida con hash almacenado.');
       const isPasswordValid = await bcrypt.compare(password, user.password);
-      console.log('[AuthService][validateUser] Resultado bcrypt.compare:', isPasswordValid ? 'MATCH' : 'NO_MATCH');
       if (!isPasswordValid) {
         return null;
       }
-    } catch (err) {
-      console.error('[AuthService][validateUser] Error en bcrypt.compare:', err);
+    } catch {
       return null;
     }
 
@@ -76,34 +72,27 @@ export class AuthService {
   
   async changePassword(userId: number, changePasswordDto: ChangePasswordDto): Promise<void> {
     const user = await this.usersService.findOne(userId);
-    
-    // Obtener el usuario completo con password para validación
     const fullUser = await this.usersService.findByCuit(user.cuit);
-    
-    // Verificar que la nueva contraseña sea diferente
+
+    // Validar contraseña actual
+    const isCurrentValid = await bcrypt.compare(
+      changePasswordDto.currentPassword,
+      fullUser.password,
+    );
+    if (!isCurrentValid) {
+      throw new UnauthorizedException('Contraseña actual incorrecta');
+    }
+
+    // La nueva contraseña debe ser diferente a la actual
     const isSamePassword = await bcrypt.compare(
       changePasswordDto.newPassword,
-      fullUser.password
+      fullUser.password,
     );
-    
     if (isSamePassword) {
       throw new BadRequestException('La nueva contraseña debe ser diferente a la actual');
     }
 
-    // Actualizar contraseña
     await this.usersService.updatePassword(userId, changePasswordDto.newPassword, false);
   }
 
-  async resetPassword(userId: number, newPassword: string): Promise<void> {
-    // Solo administradores pueden resetear contraseñas
-    await this.usersService.updatePassword(userId, newPassword, true);
-  }
-
-  async verifyToken(token: string): Promise<JwtPayload> {
-    try {
-      return this.jwtService.verify(token);
-    } catch (error) {
-      throw new UnauthorizedException('Token inválido');
-    }
-  }
 }
