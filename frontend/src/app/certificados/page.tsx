@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales } from '@/lib/api';
 import Image from 'next/image';
 import ExcelJS from 'exceljs';
+import { message } from 'antd';
 
 export default function CertificadosPage() {
   const [user, setUser] = useState<any>(null);
@@ -388,7 +389,7 @@ export default function CertificadosPage() {
       await validarLimiteDescargas();
       await loadMetricas();
       
-      alert('¡Certificado descargado exitosamente!');
+      message.success('Certificado descargado exitosamente');
       
     } catch (error: any) {
       console.error('Error en descarga:', error);
@@ -415,7 +416,7 @@ export default function CertificadosPage() {
       
       // Técnico (5): No puede cambiar nada
       if (rol === 5) {
-        alert('Los técnicos no pueden cambiar estados de descargas.');
+        message.warning('Los técnicos no pueden cambiar estados de descargas.');
         return;
       }
       
@@ -454,7 +455,7 @@ export default function CertificadosPage() {
       if (rol === 2) {
         // Mayorista NO puede cambiar estado si la descarga es PREPAGO
         if (tipoDescarga === 'PREPAGO') {
-          alert('No se puede modificar el estado de descargas PREPAGO. El estado es definitivo.');
+          message.warning('No se puede modificar el estado de descargas PREPAGO. El estado es definitivo.');
           return;
         }
         
@@ -468,13 +469,13 @@ export default function CertificadosPage() {
       
       // Distribuidor (3): No puede cambiar nada
       if (rol === 3) {
-        alert('Los distribuidores no pueden cambiar estados de descargas.');
+        message.warning('Los distribuidores no pueden cambiar estados de descargas.');
         return;
       }
       
     } catch (error) {
       console.error('Error cambiando estado:', error);
-      alert('Error al cambiar estado');
+      message.error('Error al cambiar estado');
     }
   };
   const handleConfirmarFacturacion = async () => {
@@ -511,7 +512,7 @@ export default function CertificadosPage() {
       //alert('Estado actualizado correctamente');
     } catch (error) {
       console.error('Error al confirmar facturación:', error);
-      alert('Error al actualizar estado');
+      message.error('Error al actualizar estado');
     } finally {
       setFacturaLoading(false);
     }
@@ -1430,7 +1431,7 @@ export default function CertificadosPage() {
                                           document.body.removeChild(link);
                                           window.URL.revokeObjectURL(url);
                                         } catch (error) {
-                                          alert('Error al descargar archivo');
+                                          message.error('Error al descargar archivo');
                                         }
                                       }}
                                       className={`text-indigo-600 hover:text-indigo-900 ${!esUltimo ? 'opacity-40 cursor-not-allowed' : ''}`}
