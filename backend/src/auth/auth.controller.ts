@@ -38,7 +38,9 @@ export class AuthController {
     const ip = (req as any).ip || (req as any).connection?.remoteAddress;
     const result = await this.authService.login(loginDto, ip);
 
-    // El token JWT viaja en cookie httpOnly para protección XSS
+    // El token JWT viaja en cookie httpOnly para protección XSS (mismo dominio)
+    // y también se devuelve en el body para que frontends cross-domain puedan
+    // enviarlo vía Authorization: Bearer (cuando las cookies cross-site son bloqueadas).
     res.cookie('auth_token', (result as any).access_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -47,7 +49,7 @@ export class AuthController {
       path: '/',
     });
 
-    return { user: result.user };
+    return { user: result.user, access_token: (result as any).access_token };
   }
 
   @Post('logout')

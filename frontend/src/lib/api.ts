@@ -119,6 +119,15 @@ const api = axios.create({
   },
 });
 
+// Interceptor de request — adjuntar token cuando las cookies cross-site están bloqueadas
+api.interceptors.request.use((config) => {
+  const token = getSessionToken();
+  if (token && !config.headers['Authorization']) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Interceptor de respuesta — manejo de 401
 api.interceptors.response.use(
   (response: AxiosResponse) => response,
@@ -136,6 +145,7 @@ api.interceptors.response.use(
 // ─── Cookie helpers (user_info — no httpOnly, solo datos de display) ─────────
 
 const USER_COOKIE = 'user_info';
+const TOKEN_COOKIE = 'session_token';
 
 // Detect HTTPS at runtime — process.env.NODE_ENV is always 'production' in Next.js builds
 // so it can't be used to distinguish HTTP localhost from HTTPS production.
@@ -151,6 +161,17 @@ export const setUser = (user: LoginResponse['user']): void => {
   });
 };
 
+export const setSessionToken = (token: string): void => {
+  Cookies.set(TOKEN_COOKIE, token, {
+    sameSite: 'lax',
+    secure: isSecureContext(),
+    expires: 1 / 24,
+  });
+};
+
+export const getSessionToken = (): string | undefined =>
+  Cookies.get(TOKEN_COOKIE);
+
 export const getUser = (): LoginResponse['user'] | null => {
   try {
     const raw = Cookies.get(USER_COOKIE);
@@ -162,6 +183,7 @@ export const getUser = (): LoginResponse['user'] | null => {
 
 const clearUserInfo = (): void => {
   Cookies.remove(USER_COOKIE);
+  Cookies.remove(TOKEN_COOKIE);
 };
 
 export const isAuthenticated = (): boolean => {
@@ -172,11 +194,13 @@ export const isAuthenticated = (): boolean => {
 
 export const authApi = {
   login: async (credentials: LoginRequest): Promise<LoginResponse> => {
-    const response = await api.post<LoginResponse>('/auth/login', credentials);
-    // El JWT viaja en cookie httpOnly establecida por el backend.
-    // Aquí solo guardamos el objeto usuario para display.
+    const response = await api.post<LoginResponse & { access_token?: string }>('/auth/login', credentials);
     if (response.data.user) {
       setUser(response.data.user);
+    }
+    // Guardar token para enviarlo como Authorization: Bearer en requests cross-domain
+    if (response.data.access_token) {
+      setSessionToken(response.data.access_token);
     }
     return response.data;
   },
