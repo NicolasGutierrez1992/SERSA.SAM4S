@@ -34,7 +34,7 @@ export class AuthController {
     @Body() loginDto: LoginDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ user: LoginResponse['user'] }> {
+  ): Promise<{ user: LoginResponse['user']; access_token: string }> {
     const ip = (req as any).ip || (req as any).connection?.remoteAddress;
     const result = await this.authService.login(loginDto, ip);
 
