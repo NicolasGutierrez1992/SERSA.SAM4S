@@ -10,8 +10,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Verificar presencia de la cookie httpOnly del JWT
-  const token = request.cookies.get('auth_token');
+  // user_info es seteada por el frontend JS en el mismo dominio (vercel.app).
+  // auth_token es httpOnly en railway.app y el browser no la envía a vercel.app.
+  const token = request.cookies.get('user_info');
   if (!token) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
