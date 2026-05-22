@@ -39,9 +39,10 @@ import { AppInitializerService } from './common/app-initializer.service';
           password: configService.get('DB_PASSWORD'),
           database: configService.get('DB_NAME'),
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
+          migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
           // synchronize:true en producción puede modificar/perder datos — usar migraciones
           synchronize: !isProduction,
-          migrationsRun: false,
+          migrationsRun: isProduction,
           dropSchema: false,
           // SSL: por defecto rejectUnauthorized=true para evitar MITM.
           // Railway usa certificado autofirmado en el proxy público; si la conexión
