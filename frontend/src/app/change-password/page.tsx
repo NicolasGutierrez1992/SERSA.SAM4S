@@ -34,7 +34,7 @@ export default function ChangePasswordPage() {
             <Form.Item name="currentPassword" label="Contraseña actual" rules={[{ required: true, message: 'Ingrese su contraseña actual' }]}>
               <Input.Password />
             </Form.Item>
-            <Form.Item name="newPassword" label="Nueva contraseña" rules={[{ required: true, message: 'Ingrese la nueva contraseña' }, { min: 10, message: 'Mínimo 10 caracteres' }]}>
+            <Form.Item name="newPassword" label="Nueva contraseña" rules={[{ required: true, message: 'Ingrese la nueva contraseña' }]}>
               <Input.Password />
             </Form.Item>
             <Form.Item name="confirmPassword" label="Confirmar nueva contraseña" dependencies={["newPassword"]} rules={[{ required: true, message: 'Confirme la nueva contraseña' }, ({ getFieldValue }) => ({ validator(_, value) { if (!value || getFieldValue('newPassword') === value) { return Promise.resolve(); } return Promise.reject('Las contraseñas no coinciden'); } })]}>
