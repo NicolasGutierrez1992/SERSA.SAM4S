@@ -196,6 +196,8 @@ export class AuditoriaService {
             user: adminMailUser,
             pass: adminMailPass,
           },
+          connectionTimeout: 5000,
+          socketTimeout: 10000,
         });
 
         const mailOptions = {

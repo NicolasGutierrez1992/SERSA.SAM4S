@@ -8,7 +8,7 @@ export class User {
   @PrimaryGeneratedColumn()
   id_usuario: number;
 
-  @ApiProperty({ description: 'Estado del usuario (0=Inactivo, 1=Activo)' })
+  @ApiProperty({ description: 'Estado del usuario (1=Activo, 2=Suspendido, 3=Inactivo)' })
   @Column({ type: 'integer', nullable: true })
   status: number;
   @ApiProperty({ description: 'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación)' })

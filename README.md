@@ -120,7 +120,8 @@ El login devuelve una **cookie httpOnly** (`auth_token`, 1 hora de vigencia). El
 - **Login**: `POST /api/auth/login` — recibe CUIT + contrasena, setea cookie
 - **Logout**: `POST /api/auth/logout` — borra la cookie en el servidor
 - **Me**: `GET /api/auth/me` — devuelve el usuario autenticado desde el JWT
-- **Contrasena**: minimo 10 caracteres, mayuscula + minuscula + numero
+- **Cambio de contrasena**: `POST /api/auth/change-password` — requiere autenticacion
+- **Contrasena**: minimo 6 caracteres (sin restriccion de complejidad)
 - **Rate limiting**: 5 intentos de login por minuto por IP
 - **Cambio obligatorio**: los usuarios nuevos o con contrasena reseteada deben cambiarla en el primer login
 
@@ -289,14 +290,26 @@ SERSA.SAM4S/
 ├── backend/                    NestJS API
 │   ├── src/
 │   │   ├── afip/               Integracion AFIP (WSAA, WSCert SOAP)
+│   │   │   ├── afip.module.ts
+│   │   │   ├── afip.service.ts
+│   │   │   ├── entities/afip-file.entity.ts
+│   │   │   └── services/afip-files.service.ts
 │   │   ├── auth/               Autenticacion JWT + cookies httpOnly
 │   │   ├── certificados/       Gestion y descarga de certificados CRS
+│   │   │   ├── controllers/
+│   │   │   │   ├── certificado-admin.controller.ts
+│   │   │   │   └── certificado-public.controller.ts
 │   │   │   ├── certificados.controller.ts    Endpoint de generacion/descarga
 │   │   │   ├── certificado-maestro.controller.ts  Upload PFX + Root_RTI
+│   │   │   ├── certificado-maestro.service.ts
 │   │   │   └── certificados.service.ts
 │   │   ├── common/             Servicios compartidos, interceptores, app_settings
 │   │   ├── descargas/          Historial de descargas y estados de facturacion
 │   │   ├── users/              CRUD de usuarios y mayoristas
+│   │   │   ├── dto/user.dto.ts
+│   │   │   ├── enums/
+│   │   │   │   ├── user-role.enum.ts
+│   │   │   │   └── user-status.enum.ts
 │   │   │   └── entities/
 │   │   │       ├── user.entity.ts
 │   │   │       └── mayorista.entity.ts
@@ -313,9 +326,13 @@ SERSA.SAM4S/
 │   │   │   ├── usuarios/       CRUD de usuarios
 │   │   │   ├── certificados/   Generacion y descarga de certificados CRS
 │   │   │   └── change-password/ Cambio obligatorio de contrasena
-│   │   ├── lib/api.ts          Cliente Axios (withCredentials, interceptor 401)
+│   │   ├── components/         AuthGuard, CertificateStatusCard
 │   │   ├── contexts/           AuthContext
-│   │   └── middleware.ts       Proteccion de rutas por cookie auth_token
+│   │   ├── hooks/useAuth.tsx   Hook de autenticacion
+│   │   ├── lib/api.ts          Cliente Axios (withCredentials, interceptor 401)
+│   │   ├── services/api.ts     Facade sobre lib/api.ts para AuthContext
+│   │   ├── types/index.ts      Tipos compartidos
+│   │   └── middleware.ts       Proteccion de rutas (verifica cookie user_info)
 │   └── Dockerfile
 ├── docker-compose.yml          Orquesta DB + Backend + Frontend
 └── README.md

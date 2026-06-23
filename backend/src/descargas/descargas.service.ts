@@ -15,7 +15,6 @@ import {
   NotFoundException, 
   BadRequestException 
 } from '@nestjs/common';
-import { AppSettingsService } from '../common/services/app-settings.service';
 interface RegistrarDescargaData {
   usuarioId: number;
   controladorId?: string;
@@ -47,7 +46,6 @@ export class DescargasService {
     private certificadoRepository: Repository<Certificado>,
     private auditoriaService: AuditoriaService,
     private timezoneService: TimezoneService,
-    private readonly appSettingsService: AppSettingsService,
   ) {
     this.logger.log('DescargasService initialized with PostgreSQL');
   }
@@ -105,12 +103,8 @@ export class DescargasService {
     
     // Si no existe el usuario mayorista o no tiene límite asignado, usar default 100
     if (!mayorista || mayorista.notification_limit === null || mayorista.notification_limit === undefined) {
-      this.logger.warn(`No se encontró notification_limit para mayorista ${mayoristaId}, usando default`);
-      //obtengo la app-seting configurada para notification_limit en la base de datos
-      const notificationLimit = await this.appSettingsService.obtenerSetting('NOTIFICATION_LIMIT').catch(() => undefined);
-      const parsed = notificationLimit !== undefined ? parseInt(notificationLimit, 10) : NaN;
-      if (Number.isNaN(parsed)) return 100;
-      return parsed;
+      this.logger.warn(`No se encontró notification_limit para mayorista ${mayoristaId}, usando default 100`);
+      return 100;
     }
     
     return mayorista.notification_limit;
@@ -144,6 +138,22 @@ export class DescargasService {
 
     if (!user) {
       throw new NotFoundException('Usuario no encontrado');
+    }
+
+    // Verificar que el usuario no esté suspendido o inactivo
+    if (user.status != null && user.status !== 1) {
+      throw new ForbiddenException('Usuario suspendido o inactivo. No puede descargar certificados.');
+    }
+
+    // Si es distribuidor, verificar también el estado del mayorista asociado
+    if (user.rol === 3 && user.id_mayorista) {
+      const mayorista = await userRepository.findOne({
+        where: { rol: 2, id_mayorista: user.id_mayorista },
+        select: ['status', 'nombre']
+      });
+      if (mayorista && mayorista.status != null && mayorista.status !== 1) {
+        throw new ForbiddenException('Las descargas están bloqueadas: el mayorista asociado tiene la cuenta suspendida.');
+      }
     }
 
     // Admin (1) y Mayorista (2) siempre pueden descargar

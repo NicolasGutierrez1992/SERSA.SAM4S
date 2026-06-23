@@ -190,6 +190,10 @@ export default function CertificadosPage() {
         setUser(userData);
         setLoading(false);
         loadMetricas();
+        // Facturación (4) va directo al historial; no tiene pestaña de descarga
+        if (userData.rol === 4) {
+          setActiveTab('historial');
+        }
         if (activeTab === 'historial' && userData.rol === 3) {
           setFiltros(f => ({ ...f, cuit: userData.cuit, idMayorista: String(userData.id_mayorista) }));
         }
@@ -1416,7 +1420,7 @@ export default function CertificadosPage() {
                                         <option value="Facturado">Facturado</option>
                                       </select>
                                     )
-                                  )}                                  {user?.rol !== 2 && user?.rol !== 4 && (
+                                  )}                                  {user?.rol !== 4 && (
                                     <button
                                       onClick={async () => {
                                         if (!esUltimo) return;

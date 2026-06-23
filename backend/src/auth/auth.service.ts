@@ -19,8 +19,8 @@ export class AuthService {
       return null;
     }
 
-    if (user.status === 0) {
-      throw new UnauthorizedException('Usuario inactivo');
+    if (user.status != null && user.status !== 1) {
+      throw new UnauthorizedException('Usuario suspendido o inactivo');
     }
 
     try {

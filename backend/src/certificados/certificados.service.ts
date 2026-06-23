@@ -132,8 +132,9 @@ export class CertificadosService {  private readonly logger = new Logger(Certifi
         
         if (pendingDownloads >= notificationLimit) {
           this.logger.warn(`El mayorista ${idMayorista} ha superado el límite configurado en notificaciones (${notificationLimit})`);
-          // Notificación vía email a facturación
-          await this.descargasService.notificarExcesoDescargasMayorista(idMayorista, pendingDownloads);
+          // Fire-and-forget: el email no debe bloquear la respuesta HTTP
+          this.descargasService.notificarExcesoDescargasMayorista(idMayorista, pendingDownloads)
+            .catch(err => this.logger.error(`Error enviando notificación de exceso de descargas: ${err.message}`));
         }
       }
       
