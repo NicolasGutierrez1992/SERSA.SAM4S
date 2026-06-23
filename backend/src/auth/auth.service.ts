@@ -20,7 +20,7 @@ export class AuthService {
     }
 
     if (user.status != null && user.status !== 1) {
-      throw new UnauthorizedException('Usuario suspendido o inactivo');
+      throw new UnauthorizedException('Usuario suspendido o inactivo. Para más información contactá con tu proveedor.');
     }
 
     try {
