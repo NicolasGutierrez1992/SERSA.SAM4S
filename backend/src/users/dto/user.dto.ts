@@ -12,8 +12,9 @@ export enum UserRole {
 }
 
 export enum UserStatus {
-  INACTIVO = 0,
   ACTIVO = 1,
+  SUSPENDIDO = 2,
+  INACTIVO = 3,
 }
 
 export enum TipoDescarga {
@@ -69,7 +70,7 @@ export class CreateUserDto {
   @ApiPropertyOptional({
     example: 1,
     enum: UserStatus,
-    description: 'Estado del usuario (0=Inactivo, 1=Activo)',
+    description: 'Estado del usuario (1=Activo, 2=Suspendido, 3=Inactivo)',
   })
   @IsOptional()
   @IsEnum(UserStatus, { message: 'El estado debe ser válido' })
@@ -182,7 +183,7 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @ApiPropertyOptional({
     example: 1,
     enum: UserStatus,
-    description: 'Estado del usuario (0=Inactivo, 1=Activo)',
+    description: 'Estado del usuario (1=Activo, 2=Suspendido, 3=Inactivo)',
   })
   @IsOptional()
   @IsEnum(UserStatus, { message: 'El estado debe ser válido' })
