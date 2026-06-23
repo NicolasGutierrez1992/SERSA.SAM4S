@@ -191,13 +191,15 @@ export class AuditoriaService {
       }
 
       const transporter = nodemailer.createTransport({
-          service: 'gmail',
+          host: 'smtp.gmail.com',
+          port: 587,
+          secure: false,
           auth: {
             user: adminMailUser,
             pass: adminMailPass,
           },
-          connectionTimeout: 5000,
-          socketTimeout: 10000,
+          connectionTimeout: 10000,
+          socketTimeout: 15000,
         });
 
         const mailOptions = {
