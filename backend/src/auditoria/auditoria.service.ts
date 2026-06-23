@@ -192,7 +192,7 @@ export class AuditoriaService {
       const resend = new Resend(resendApiKey);
 
       const { error } = await resend.emails.send({
-        from: `SERSA Notificaciones <${adminMailUser || 'onboarding@resend.dev'}>`,
+        from: 'SERSA Notificaciones <onboarding@resend.dev>',
         to: adminMailTo,
         subject: '⚠️ Alerta: Exceso de descargas pendientes',
         html: `
