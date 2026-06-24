@@ -1329,12 +1329,12 @@ export default function CertificadosPage() {
                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>
                                           {descarga.estadoMayorista}
                                         </span>
-                                        {descarga.estadoMayorista === 'Facturado' && descarga.numero_factura && (
+                                        {descarga.numero_factura && (
                                           <span className="text-xs text-gray-600">
                                             <span className="font-semibold">Nro Factura:</span> {descarga.numero_factura}
                                           </span>
                                         )}
-                                        {descarga.estadoMayorista === 'Cobrado' && descarga.referencia_pago && (
+                                        {descarga.referencia_pago && (
                                           <span className="text-xs text-gray-600">
                                             <span className="font-semibold">Referencia:</span> {descarga.referencia_pago}
                                           </span>
