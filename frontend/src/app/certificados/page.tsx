@@ -1325,9 +1325,21 @@ export default function CertificadosPage() {
                                 {user?.rol === 2 && (
                                   <>
                                     <td className="px-3 py-4 whitespace-nowrap">
-                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>
-                                        {descarga.estadoMayorista}
-                                      </span>
+                                      <div className="flex flex-col gap-1">
+                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>
+                                          {descarga.estadoMayorista}
+                                        </span>
+                                        {descarga.estadoMayorista === 'Facturado' && descarga.numero_factura && (
+                                          <span className="text-xs text-gray-600">
+                                            <span className="font-semibold">Nro Factura:</span> {descarga.numero_factura}
+                                          </span>
+                                        )}
+                                        {descarga.estadoMayorista === 'Cobrado' && descarga.referencia_pago && (
+                                          <span className="text-xs text-gray-600">
+                                            <span className="font-semibold">Referencia:</span> {descarga.referencia_pago}
+                                          </span>
+                                        )}
+                                      </div>
                                     </td>
                                     <td className="px-3 py-4 whitespace-nowrap">
                                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>
