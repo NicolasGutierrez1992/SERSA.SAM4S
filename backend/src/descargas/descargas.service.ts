@@ -140,9 +140,11 @@ export class DescargasService {
       throw new NotFoundException('Usuario no encontrado');
     }
 
-    // Verificar que el usuario no esté suspendido o inactivo
-    if (user.status != null && user.status !== 1) {
-      throw new ForbiddenException('Usuario suspendido o inactivo. No puede descargar certificados.');
+    if (user.status === 2) {
+      throw new ForbiddenException('Tu cuenta está suspendida. Para más información contactá con tu proveedor.');
+    }
+    if (user.status === 3) {
+      throw new ForbiddenException('Tu cuenta está inactiva. Para más información contactá con tu proveedor.');
     }
 
     // Si es distribuidor, verificar también el estado del mayorista asociado
@@ -576,6 +578,7 @@ export class DescargasService {
       limit = 50,
       usuarioId,
       cuit,
+      nombre,
       idMayorista,
       fechaDesde,
       fechaHasta,
@@ -606,6 +609,10 @@ export class DescargasService {
     if (cuit) {
       this.logger.log(`[getDescargas] Filtrando por cuit: ${cuit}`);
       query.andWhere('usuario.cuit LIKE :cuit', { cuit: `${cuit}%` });
+    }
+    if (nombre) {
+      this.logger.log(`[getDescargas] Filtrando por nombre: ${nombre}`);
+      query.andWhere('usuario.nombre ILIKE :nombre', { nombre: `%${nombre}%` });
     }
     if (idMayorista) {
       const idMayoristaNum = typeof idMayorista === 'string' ? parseInt(idMayorista, 10) : idMayorista;

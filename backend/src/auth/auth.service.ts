@@ -19,9 +19,10 @@ export class AuthService {
       return null;
     }
 
-    if (user.status != null && user.status !== 1) {
-      throw new UnauthorizedException('Usuario suspendido o inactivo. Para más información contactá con tu proveedor.');
+    if (user.status === 3) {
+      throw new UnauthorizedException('Tu cuenta está inactiva. Para más información contactá con tu proveedor.');
     }
+    // status=2 (Suspendido): puede ingresar pero no puede descargar
 
     try {
       const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -50,7 +51,8 @@ export class AuthService {
       nombre: user.nombre,
       rol: user.rol,
       mustChangePassword: user.must_change_password,
-      id_mayorista: user.id_mayorista // <-- Asegurarse de incluirlo en el payload
+      id_mayorista: user.id_mayorista,
+      status: user.status,
     };
 
     const access_token = this.jwtService.sign(payload);         
@@ -62,10 +64,11 @@ export class AuthService {
         nombre: user.nombre,
         email: user.mail,
         rol: user.rol,
+        status: user.status,
         must_change_password: user.must_change_password,
         last_login: user.ultimo_login,
-        id_mayorista: user.id_mayorista, // <-- Agregado para el frontend
-        limite_descargas: user.limite_descargas // <-- Agregado para el frontend
+        id_mayorista: user.id_mayorista,
+        limite_descargas: user.limite_descargas
       },
     };
   }

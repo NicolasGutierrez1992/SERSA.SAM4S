@@ -258,7 +258,7 @@ export default function CertArchivosPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {settings.map((setting) => (
+                  {settings.filter(s => s.id !== 'NOTIFICATION_LIMIT').map((setting) => (
                     <div
                       key={setting.id}
                       className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"

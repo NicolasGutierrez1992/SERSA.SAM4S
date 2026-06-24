@@ -49,6 +49,7 @@ export interface JwtPayload {
   rol: number;
   mustChangePassword: boolean;
   id_mayorista?: number;
+  status?: number;
 }
 
 export class LoginResponse {
@@ -65,6 +66,7 @@ export class LoginResponse {
     nombre: string;
     email: string;
     rol: number;
+    status?: number;
     must_change_password: boolean;
     last_login: Date | null;
     id_mayorista?: number;

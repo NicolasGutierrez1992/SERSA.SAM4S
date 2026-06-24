@@ -69,13 +69,21 @@ export class QueryDescargasDto {
   @IsString()
   controladorId?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'CUIT del usuario',
     example: '20366299913'
   })
   @IsOptional()
   @IsString()
   cuit?: string;
+
+  @ApiPropertyOptional({
+    description: 'Nombre del usuario (búsqueda parcial)',
+    example: 'Juan'
+  })
+  @IsOptional()
+  @IsString()
+  nombre?: string;
 
   @ApiPropertyOptional({ 
     description: 'ID del mayorista',
