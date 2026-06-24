@@ -315,11 +315,11 @@ export default function CertificadosPage() {
         limiteDisponible: validacion.limiteDisponible,
         message: validacion.message
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error validando límite de descargas:', error);
-      // Si falla, asumir que NO puede descargar (modo seguro)
       setCanDownload(false);
-      setDownloadMessage('Error al validar límite de descargas. Por favor, recarga la página.');
+      const serverMsg = error.response?.data?.message;
+      setDownloadMessage(serverMsg || 'Error al validar límite de descargas. Por favor, recarga la página.');
     }
   };
 
@@ -976,6 +976,8 @@ export default function CertificadosPage() {
                   >
                     {user?.status === 2 ? (
                       'CUENTA SUSPENDIDA'
+                    ) : !canDownload && downloadMessage?.toLowerCase().includes('suspendid') ? (
+                      'DESCARGAS BLOQUEADAS'
                     ) : !canDownload ? (
                       'SOLICITAR LIMITE A TU PROVEEDOR'
                     ) : (
