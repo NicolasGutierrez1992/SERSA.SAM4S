@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Auditoria } from './entities/auditoria.entity';
 import { CreateAuditoriaDto } from './dto/create-auditoria.dto';
-import { Resend } from 'resend';
+import * as nodemailer from 'nodemailer';
 import { AppSettingsService } from '../common/services/app-settings.service';
 
 export enum AuditoriaAccion {
@@ -180,19 +180,30 @@ export class AuditoriaService {
     console.log(`Notificación: El mayorista ${mayorista} tiene ${totalPendientes} descargas pendientes de facturar.`);
 
     try {
-      const resendApiKey = process.env.RESEND_API_KEY;
       const adminMailUser = process.env.ADMIN_MAIL_USER;
       const adminMailTo = await this.appSettingsService.obtenerSetting('ADMIN_MAIL_TO');
+      const clientId = process.env.GMAIL_CLIENT_ID;
+      const clientSecret = process.env.GMAIL_CLIENT_SECRET;
+      const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
 
-      if (!resendApiKey || !adminMailTo) {
-        console.error('Faltan variables RESEND_API_KEY o ADMIN_MAIL_TO para enviar notificación');
+      if (!adminMailUser || !adminMailTo || !clientId || !clientSecret || !refreshToken) {
+        console.error('Faltan variables de configuración de Gmail OAuth2 para enviar notificación');
         return;
       }
 
-      const resend = new Resend(resendApiKey);
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          type: 'OAuth2',
+          user: adminMailUser,
+          clientId,
+          clientSecret,
+          refreshToken,
+        },
+      });
 
-      const { error } = await resend.emails.send({
-        from: 'SERSA Notificaciones <onboarding@resend.dev>',
+      await transporter.sendMail({
+        from: `SERSA Notificaciones <${adminMailUser}>`,
         to: adminMailTo,
         subject: '⚠️ Alerta: Exceso de descargas pendientes',
         html: `
@@ -209,13 +220,9 @@ export class AuditoriaService {
         `,
       });
 
-      if (error) {
-        console.error('Error enviando correo de notificación:', error);
-      } else {
-        console.log('Correo de notificación enviado al administrador.');
-      }
+      console.log('Correo de notificación enviado al administrador.');
     } catch (error) {
-      console.error('Error enviando notificación:', error);
+      console.error('Error enviando correo de notificación:', error);
     }
   }
 }
