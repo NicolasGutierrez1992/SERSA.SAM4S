@@ -3,7 +3,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Auditoria } from './entities/auditoria.entity';
 import { CreateAuditoriaDto } from './dto/create-auditoria.dto';
-import * as nodemailer from 'nodemailer';
 import { AppSettingsService } from '../common/services/app-settings.service';
 
 export enum AuditoriaAccion {
@@ -191,36 +190,64 @@ export class AuditoriaService {
         return;
       }
 
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          type: 'OAuth2',
-          user: adminMailUser,
-          clientId,
-          clientSecret,
-          refreshToken,
+      // Obtener access token via HTTPS (no SMTP — Railway no bloquea esto)
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          refresh_token: refreshToken,
+          grant_type: 'refresh_token',
+        }),
+      });
+      const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
+      if (!tokenData.access_token) {
+        console.error('No se pudo obtener access token de Gmail:', tokenData.error);
+        return;
+      }
+
+      // Construir email en formato RFC 2822 y enviarlo via Gmail REST API (HTTPS)
+      const htmlBody = `
+        <div style="font-family: Arial, sans-serif; color: #222;">
+          <h2 style="color: #b91c1c;">⚠️ Alerta de Descargas Pendientes</h2>
+          <p>Estimado administrador,</p>
+          <p>El <b>mayorista</b> <span style="color:#2563eb; font-weight:bold;">${mayorista}</span> ha superado el límite de descargas pendientes de facturar.</p>
+          <p><b>Total de descargas pendientes:</b> <span style="color:#b91c1c; font-size:1.2em;">${totalPendientes}</span></p>
+          <p style="margin-top:20px;">Por favor, revise la situación en el sistema de gestión de certificados.</p>
+          <p style="margin-top:20px;"><a href="https://sersa-certs-frontend.vercel.app/">Ir al sistema</a></p>
+          <hr style="margin:24px 0;"/>
+          <p style="font-size:0.95em; color:#555;">Saludos,<br/>Sistema SERSA</p>
+        </div>`;
+
+      const rfc2822 = [
+        `From: SERSA Notificaciones <${adminMailUser}>`,
+        `To: ${adminMailTo}`,
+        `Subject: =?UTF-8?B?${Buffer.from('⚠️ Alerta: Exceso de descargas pendientes').toString('base64')}?=`,
+        `MIME-Version: 1.0`,
+        `Content-Type: text/html; charset=UTF-8`,
+        ``,
+        htmlBody,
+      ].join('\r\n');
+
+      const encodedEmail = Buffer.from(rfc2822).toString('base64url');
+
+      const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${tokenData.access_token}`,
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ raw: encodedEmail }),
       });
 
-      await transporter.sendMail({
-        from: `SERSA Notificaciones <${adminMailUser}>`,
-        to: adminMailTo,
-        subject: '⚠️ Alerta: Exceso de descargas pendientes',
-        html: `
-          <div style="font-family: Arial, sans-serif; color: #222;">
-            <h2 style="color: #b91c1c;">⚠️ Alerta de Descargas Pendientes</h2>
-            <p>Estimado administrador,</p>
-            <p>El <b>mayorista</b> <span style="color:#2563eb; font-weight:bold;">${mayorista}</span> ha superado el límite de descargas pendientes de facturar.</p>
-            <p><b>Total de descargas pendientes:</b> <span style="color:#b91c1c; font-size:1.2em;">${totalPendientes}</span></p>
-            <p style="margin-top:20px;">Por favor, revise la situación en el sistema de gestión de certificados.</p>
-            <p style="margin-top:20px;"><a href="https://sersa-certs-frontend.vercel.app/">Ir al sistema</a></p>
-            <hr style="margin:24px 0;"/>
-            <p style="font-size:0.95em; color:#555;">Saludos,<br/>Sistema SERSA</p>
-          </div>
-        `,
-      });
+      if (!sendRes.ok) {
+        const err = await sendRes.json();
+        console.error('Error enviando email via Gmail API:', err);
+        return;
+      }
 
-      console.log('Correo de notificación enviado al administrador.');
+      console.log('Correo de notificación enviado al administrador via Gmail API.');
     } catch (error) {
       console.error('Error enviando correo de notificación:', error);
     }
