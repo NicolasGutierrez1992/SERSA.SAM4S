@@ -176,11 +176,12 @@ export default function UsuariosPage() {
           dataToSend = dataSinRol;
           console.log('[Técnico Edit] Campos filtrados (sin rol):', dataToSend);
         } else if (!isMayorista && editingUser.rol === 2) {
-          // Admin editando Mayorista: puede editar notification_limit, limiteDescargas y tipo_descarga
+          // Admin editando Mayorista
           dataToSend = {
             limiteDescargas: values.limiteDescargas,
             tipo_descarga: values.tipo_descarga,
-            notification_limit: values.notification_limit
+            notification_limit: values.notification_limit,
+            status: values.status,
           };
           console.log('[Admin Edit Mayorista] Campos permitidos:', dataToSend);
         } else {
