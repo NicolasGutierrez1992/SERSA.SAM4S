@@ -104,12 +104,28 @@ Cada **distribuidor** pertenece a un mayorista (`id_mayorista`). El mayorista pu
 
 ## Estados de una descarga
 
+Cada descarga tiene dos estados independientes: uno que ve el **mayorista** (`estadoMayorista`) y otro que ve el **distribuidor** (`estadoDistribuidor`).
+
 | Estado | Descripcion |
 |--------|-------------|
-| `PENDIENTE_FACTURAR` | Descarga realizada, aun no incluida en factura al mayorista |
-| `FACTURADO` | Descarga ya facturada |
+| `PENDIENTE_FACTURAR` | Descarga realizada, aun no incluida en factura |
+| `FACTURADO` | Descarga ya facturada al mayorista |
+| `COBRADO` | Pago recibido (incluye referencia de cobro) |
+| `GARANTIA` | Descarga cubierta por garantia |
+| `BONIFICADO` | Descarga bonificada sin cargo |
+| `PREPAGO` | Descarga descontada de saldo prepago del distribuidor |
 
-Cuando la suma de descargas `PENDIENTE_FACTURAR` de un mayorista supera su `notification_limit`, el sistema envia un email de alerta al administrador.
+Cuando la suma de descargas `PENDIENTE_FACTURAR` de un mayorista supera su `notification_limit`, el sistema envia un email de alerta al administrador via Gmail API (OAuth2, puerto 443).
+
+## Estados de un usuario
+
+| Estado | Valor | Comportamiento |
+|--------|-------|----------------|
+| Activo | 1 | Puede iniciar sesion y descargar |
+| Suspendido | 2 | Puede iniciar sesion y ver el historial, pero no puede descargar |
+| Inactivo | 3 | No puede iniciar sesion |
+
+**Suspension en cascada**: si un mayorista esta Suspendido, todos sus distribuidores quedan bloqueados para descargar (sin cambiar su propio estado individual).
 
 ---
 
@@ -190,8 +206,10 @@ Despues de levantar Docker por primera vez, ingresar como administrador y:
 | `ENCRYPTION_KEY` | Clave AES-256 para cifrar certs en BD (64 chars hex) | Si |
 | `CORS_ORIGINS` | Origenes permitidos (ej: `https://sersa.vercel.app`) | Si |
 | `DEFAULT_USER_PASSWORD` | Contrasena asignada al resetear un usuario | No |
-| `ADMIN_MAIL_USER` | Email remitente para alertas (Gmail) | No |
-| `ADMIN_MAIL_PASS` | App Password de Gmail | No |
+| `ADMIN_MAIL_USER` | Email remitente para alertas (Gmail OAuth2) | No |
+| `GMAIL_CLIENT_ID` | Client ID de Google OAuth2 para envio de alertas | No |
+| `GMAIL_CLIENT_SECRET` | Client Secret de Google OAuth2 | No |
+| `GMAIL_REFRESH_TOKEN` | Refresh Token de Google OAuth2 (expira en 7 dias en modo Testing) | No |
 | `THROTTLE_TTL` | Ventana de rate limiting en segundos | No |
 | `THROTTLE_LIMIT` | Requests maximos por ventana | No |
 
@@ -205,8 +223,9 @@ Estas variables estan almacenadas en la tabla `app_settings` de la BD y se edita
 | `AFIP_WSCERT_WSDL` | WSDL del servicio WSCert de AFIP |
 | `AFIP_CUIT` | CUIT de SERSA ante AFIP |
 | `AFIP_FABRICANTE` | Codigo de fabricante (`SE`) |
-| `NOTIFICATION_LIMIT` | Limite de descargas pendientes para alerta (fallback global) |
 | `ADMIN_MAIL_TO` | Email destino de las alertas |
+
+> El limite de notificacion de descargas pendientes se configura por mayorista en el campo `notification_limit` del usuario (no es un setting global).
 
 Generar valores seguros:
 ```bash
