@@ -33,16 +33,11 @@ export default function UsuariosPage() {
         setUsuarios(res.data.data || []);
         //setJerarquia(res.data.jerarquia || []);
       } catch (err: any) {
-        // Log completo del error para depuración
-        console.error('[UsuariosPage] Error al cargar usuarios (estructura completa):', err);
-        // Manejo robusto para distintos tipos de error
-          message.error('error', err);
-        if (err?.status === 403 || err?.error === 'No tienes permisos para acceder a esta sección.') {
+        console.error('[UsuariosPage] Error al cargar usuarios:', err);
+        if (err?.response?.status === 403) {
           message.error('No tienes permisos para acceder a esta sección.');
-        } else if (err?.error) {
-          message.error(err.error);
         } else {
-          message.error('Error al cargar usuarios');
+          message.error(err?.response?.data?.message || 'Error al cargar usuarios');
         }
       } finally {
         setLoading(false);
@@ -98,8 +93,9 @@ export default function UsuariosPage() {
       setModalVisible(true);
     } catch (err: any) {
       console.error('Error al validar permisos:', err);
-      if (err?.response?.data?.message) {
-        message.error(err.response.data.message);
+      const serverMsg = err?.response?.data?.message;
+      if (serverMsg) {
+        message.error(Array.isArray(serverMsg) ? serverMsg.join(' | ') : serverMsg);
       } else {
         message.error('No tienes permisos para editar este usuario');
       }
@@ -245,8 +241,13 @@ export default function UsuariosPage() {
         console.error('[Error refrescando usuarios]:', err);
       }
     } catch (err: any) {
-      if (err?.response?.data?.message) {
-        message.error(err.response.data.message);
+      // form.validateFields() rechaza con { errorFields } — Ant Design ya muestra los errores en el form
+      if (err?.errorFields) return;
+
+      const serverMsg = err?.response?.data?.message;
+      if (serverMsg) {
+        // NestJS puede devolver message como array (errores de validación DTO)
+        message.error(Array.isArray(serverMsg) ? serverMsg.join(' | ') : serverMsg);
       } else {
         message.error('Error al guardar usuario');
       }
