@@ -58,14 +58,6 @@ export class UsersService {
       throw new ConflictException('Ya existe un usuario con este CUIT');
     }
 
-    // Verificar si el email ya existe
-    const existingUserByEmail = await this.userRepository.findOne({
-      where: { mail: createUserDto.email },
-    });
-    if (existingUserByEmail) {
-      throw new ConflictException('Ya existe un usuario con este email');
-    }
-
     // Validar asociación de mayorista para distribuidores
     if (createUserDto.rol === UserRole.DISTRIBUIDOR) {
       if (!createUserDto.id_mayorista) {
@@ -239,16 +231,6 @@ export class UsersService {
       // Otros roles no pueden editar
       else if (currentUser.rol !== 1 && currentUser.rol !== 4) {
         throw new BadRequestException('No tienes permisos para editar usuarios');
-      }
-    }
-
-    // Verificar email único si se está actualizando
-    if (updateUserDto.email && updateUserDto.email !== user.mail) {
-      const existingUser = await this.userRepository.findOne({
-        where: { mail: updateUserDto.email },
-      });
-      if (existingUser) {
-        throw new ConflictException('Ya existe un usuario con este email');
       }
     }
 
