@@ -171,13 +171,16 @@ export default function UsuariosPage() {
           };
           console.log('[Mayorista Edit] Campos filtrados:', dataToSend);
         } else if (currentUser?.rol === 5) {
-          // Técnico editando: puede editar todo EXCEPTO rol
-          const { rol, ...dataSinRol } = values;
+          // Técnico editando: puede editar todo EXCEPTO rol y notification_limit
+          const { rol, notification_limit, ...dataSinRol } = values;
           dataToSend = dataSinRol;
-          console.log('[Técnico Edit] Campos filtrados (sin rol):', dataToSend);
+          console.log('[Técnico Edit] Campos filtrados (sin rol/notification_limit):', dataToSend);
         } else if (!isMayorista && editingUser.rol === 2) {
           // Admin editando Mayorista
           dataToSend = {
+            nombre: values.nombre,
+            email: values.email,
+            celular: values.celular,
             limiteDescargas: values.limiteDescargas,
             tipo_descarga: values.tipo_descarga,
             notification_limit: values.notification_limit,
@@ -506,7 +509,7 @@ export default function UsuariosPage() {
                     <Form.Item name="email" label="Email" rules={[{ required: true, message: 'Ingrese el email' }]}>
                       <Input type="email" disabled={isMayorista} />
                     </Form.Item>
-                    <Form.Item name="celular" label="Celular" rules={[{ required: true, message: 'Ingrese el número de celular' }]}>
+                    <Form.Item name="celular" label="Celular" rules={[{ required: !editingUser, message: 'Ingrese el número de celular' }]}>
                       <Input type="tel" disabled={isMayorista} />
                     </Form.Item>                    <Form.Item name="rol" label="Rol" rules={[{ required: true }]}>
                       <Select 
