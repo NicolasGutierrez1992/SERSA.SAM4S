@@ -523,19 +523,28 @@ export class CertificadosController {
         userRole: user.rol
       });
       
+      // Descargas totales del distribuidor (sin filtro de estado)
+      const totalDistribuidorResult = await this.descargasService.getDescargas({
+        limit: 10000,
+        usuarioId: userId,
+        userRole: user.rol
+      });
+
       // Sumar ambos estados
-      const pendienteFacturar = pendientesResult.descargas.length ;
+      const pendienteFacturar = pendientesResult.descargas.length;
       const pendienteCobrar = facturadosResult.descargas.length;
+      const descargasTotales = totalDistribuidorResult.total;
       const limiteDescargas = usuarioCompleto.limite_descargas;
-      const porcentajeLimite = limiteDescargas > 0 
+      const porcentajeLimite = limiteDescargas > 0
         ? Math.round((pendienteFacturar / limiteDescargas) * 100)
         : 0;
-      
-      this.logger.log(`[Métricas Distribuidor] Pendientes=${pendientesResult.descargas.length}, Facturados=${facturadosResult.descargas.length}, Total=${pendienteFacturar + pendienteCobrar}, Límite=${limiteDescargas}, Porcentaje=${porcentajeLimite}%`);
-      
+
+      this.logger.log(`[Métricas Distribuidor] Pendientes=${pendientesResult.descargas.length}, Facturados=${facturadosResult.descargas.length}, Total=${descargasTotales}, Límite=${limiteDescargas}, Porcentaje=${porcentajeLimite}%`);
+
       return {
         pendienteFacturar,
         pendienteCobrar,
+        descargasTotales,
         limiteDescargas,
         porcentajeLimite,
         rol: user.rol

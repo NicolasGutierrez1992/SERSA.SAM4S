@@ -860,6 +860,25 @@ export default function CertificadosPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* 4. Descargas Totales */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M10 4v16M14 4v16" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Descargas Totales</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.descargasTotales ?? '-'}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </>
             )}
             
