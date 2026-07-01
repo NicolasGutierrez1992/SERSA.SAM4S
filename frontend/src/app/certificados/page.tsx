@@ -34,7 +34,8 @@ export default function CertificadosPage() {
     estadoMayorista: '',
     estadoDistribuidor: '',
     marca: '',
-    anio: ''
+    anio: '',
+    numeroFactura: ''
   });
 
   // Estado para historial
@@ -773,6 +774,25 @@ export default function CertificadosPage() {
                     </div>
                   </div>
                 </div>
+
+                {/* 4. Descargas Totales */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18M10 4v16M14 4v16" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Descargas Totales</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.descargasTotales ?? '-'}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </>
             )}            {/* ========== DISTRIBUIDOR (Rol 3) ========== */}
             {user?.rol === 3 && (
@@ -1161,6 +1181,28 @@ export default function CertificadosPage() {
                       </select>
                     )}
                   </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">Controlador</label>
+                    <input
+                      type="text"
+                      value={filtros.controladorId}
+                      onChange={e => setFiltros(f => ({ ...f, controladorId: e.target.value }))}
+                      placeholder="N° de controlador..."
+                      className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                    />
+                  </div>
+                  {(user?.rol === 1 || user?.rol === 2 || user?.rol === 4) && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700">N° de Factura</label>
+                      <input
+                        type="text"
+                        value={filtros.numeroFactura}
+                        onChange={e => setFiltros(f => ({ ...f, numeroFactura: e.target.value }))}
+                        placeholder="N° de factura..."
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                    </div>
+                  )}
                 </div>
                 {/* Tabla */}
                 {historialLoading ? (

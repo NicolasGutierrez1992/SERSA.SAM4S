@@ -135,4 +135,12 @@ export class QueryDescargasDto {
   @Type(() => Number)
   @IsNumber()
   usuarioId?: number;
+
+  @ApiPropertyOptional({
+    example: '2025-001',
+    description: 'Número de factura (búsqueda parcial)',
+  })
+  @IsOptional()
+  @IsString()
+  numeroFactura?: string;
 }

@@ -477,17 +477,26 @@ export class CertificadosController {
         usuarioId: userId,
         userRole: user.rol
       });
-      
+
+      // 4. Descargas totales del mayorista (todos los usuarios)
+      const descargasTotalesMayoristaResult = await this.descargasService.getDescargas({
+        limit: 10000,
+        idMayorista: usuarioCompleto.id_mayorista,
+        userRole: user.rol
+      });
+
       const pendienteFacturarMayorista = pendienteMayoristaResult.descargas.length;
       const pendienteFacturarDistribuidor = pendienteDistribuidorResult.descargas.length;
       const descargasPropiasTotal = descargasPropiasTotalResult.descargas.length;
-      
-      this.logger.log(`[Métricas Mayorista] PendienteMayorista=${pendienteFacturarMayorista}, PendienteDistribuidor=${pendienteFacturarDistribuidor}, PropiasTotal=${descargasPropiasTotal}`);
-      
+      const descargasTotales = descargasTotalesMayoristaResult.total;
+
+      this.logger.log(`[Métricas Mayorista] PendienteMayorista=${pendienteFacturarMayorista}, PendienteDistribuidor=${pendienteFacturarDistribuidor}, PropiasTotal=${descargasPropiasTotal}, Total=${descargasTotales}`);
+
       return {
         pendienteFacturarMayorista,
         pendienteFacturarDistribuidor,
         descargasPropiasTotal,
+        descargasTotales,
         rol: user.rol
       };
         } 

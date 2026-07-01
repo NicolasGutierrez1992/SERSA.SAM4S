@@ -588,6 +588,7 @@ export class DescargasService {
       estadoDistribuidor,
       estadoMayorista,
       marca,
+      numeroFactura,
       userRole // ⭐ NUEVO: Rol del usuario para filtrado inteligente
     } = params;    this.logger.log(`[getDescargas] Parámetros recibidos:`, params);
     this.logger.log(`[getDescargas] usuarioId: ${usuarioId} (tipo: ${typeof usuarioId})`);
@@ -650,6 +651,9 @@ export class DescargasService {
     
     if (marca) {
       query.andWhere('descarga.marca = :marca', { marca });
+    }
+    if (numeroFactura) {
+      query.andWhere('descarga.numero_factura ILIKE :numeroFactura', { numeroFactura: `%${numeroFactura}%` });
     }
 
     this.logger.log(`[getDescargas] Query construida, ejecutando... page: ${page}, limit: ${limit}`);
