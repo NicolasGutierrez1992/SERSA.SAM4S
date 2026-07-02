@@ -41,6 +41,9 @@ export default function CertificadosPage() {
   // Estado para historial
   const [historial, setHistorial] = useState<DescargaHistorial[]>([]);
   const [historialLoading, setHistorialLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalRegistros, setTotalRegistros] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
 
   // Estados para métricas
   const [metricas, setMetricas] = useState<MetricasPersonales | null>(null);
@@ -239,10 +242,10 @@ export default function CertificadosPage() {
       console.error('Error cargando métricas:', error);
     }
   };  // Función para cargar historial según rol
-  const loadHistorial = async () => {
+  const loadHistorial = async (page = 1) => {
     setHistorialLoading(true);
     // Construir filtrosFinal con tipos correctos
-    let filtrosFinal: any = { ...filtros, page: 1, limit: 50 };
+    let filtrosFinal: any = { ...filtros, page, limit: 50 };
     
     // Si es Distribuidor (3) limitar por CUIT y mayorista correspondiente
     if (user?.rol === 3) {
@@ -299,6 +302,9 @@ export default function CertificadosPage() {
       console.log('[CertificadosPage] Filtrando descargas por id_mayorista en frontend (mayorista):', user.id_mayorista, 'result:', descargas.length);
     }
     setHistorial(descargas);
+    setTotalRegistros(response.total ?? 0);
+    setTotalPages(response.totalPages ?? 1);
+    setCurrentPage(page);
     setHistorialLoading(false);
   };   // Validar límite de descargas (ahora función reutilizable)
   // ⭐ VALIDACIÓN CENTRALIZADA EN BACKEND - Elimina fallback defectuoso
@@ -1223,6 +1229,13 @@ export default function CertificadosPage() {
                     </div>
                   )}
                 </div>
+                {/* Contador de registros */}
+                {!historialLoading && totalRegistros > 0 && (
+                  <div className="mb-3 text-sm text-gray-600">
+                    {totalRegistros} registro{totalRegistros !== 1 ? 's' : ''} encontrado{totalRegistros !== 1 ? 's' : ''}
+                    {totalPages > 1 && ` — Página ${currentPage} de ${totalPages}`}
+                  </div>
+                )}
                 {/* Tabla */}
                 {historialLoading ? (
                   <div className="flex justify-center py-8">
@@ -1558,6 +1571,27 @@ export default function CertificadosPage() {
                         </div>
                       )}
                     </div>
+                    {totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4 px-2">
+                        <button
+                          onClick={() => loadHistorial(currentPage - 1)}
+                          disabled={currentPage <= 1 || historialLoading}
+                          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Anterior
+                        </button>
+                        <span className="text-sm text-gray-700">
+                          Página {currentPage} de {totalPages} ({totalRegistros} registros)
+                        </span>
+                        <button
+                          onClick={() => loadHistorial(currentPage + 1)}
+                          disabled={currentPage >= totalPages || historialLoading}
+                          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Siguiente
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
