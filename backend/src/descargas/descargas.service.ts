@@ -636,7 +636,7 @@ export class DescargasService {
       const anioNum = typeof anio === 'string' ? parseInt(anio, 10) : anio;
       query.andWhere('EXTRACT(YEAR FROM descarga.created_at AT TIME ZONE \'America/Argentina/Buenos_Aires\') = :anio', { anio: anioNum });
     }    if (controladorId) {
-      query.andWhere('descarga.id_certificado LIKE :controladorId', { controladorId: `${controladorId}%` });
+      query.andWhere('descarga.id_certificado ILIKE :controladorId', { controladorId: `%${controladorId}%` });
     }
       // ⭐ FILTRADO DE ESTADOS - Lógica flexible
     // Ambos estados pueden filtrarse independientemente según el parámetro explícito
