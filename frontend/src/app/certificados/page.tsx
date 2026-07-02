@@ -1145,7 +1145,7 @@ export default function CertificadosPage() {
                       onChange={e => setFiltros(f => ({ ...f, mes: e.target.value }))}
                       className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     >
-                      <option value="">Todas</option>
+                      <option value="">Todos</option>
                       <option value="1">Enero</option>
                       <option value="2">Febrero</option>
                       <option value="3">Marzo</option>
