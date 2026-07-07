@@ -466,9 +466,25 @@ export default function CertificadosPage() {
           message.warning('No se puede modificar el estado de descargas PREPAGO. El estado es definitivo.');
           return;
         }
-        
+
+        // Si requiere datos de facturación, mostrar modal
+        if (nuevoEstado === 'Facturado' || nuevoEstado === 'Cobrado') {
+          setFacturaData({
+            numero_factura: '',
+            referencia_pago: ''
+          });
+          setPendingEstadoChange({
+            downloadId,
+            nuevoEstado,
+            tipo: 'distribuidor',
+            userid
+          });
+          setShowFacturacionModal(true);
+          return;
+        }
+
         const estado = { estadoDistribuidor: nuevoEstado };
-        console.log('cambio de estado distribuidor (mayorista):', estado);        
+        console.log('cambio de estado distribuidor (mayorista):', estado);
         await certificadosApi.cambiarEstado(downloadId, estado);
         await loadHistorial();
         //alert('Estado actualizado correctamente');
@@ -501,15 +517,25 @@ export default function CertificadosPage() {
       } else {
         updateData.estadoDistribuidor = pendingEstadoChange.nuevoEstado;
       }
-      
+
+      const esDistribuidor = pendingEstadoChange.tipo === 'distribuidor';
+
       // Agregar número de factura si se está cambiando a Facturado
       if (pendingEstadoChange.nuevoEstado === 'Facturado' && facturaData.numero_factura) {
-        updateData.numero_factura = facturaData.numero_factura;
+        if (esDistribuidor) {
+          updateData.numero_factura_distribuidor = facturaData.numero_factura;
+        } else {
+          updateData.numero_factura = facturaData.numero_factura;
+        }
       }
 
       // Agregar referencia de pago si se está cambiando a Cobrado
       if (pendingEstadoChange.nuevoEstado === 'Cobrado' && facturaData.referencia_pago) {
-        updateData.referencia_pago = facturaData.referencia_pago;
+        if (esDistribuidor) {
+          updateData.referencia_pago_distribuidor = facturaData.referencia_pago;
+        } else {
+          updateData.referencia_pago = facturaData.referencia_pago;
+        }
       }
 
       await certificadosApi.cambiarEstado(pendingEstadoChange.downloadId, updateData);
@@ -1049,6 +1075,8 @@ export default function CertificadosPage() {
                       if (user?.rol !== 3) {
                         baseData['Número de Factura'] = descarga.numero_factura || '-';
                         baseData['Referencia de Pago'] = descarga.referencia_pago || '-';
+                        baseData['Nro Factura Distribuidor'] = descarga.numero_factura_distribuidor || '-';
+                        baseData['Referencia Pago Distribuidor'] = descarga.referencia_pago_distribuidor || '-';
                       }
 
                       return baseData;
@@ -1437,9 +1465,21 @@ export default function CertificadosPage() {
                                       </div>
                                     </td>
                                     <td className="px-3 py-4 whitespace-nowrap">
-                                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>
-                                        {descarga.estadoDistribuidor}
-                                      </span>
+                                      <div className="flex flex-col gap-1">
+                                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>
+                                          {descarga.estadoDistribuidor}
+                                        </span>
+                                        {descarga.numero_factura_distribuidor && (
+                                          <span className="text-xs text-gray-600">
+                                            <span className="font-semibold">Nro Factura (Distribuidor):</span> {descarga.numero_factura_distribuidor}
+                                          </span>
+                                        )}
+                                        {descarga.referencia_pago_distribuidor && (
+                                          <span className="text-xs text-gray-600">
+                                            <span className="font-semibold">Referencia (Distribuidor):</span> {descarga.referencia_pago_distribuidor}
+                                          </span>
+                                        )}
+                                      </div>
                                     </td>
                                   </>                                )}                                {user?.rol === 3 && (
                                   <td className="px-3 py-4 whitespace-nowrap">
@@ -1468,19 +1508,19 @@ export default function CertificadosPage() {
                                         {expandedRows.has(descarga.id) && (
                                           <div className="pl-6 space-y-2 border-l-2 border-gray-300">
                                             <div className="space-y-1">
-                                              {descarga.numero_factura && (
+                                              {descarga.numero_factura_distribuidor && (
                                                 <div className="text-xs">
                                                   <span className="font-semibold text-gray-700">Nro Factura:</span>
-                                                  <span className="ml-2 text-gray-600">{descarga.numero_factura}</span>
+                                                  <span className="ml-2 text-gray-600">{descarga.numero_factura_distribuidor}</span>
                                                 </div>
                                               )}
-                                              {descarga.referencia_pago && (
+                                              {descarga.referencia_pago_distribuidor && (
                                                 <div className="text-xs">
                                                   <span className="font-semibold text-gray-700">Referencia:</span>
-                                                  <span className="ml-2 text-gray-600">{descarga.referencia_pago}</span>
+                                                  <span className="ml-2 text-gray-600">{descarga.referencia_pago_distribuidor}</span>
                                                 </div>
                                               )}
-                                              {!descarga.numero_factura && !descarga.referencia_pago && (
+                                              {!descarga.numero_factura_distribuidor && !descarga.referencia_pago_distribuidor && (
                                                 <div className="text-xs text-gray-500">
                                                   Sin datos de facturación
                                                 </div>
@@ -1525,6 +1565,9 @@ export default function CertificadosPage() {
                                         <option value={descarga.estadoDistribuidor}>{descarga.estadoDistribuidor}</option>
                                         <option value="Pendiente de Facturar">Pendiente de Facturar</option>
                                         <option value="Facturado">Facturado</option>
+                                        <option value="Cobrado">Cobrado</option>
+                                        <option value="Garantia">Garantia</option>
+                                        <option value="Bonificado">Bonificado</option>
                                       </select>
                                     )
                                   )}                                  {user?.rol !== 4 && (
@@ -1745,11 +1788,16 @@ export default function CertificadosPage() {
       {showFacturacionModal && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">
-              {pendingEstadoChange?.nuevoEstado === 'Facturado' 
-                ? 'Número de Factura' 
+            <h3 className="text-lg font-medium text-gray-900 mb-1">
+              {pendingEstadoChange?.nuevoEstado === 'Facturado'
+                ? 'Número de Factura'
                 : 'Referencia de Pago'}
             </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {pendingEstadoChange?.tipo === 'distribuidor'
+                ? 'Facturación al Distribuidor'
+                : 'Facturación Mayorista'}
+            </p>
 
             {pendingEstadoChange?.nuevoEstado === 'Facturado' && (
               <div className="mb-4">

@@ -344,6 +344,8 @@ export class DescargasService {
       tipoDescarga: descarga.tipo_descarga,
       numero_factura: descarga.numero_factura,
       referencia_pago: descarga.referencia_pago,
+      numero_factura_distribuidor: descarga.numero_factura_distribuidor,
+      referencia_pago_distribuidor: descarga.referencia_pago_distribuidor,
       usuario: descarga.usuario
         ? {
             nombre: descarga.usuario.nombre,
@@ -447,7 +449,14 @@ export class DescargasService {
    * Cambiar estado de descarga
    */  async updateEstadoDescarga(
     descargaId: string | number,
-    nuevoEstado: { estadoMayorista?: EstadoDescarga; estadoDistribuidor?: EstadoDescarga; numero_factura?: string; referencia_pago?: string },
+    nuevoEstado: {
+      estadoMayorista?: EstadoDescarga;
+      estadoDistribuidor?: EstadoDescarga;
+      numero_factura?: string;
+      referencia_pago?: string;
+      numero_factura_distribuidor?: string;
+      referencia_pago_distribuidor?: string;
+    },
     userId: number,
     userRole: number,
     fechaFacturacion: Date,
@@ -468,9 +477,19 @@ export class DescargasService {
       throw new ForbiddenException(`${rolName} no pueden cambiar estados de descargas`);
     }
 
+    // Mayorista (2): solo puede modificar descargas de sus propios distribuidores (mismo id_mayorista)
+    if (userRole === 2) {
+      const idMayoristaLogueado = await this.obtenerIdMayoristaPorUsuario(userId);
+      if (idMayoristaLogueado !== idMayorista) {
+        throw new ForbiddenException('No podés modificar descargas de distribuidores que no son tuyos');
+      }
+    }
+
     // Estados que liberan deuda (garantia/bonificado): permiten modificar incluso PREPAGO SERSA
     const esEstadoLibreDeuda = nuevoEstado.estadoMayorista === EstadoDescarga.GARANTIA
-      || nuevoEstado.estadoMayorista === EstadoDescarga.BONIFICADO;
+      || nuevoEstado.estadoMayorista === EstadoDescarga.BONIFICADO
+      || nuevoEstado.estadoDistribuidor === EstadoDescarga.GARANTIA
+      || nuevoEstado.estadoDistribuidor === EstadoDescarga.BONIFICADO;
 
     // ⭐ NUEVA LÓGICA: Bloqueo selectivo de PREPAGO
     // Caso 1: PREPAGO de SERSA (mayorista = 1) - Bloquear AMBOS estados (excepto Garantia/Bonificado)
@@ -494,7 +513,9 @@ export class DescargasService {
       estadoMayorista: descarga.estadoMayorista,
       estadoDistribuidor: descarga.estadoDistribuidor,
       numero_factura: descarga.numero_factura,
-      referencia_pago: descarga.referencia_pago
+      referencia_pago: descarga.referencia_pago,
+      numero_factura_distribuidor: descarga.numero_factura_distribuidor,
+      referencia_pago_distribuidor: descarga.referencia_pago_distribuidor
     };
 
     this.logger.log(`[updateEstadoDescarga] Usuario ${userId} (rol ${userRole}) intenta cambiar estados`);
@@ -514,15 +535,29 @@ export class DescargasService {
       if (idMayorista === 1  ) {
         descarga.estadoDistribuidor = nuevoEstado.estadoMayorista;
         this.logger.log(`[updateEstadoDescarga] Admin/Facturación cambió estadoDistribuidor (SERSA)`);
+
+        // Espejar también el número de factura/referencia de pago hacia los campos del distribuidor
+        if (nuevoEstado.estadoMayorista === EstadoDescarga.FACTURADO) {
+          descarga.numero_factura_distribuidor = nuevoEstado.numero_factura || descarga.numero_factura_distribuidor;
+        } else if (nuevoEstado.estadoMayorista === EstadoDescarga.PENDIENTE_FACTURAR) {
+          descarga.numero_factura_distribuidor = null;
+          descarga.referencia_pago_distribuidor = null;
+        }
+
+        if (nuevoEstado.estadoMayorista === EstadoDescarga.COBRADO) {
+          descarga.referencia_pago_distribuidor = nuevoEstado.referencia_pago || descarga.referencia_pago_distribuidor;
+        } else if (nuevoEstado.estadoMayorista === EstadoDescarga.FACTURADO) {
+          descarga.referencia_pago_distribuidor = null;
+        }
       }
     }
-    // Mayorista (2): Puede cambiar estadoDistribuidor de sus distribuidores
+    // Mayorista (2): Puede cambiar estadoDistribuidor de sus distribuidores con los 5 estados
     else if (userRole === 2 && nuevoEstado.estadoDistribuidor !== undefined) {
       descarga.estadoDistribuidor = nuevoEstado.estadoDistribuidor;
-      this.logger.log(`[updateEstadoDescarga] Mayorista cambió estadoDistribuidor`);
+      this.logger.log(`[updateEstadoDescarga] Mayorista cambió estadoDistribuidor a ${nuevoEstado.estadoDistribuidor}`);
     }
 
-    // Manejar número de factura (solo para estado Facturado)
+    // Manejar número de factura del mayorista (solo para estado Facturado)
     if (nuevoEstado.estadoMayorista === EstadoDescarga.FACTURADO) {
       descarga.numero_factura = nuevoEstado.numero_factura || descarga.numero_factura;
     } else if (nuevoEstado.estadoMayorista === EstadoDescarga.PENDIENTE_FACTURAR) {
@@ -531,12 +566,31 @@ export class DescargasService {
       descarga.referencia_pago = null;
     }
 
-    // Manejar referencia de pago (solo para estado Cobrado)
+    // Manejar referencia de pago del mayorista (solo para estado Cobrado)
     if (nuevoEstado.estadoMayorista === EstadoDescarga.COBRADO) {
       descarga.referencia_pago = nuevoEstado.referencia_pago || descarga.referencia_pago;
     } else if (nuevoEstado.estadoMayorista === EstadoDescarga.FACTURADO) {
       // Si retrocede de Cobrado a Facturado, limpiar solo referencia_pago
       descarga.referencia_pago = null;
+    }
+
+    // Manejar número de factura del distribuidor (solo cuando lo cambia el Mayorista, estado Facturado)
+    if (userRole === 2) {
+      if (nuevoEstado.estadoDistribuidor === EstadoDescarga.FACTURADO) {
+        descarga.numero_factura_distribuidor = nuevoEstado.numero_factura_distribuidor || descarga.numero_factura_distribuidor;
+      } else if (nuevoEstado.estadoDistribuidor === EstadoDescarga.PENDIENTE_FACTURAR) {
+        // Si retrocede a Pendiente, limpiar ambos
+        descarga.numero_factura_distribuidor = null;
+        descarga.referencia_pago_distribuidor = null;
+      }
+
+      // Manejar referencia de pago del distribuidor (solo para estado Cobrado)
+      if (nuevoEstado.estadoDistribuidor === EstadoDescarga.COBRADO) {
+        descarga.referencia_pago_distribuidor = nuevoEstado.referencia_pago_distribuidor || descarga.referencia_pago_distribuidor;
+      } else if (nuevoEstado.estadoDistribuidor === EstadoDescarga.FACTURADO) {
+        // Si retrocede de Cobrado a Facturado, limpiar solo referencia_pago
+        descarga.referencia_pago_distribuidor = null;
+      }
     }
 
     // Actualizar fecha de facturación si se proporciona
@@ -563,7 +617,11 @@ export class DescargasService {
       estadoAnterior,
       {
         estadoMayorista: updatedDescarga.estadoMayorista,
-        estadoDistribuidor: updatedDescarga.estadoDistribuidor
+        estadoDistribuidor: updatedDescarga.estadoDistribuidor,
+        numero_factura: updatedDescarga.numero_factura,
+        referencia_pago: updatedDescarga.referencia_pago,
+        numero_factura_distribuidor: updatedDescarga.numero_factura_distribuidor,
+        referencia_pago_distribuidor: updatedDescarga.referencia_pago_distribuidor
       },
       ip
     );

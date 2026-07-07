@@ -75,6 +75,22 @@ export class UpdateEstadoDescargaDto {
   @IsOptional()
   @IsString()
   referencia_pago?: string;
+
+  @ApiPropertyOptional({
+    description: 'Número de factura del distribuidor (solo para estadoDistribuidor = Facturado)',
+    example: '2025-001'
+  })
+  @IsOptional()
+  @IsString()
+  numero_factura_distribuidor?: string;
+
+  @ApiPropertyOptional({
+    description: 'Referencia de pago del distribuidor (solo para estadoDistribuidor = Cobrado)',
+    example: 'REF-123456'
+  })
+  @IsOptional()
+  @IsString()
+  referencia_pago_distribuidor?: string;
 }
 
 export class QueryDescargasDto {

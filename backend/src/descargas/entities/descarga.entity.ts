@@ -40,9 +40,9 @@ export class Descarga {
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   fecha_facturacion: Date;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Estado de facturación distribuidor',
-    enum: ['Pendiente de Facturar', 'Facturado', 'Cobrado'],
+    enum: ['Pendiente de Facturar', 'Facturado', 'Cobrado', 'Garantia', 'Bonificado'],
     default: 'Pendiente de Facturar'
   })
   @Column({ type: 'text', default: 'Pendiente de Facturar' })
@@ -96,4 +96,18 @@ export class Descarga {
   })
   @Column({ type: 'varchar', length: 255, nullable: true })
   referencia_pago: string;
+
+  @ApiPropertyOptional({
+    description: 'Número de factura (solo para estado Facturado del distribuidor)',
+    example: '2025-001'
+  })
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  numero_factura_distribuidor: string;
+
+  @ApiPropertyOptional({
+    description: 'Referencia de pago (solo para estado Cobrado del distribuidor)',
+    example: 'REF-123456'
+  })
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  referencia_pago_distribuidor: string;
 }

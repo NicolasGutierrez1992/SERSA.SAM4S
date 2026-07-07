@@ -79,6 +79,8 @@ export interface DescargaHistorial {
   tipoDescarga?: 'CUENTA_CORRIENTE' | 'PREPAGO' | null;
   numero_factura?: string | null;
   referencia_pago?: string | null;
+  numero_factura_distribuidor?: string | null;
+  referencia_pago_distribuidor?: string | null;
   usuario?: {
     nombre: string;
     cuit: string;
@@ -285,6 +287,8 @@ export const certificadosApi = {
       estadoDistribuidor?: string;
       numero_factura?: string;
       referencia_pago?: string;
+      numero_factura_distribuidor?: string;
+      referencia_pago_distribuidor?: string;
     },
   ): Promise<DescargaHistorial> => {
     const response = await api.put(`/certificados/descargas/${downloadId}/estado`, estado);
