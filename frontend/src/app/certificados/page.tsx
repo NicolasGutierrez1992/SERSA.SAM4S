@@ -1464,6 +1464,11 @@ export default function CertificadosPage() {
                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>
                                           {descarga.estadoMayorista}
                                         </span>
+                                        {descarga.tipoDescarga === 'PREPAGO' && (
+                                          <span className="text-xs text-gray-600">
+                                            <span className="font-semibold">Factura Prepago:</span> {descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)'}
+                                          </span>
+                                        )}
                                         {descarga.numero_factura && (
                                           <span className="text-xs text-gray-600">
                                             <span className="font-semibold">Nro Factura:</span> {descarga.numero_factura}
@@ -1495,10 +1500,11 @@ export default function CertificadosPage() {
                                     </td>
                                   </>                                )}                                {user?.rol === 3 && (
                                   <td className="px-3 py-4 whitespace-nowrap">
-                                    {/* Para Distribuidor SERSA (idMayorista=1): Mostrar estado con datos de facturación */}
-                                    {descarga.usuario?.id_mayorista === 1 ? (
+                                    {/* Mostrar detalle expandible si la descarga usó saldo prepago (factura de la compra)
+                                        o si es Distribuidor SERSA (id_mayorista=1, datos de facturación mayorista) */}
+                                    {(descarga.tipoDescarga === 'PREPAGO' || descarga.usuario?.id_mayorista === 1) ? (
                                       <div className="space-y-2">
-                                        {/* Collapsible row header - DISTRIBUIDOR SERSA ve EstadoDistribuidor + datos facturación */}
+                                        {/* Collapsible row header */}
                                         <button
                                           onClick={() => toggleRowExpanded(descarga.id)}
                                           className="flex items-center gap-2 hover:opacity-80"
@@ -1515,34 +1521,43 @@ export default function CertificadosPage() {
                                             {descarga.estadoDistribuidor}
                                           </span>
                                         </button>
-                                        
+
                                         {/* Expanded content - Mostrar datos de facturación */}
                                         {expandedRows.has(descarga.id) && (
                                           <div className="pl-6 space-y-2 border-l-2 border-gray-300">
                                             <div className="space-y-1">
-                                              {descarga.numero_factura_distribuidor && (
+                                              {descarga.tipoDescarga === 'PREPAGO' ? (
                                                 <div className="text-xs">
-                                                  <span className="font-semibold text-gray-700">Nro Factura:</span>
-                                                  <span className="ml-2 text-gray-600">{descarga.numero_factura_distribuidor}</span>
+                                                  <span className="font-semibold text-gray-700">Factura Prepago:</span>
+                                                  <span className="ml-2 text-gray-600">{descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)'}</span>
                                                 </div>
-                                              )}
-                                              {descarga.referencia_pago_distribuidor && (
-                                                <div className="text-xs">
-                                                  <span className="font-semibold text-gray-700">Referencia:</span>
-                                                  <span className="ml-2 text-gray-600">{descarga.referencia_pago_distribuidor}</span>
-                                                </div>
-                                              )}
-                                              {!descarga.numero_factura_distribuidor && !descarga.referencia_pago_distribuidor && (
-                                                <div className="text-xs text-gray-500">
-                                                  Sin datos de facturación
-                                                </div>
+                                              ) : (
+                                                <>
+                                                  {descarga.numero_factura_distribuidor && (
+                                                    <div className="text-xs">
+                                                      <span className="font-semibold text-gray-700">Nro Factura:</span>
+                                                      <span className="ml-2 text-gray-600">{descarga.numero_factura_distribuidor}</span>
+                                                    </div>
+                                                  )}
+                                                  {descarga.referencia_pago_distribuidor && (
+                                                    <div className="text-xs">
+                                                      <span className="font-semibold text-gray-700">Referencia:</span>
+                                                      <span className="ml-2 text-gray-600">{descarga.referencia_pago_distribuidor}</span>
+                                                    </div>
+                                                  )}
+                                                  {!descarga.numero_factura_distribuidor && !descarga.referencia_pago_distribuidor && (
+                                                    <div className="text-xs text-gray-500">
+                                                      Sin datos de facturación
+                                                    </div>
+                                                  )}
+                                                </>
                                               )}
                                             </div>
                                           </div>
                                         )}
                                       </div>
                                     ) : (
-                                      /* Para otros mayoristas: Solo mostrar estado sin expandible */
+                                      /* Para otros mayoristas sin prepago: Solo mostrar estado sin expandible */
                                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>
                                         {descarga.estadoDistribuidor}
                                       </span>
