@@ -108,18 +108,15 @@ export default function CertificadosPage() {
   };
 
   const toggleSelectAll = () => {
-    // Filtrar descargas que no sean PREPAGO
     const selectableIds = new Set(
       historial
-        .filter(d => d.tipoDescarga !== 'PREPAGO')
+        .filter(d => d.estadoMayorista !== 'PREPAGO')
         .map(d => d.id)
     );
 
     if (selectedDownloadIds.size === selectableIds.size) {
-      // Si todos están seleccionados, desseleccionar todos
       setSelectedDownloadIds(new Set());
     } else {
-      // Seleccionar todos los no-PREPAGO
       setSelectedDownloadIds(selectableIds);
     }
   };
@@ -146,10 +143,9 @@ export default function CertificadosPage() {
         const descarga = historial.find(d => d.id === downloadId);
         if (!descarga) continue;
 
-        // Bloquear si es PREPAGO
-        if (descarga.tipoDescarga === 'PREPAGO') {
+        if (descarga.estadoMayorista === 'PREPAGO') {
           failedCount++;
-          errors.push(`${descarga.controladorId}: PREPAGO - Inmutable`);
+          errors.push(`${descarga.controladorId}: Estado Mayorista PREPAGO - Inmutable`);
           continue;
         }
 
@@ -550,9 +546,8 @@ export default function CertificadosPage() {
     }
   };
 
-  // Calcular descargas seleccionadas válidas (no PREPAGO)
   const validSelectedCount = Array.from(selectedDownloadIds).filter(id =>
-    historial.find(d => d.id === id && d.tipoDescarga !== 'PREPAGO')
+    historial.find(d => d.id === id && d.estadoMayorista !== 'PREPAGO')
   ).length;  const handleLogout = () => {
       authApi.logout();
     };
@@ -1250,10 +1245,10 @@ export default function CertificadosPage() {
                               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                                 <input
                                   type="checkbox"
-                                  checked={selectedDownloadIds.size > 0 && selectedDownloadIds.size === historial.filter(d => d.tipoDescarga !== 'PREPAGO').length}
+                                  checked={selectedDownloadIds.size > 0 && selectedDownloadIds.size === historial.filter(d => d.estadoMayorista !== 'PREPAGO').length}
                                   onChange={toggleSelectAll}
                                   className="rounded"
-                                  title="Seleccionar todos (excepto PREPAGO)"
+                                  title="Seleccionar todos (excepto Estado Mayorista PREPAGO)"
                                 />
                               </th>
                             )}
@@ -1290,11 +1285,11 @@ export default function CertificadosPage() {
                                   <td className="px-3 py-4 whitespace-nowrap text-sm">
                                     <input
                                       type="checkbox"
-                                      checked={selectedDownloadIds.has(descarga.id) && descarga.tipoDescarga !== 'PREPAGO'}
-                                      onChange={() => descarga.tipoDescarga !== 'PREPAGO' && toggleSelectDownload(descarga.id)}
-                                      disabled={descarga.tipoDescarga === 'PREPAGO'}
+                                      checked={selectedDownloadIds.has(descarga.id) && descarga.estadoMayorista !== 'PREPAGO'}
+                                      onChange={() => descarga.estadoMayorista !== 'PREPAGO' && toggleSelectDownload(descarga.id)}
+                                      disabled={descarga.estadoMayorista === 'PREPAGO'}
                                       className="rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                                      title={descarga.tipoDescarga === 'PREPAGO' ? 'PREPAGO no puede ser seleccionado' : 'Seleccionar para cambio masivo'}
+                                      title={descarga.estadoMayorista === 'PREPAGO' ? 'Estado Mayorista PREPAGO no puede modificarse' : 'Seleccionar para cambio masivo'}
                                     />
                                   </td>
                                 )}<td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.controladorId || descarga.certificadoNombre}</td>
