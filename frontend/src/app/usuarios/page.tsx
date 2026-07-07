@@ -4,7 +4,8 @@ import api, { getUser } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 import { Table, Input, Spin,  Modal, Button, Form, Select, message } from 'antd';
 import Image from 'next/image';
-import { EditOutlined, ReloadOutlined } from '@ant-design/icons';
+import { EditOutlined, ReloadOutlined, DownloadOutlined } from '@ant-design/icons';
+import ExcelJS from 'exceljs';
 
 const getCurrentUser = () => getUser();
 
@@ -361,7 +362,31 @@ export default function UsuariosPage() {
     u.nombre?.toLowerCase().includes(search.toLowerCase()) ||
     u.mail?.toLowerCase().includes(search.toLowerCase()) ||
     u.cuit?.toLowerCase().includes(search.toLowerCase())
-  );  // Obtener nombre del rol
+  );
+
+  const exportarExcel = async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Usuarios');
+    sheet.columns = [
+      { header: 'CUIT', key: 'cuit', width: 20 },
+      { header: 'Razón Social', key: 'nombre', width: 30 },
+      { header: 'Mail', key: 'mail', width: 30 },
+      { header: 'Teléfono', key: 'celular', width: 20 },
+    ];
+    filtered.forEach(u => {
+      sheet.addRow({ cuit: u.cuit, nombre: u.nombre, mail: u.mail, celular: u.celular || '' });
+    });
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'usuarios.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Obtener nombre del rol
   const getRoleName = (rol: number) => {
     switch (rol) {
       case 1: return 'Administrador';
@@ -424,6 +449,13 @@ export default function UsuariosPage() {
                 )}
                 
               </div>
+              <Button
+                icon={<DownloadOutlined />}
+                onClick={exportarExcel}
+                disabled={filtered.length === 0}
+              >
+                Exportar Excel
+              </Button>
               {!isMayorista && (
                 <Button
                   className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
