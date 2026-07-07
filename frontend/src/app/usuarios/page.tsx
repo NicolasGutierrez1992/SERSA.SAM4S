@@ -20,14 +20,6 @@ export default function UsuariosPage() {
   const [user, setUser] = useState<any>(null);
   const [mounted, setMounted] = useState(false);
   const router = useRouter();
-  const rolForm = Form.useWatch('rol', form);
-  // Rol efectivo para decidir qué secciones mostrar: el del usuario en edición, o el
-  // seleccionado en el formulario al crear uno nuevo.
-  const rolEfectivo = editingUser?.rol ?? rolForm;
-  // Mayorista (2), Distribuidor (3) y Facturación (4) pueden recibir compras prepago
-  const mostrarComprasPrepago = editingUser && [2, 3, 4].includes(rolEfectivo);
-  // El límite de cuenta corriente no aplica a Admin (1) ni Mayorista (2)
-  const mostrarLimiteCuentaCorriente = ![1, 2].includes(rolEfectivo);
 
   // Estado para compras prepago (Mayorista/Distribuidor/Facturación)
   const [comprasPrepago, setComprasPrepago] = useState<CompraPrepago[]>([]);
@@ -36,36 +28,14 @@ export default function UsuariosPage() {
   const [editingFacturaId, setEditingFacturaId] = useState<number | null>(null);
   const [editingFacturaValue, setEditingFacturaValue] = useState('');
 
-  // Estado para el editor rápido de límite de cuenta corriente (sin abrir el perfil completo)
-  const [quickEditUser, setQuickEditUser] = useState<any | null>(null);
-  const [quickEditValue, setQuickEditValue] = useState('');
-  const [quickEditLoading, setQuickEditLoading] = useState(false);
-
-  const openQuickEditLimite = (user: any) => {
-    setQuickEditUser(user);
-    setQuickEditValue(String(user.limite_descargas ?? 0));
-  };
-
-  const handleGuardarQuickEdit = async () => {
-    if (!quickEditUser) return;
-    const limiteDescargas = Number(quickEditValue);
-    if (isNaN(limiteDescargas) || limiteDescargas < 0) {
-      message.error('Ingrese un límite válido');
-      return;
-    }
-    setQuickEditLoading(true);
-    try {
-      await api.patch(`/users/${quickEditUser.id_usuario}`, { limiteDescargas });
-      message.success('Límite de cuenta corriente actualizado');
-      setQuickEditUser(null);
-      const res = await api.get('/users');
-      setUsuarios(res.data.data || []);
-    } catch (err: any) {
-      message.error(err?.response?.data?.message || 'Error al actualizar el límite');
-    } finally {
-      setQuickEditLoading(false);
-    }
-  };
+  // Estado del modal unificado "Gestionar Créditos" (límite de cuenta corriente + compras prepago)
+  const [creditosUser, setCreditosUser] = useState<any | null>(null);
+  const [creditosLimiteValue, setCreditosLimiteValue] = useState('');
+  const [creditosLoading, setCreditosLoading] = useState(false);
+  // El límite de cuenta corriente no aplica a Admin (1) ni Mayorista (2)
+  const mostrarLimiteCuentaCorriente = creditosUser && ![1, 2].includes(creditosUser.rol);
+  // Mayorista (2), Distribuidor (3) y Facturación (4) pueden recibir compras prepago
+  const mostrarComprasPrepago = creditosUser && [2, 3, 4].includes(creditosUser.rol);
 
   const fetchComprasPrepago = async (userId: number) => {
     setComprasLoading(true);
@@ -79,35 +49,69 @@ export default function UsuariosPage() {
     }
   };
 
+  const openGestionarCreditos = (record: any) => {
+    setCreditosUser(record);
+    setCreditosLimiteValue(String(record.limite_descargas ?? 0));
+    setComprasPrepago([]);
+    setNuevaCompra({ cantidad: '', numero_factura: '' });
+    if ([2, 3, 4].includes(record.rol)) {
+      fetchComprasPrepago(record.id_usuario);
+    }
+  };
+
+  const handleGuardarCreditos = async () => {
+    if (!creditosUser) return;
+    if (![1, 2].includes(creditosUser.rol)) {
+      const limiteDescargas = Number(creditosLimiteValue);
+      if (isNaN(limiteDescargas) || limiteDescargas < 0) {
+        message.error('Ingrese un límite válido');
+        return;
+      }
+      setCreditosLoading(true);
+      try {
+        await api.patch(`/users/${creditosUser.id_usuario}`, { limiteDescargas });
+        message.success('Límite de cuenta corriente actualizado');
+        const res = await api.get('/users');
+        setUsuarios(res.data.data || []);
+      } catch (err: any) {
+        message.error(err?.response?.data?.message || 'Error al actualizar el límite');
+        return;
+      } finally {
+        setCreditosLoading(false);
+      }
+    }
+    setCreditosUser(null);
+  };
+
   const handleAgregarCompra = async () => {
-    if (!editingUser) return;
+    if (!creditosUser) return;
     const cantidad = Number(nuevaCompra.cantidad);
     if (!cantidad || cantidad <= 0) {
       message.error('Ingrese una cantidad válida');
       return;
     }
     try {
-      await api.post(`/users/${editingUser.id_usuario}/compras-prepago`, {
+      await api.post(`/users/${creditosUser.id_usuario}/compras-prepago`, {
         cantidad,
         numero_factura: nuevaCompra.numero_factura || undefined,
       });
       message.success('Compra cargada');
       setNuevaCompra({ cantidad: '', numero_factura: '' });
-      await fetchComprasPrepago(editingUser.id_usuario);
+      await fetchComprasPrepago(creditosUser.id_usuario);
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Error al cargar la compra');
     }
   };
 
   const handleGuardarFactura = async (compraId: number) => {
-    if (!editingUser) return;
+    if (!creditosUser) return;
     try {
-      await api.patch(`/users/${editingUser.id_usuario}/compras-prepago/${compraId}`, {
+      await api.patch(`/users/${creditosUser.id_usuario}/compras-prepago/${compraId}`, {
         numero_factura: editingFacturaValue || null,
       });
       message.success('Factura actualizada');
       setEditingFacturaId(null);
-      await fetchComprasPrepago(editingUser.id_usuario);
+      await fetchComprasPrepago(creditosUser.id_usuario);
     } catch (err: any) {
       message.error(err?.response?.data?.message || 'Error al actualizar la factura');
     }
@@ -145,8 +149,6 @@ export default function UsuariosPage() {
   // funcion para agregar un nuevo usuario
   const openAddUser = () => {
     setEditingUser(null);
-    setComprasPrepago([]);
-    setNuevaCompra({ cantidad: '', numero_factura: '' });
     form.resetFields();
     form.setFieldsValue({ password: 'certificados' });
     // Si es mayorista, setear id_mayorista automáticamente
@@ -164,11 +166,9 @@ export default function UsuariosPage() {
     email: user.mail,
     cuit: user.cuit,
     rol: user.rol,
-    status: user.status,    
-    limiteDescargas: user.limite_descargas,
+    status: user.status,
     id_mayorista: user.id_mayorista,
     celular: user.celular,
-    tipo_descarga: user.tipo_descarga || 'CUENTA_CORRIENTE',
     notification_limit: user.notification_limit !== null && user.notification_limit !== undefined ? user.notification_limit : 100,
   });
   const openEditUser = async (user: any) => {
@@ -176,7 +176,7 @@ export default function UsuariosPage() {
       // ⭐ Llamar al GET endpoint para validar permisos
       const response = await api.get(`/users/${user.id_usuario}`);
       const userData = response.data;
-      
+
       // Validar que pueda editar
       if (!userData.canEdit) {
         message.error('No tienes permisos para editar este usuario');
@@ -186,13 +186,6 @@ export default function UsuariosPage() {
       setEditingUser(userData);
       form.setFieldsValue(mapUserToForm(userData));
       setModalVisible(true);
-
-      // Mayorista/Distribuidor/Facturación pueden tener compras prepago cargadas
-      setComprasPrepago([]);
-      setNuevaCompra({ cantidad: '', numero_factura: '' });
-      if ([2, 3, 4].includes(userData.rol)) {
-        fetchComprasPrepago(userData.id_usuario);
-      }
     } catch (err: any) {
       console.error('Error al validar permisos:', err);
       const serverMsg = err?.response?.data?.message;
@@ -235,39 +228,17 @@ export default function UsuariosPage() {
         return;
       }
 
-      // ⭐ Si es mayorista editando, y cambia el tipo_descarga, mostrar confirmación
-      if (editingUser && isMayorista && values.tipo_descarga !== editingUser.tipo_descarga) {
-        const tipoAnterior = editingUser.tipo_descarga || 'CUENTA_CORRIENTE';
-        const tipoNuevo = values.tipo_descarga;
-        const labelAnterior = tipoAnterior === 'PREPAGO' ? 'Prepago' : 'Cuenta Corriente';
-        const labelNuevo = tipoNuevo === 'PREPAGO' ? 'Prepago' : 'Cuenta Corriente';
-        
-        const confirmacion = window.confirm(
-          `⚠️ CAMBIO DE TIPO DE DESCARGA\n\n` +
-          `Usuario: ${editingUser.nombre}\n` +
-          `Cambiar de: ${labelAnterior} → ${labelNuevo}\n\n` +
-          (tipoNuevo === 'PREPAGO' 
-            ? `Se le descontará el límite en cada descarga.\n` 
-            : `Se validará por descargas pendientes de pago.\n`) +
-          `\n¿Confirmar este cambio?`
-        );
-
-        if (!confirmacion) {
-          return;
-        }
-      }      console.log('Valores validados para enviar al backend:', values);
+      console.log('Valores validados para enviar al backend:', values);
       console.log('Usuario en edición:', editingUser);
       if (editingUser) {
         // ⭐ Filtrar campos según el rol
         let dataToSend: any = {};
-        
+
         if (isMayorista) {
-          // Los mayoristas solo pueden editar estos campos
-          dataToSend = {
-            limiteDescargas: values.limiteDescargas,
-            tipo_descarga: values.tipo_descarga
-          };
-          console.log('[Mayorista Edit] Campos filtrados:', dataToSend);
+          // El Mayorista ya no edita nada desde este formulario (el límite/compras
+          // se gestionan desde el modal "Gestionar Créditos"); no hay campos propios.
+          dataToSend = {};
+          console.log('[Mayorista Edit] Sin campos editables desde este formulario');
         } else if (currentUser?.rol === 5) {
           // Técnico editando: puede editar todo EXCEPTO rol y notification_limit
           const { rol, notification_limit, ...dataSinRol } = values;
@@ -279,8 +250,6 @@ export default function UsuariosPage() {
             nombre: values.nombre,
             email: values.email,
             celular: values.celular,
-            limiteDescargas: values.limiteDescargas,
-            tipo_descarga: values.tipo_descarga,
             notification_limit: values.notification_limit,
             status: values.status,
           };
@@ -415,12 +384,12 @@ export default function UsuariosPage() {
             onClick={() => openEditUser(record)}
             title="Editar usuario"
           />
-          {[3, 4].includes(record.rol) && (
+          {[2, 3, 4].includes(record.rol) && (
             <Button
               type="link"
               icon={<DollarOutlined />}
-              onClick={() => openQuickEditLimite(record)}
-              title="Editar límite de cuenta corriente"
+              onClick={() => openGestionarCreditos(record)}
+              title="Gestionar créditos"
             />
           )}
           <Button
@@ -612,15 +581,15 @@ export default function UsuariosPage() {
                   destroyOnClose
                 >                  {/* ⭐ Mostrar info si es mayorista editando */}
                   {isMayorista && editingUser && (
-                    <div style={{ 
-                      backgroundColor: '#f0f9ff', 
-                      border: '1px solid #0ea5e9', 
+                    <div style={{
+                      backgroundColor: '#f0f9ff',
+                      border: '1px solid #0ea5e9',
                       borderRadius: '6px',
                       padding: '12px',
                       marginBottom: '16px'
                     }}>
                       <p style={{ margin: 0, fontSize: '14px', color: '#0369a1', fontWeight: 500 }}>
-                        ℹ️ Como mayorista, solo puedes editar: Límite de Descargas y Tipo de Descarga
+                        ℹ️ El límite de cuenta corriente y las compras prepago se gestionan desde el ícono &quot;Gestionar Créditos&quot; de la tabla.
                       </p>
                     </div>
                   )}
@@ -640,7 +609,7 @@ export default function UsuariosPage() {
                   )}<Form
                     form={form}
                     layout="vertical"
-                    initialValues={editingUser || { status: 1, id_rol: 3, tipo_descarga: 'CUENTA_CORRIENTE', limiteDescargas: 0, notification_limit: 100 }}
+                    initialValues={editingUser || { status: 1, id_rol: 3, notification_limit: 100 }}
                   >
                     <Form.Item name="cuit" label="CUIT" rules={[{ required: true, message: 'Ingrese el CUIT' }]}>
                       <Input disabled={isMayorista} />
@@ -695,90 +664,6 @@ export default function UsuariosPage() {
                         ]}
                       />
                     </Form.Item>
-                    {mostrarLimiteCuentaCorriente && (
-                      <Form.Item name="limiteDescargas" label="Límite de Cuenta Corriente" rules={[{ required: true }]}>
-                        <Input type="number" min={0} />
-                      </Form.Item>
-                    )}
-                      <Form.Item name="tipo_descarga" label="Tipo de Descarga" rules={[{ required: true, message: 'Seleccione el tipo de descarga' }]}>
-                      <Select
-                        disabled={isMayorista && !editingUser}
-                        options={[
-                          { value: 'CUENTA_CORRIENTE', label: 'Cuenta Corriente' },
-                          { value: 'PREPAGO', label: 'Prepago' }
-                        ]}
-                      />
-                    </Form.Item>
-                    {mostrarComprasPrepago && (
-                      <div style={{ marginBottom: 16, border: '1px solid #d9d9d9', borderRadius: 6, padding: 12 }}>
-                        <p style={{ fontWeight: 600, marginBottom: 8 }}>Compras Prepago</p>
-                        {comprasLoading ? (
-                          <Spin size="small" />
-                        ) : (
-                          <table style={{ width: '100%', fontSize: 12, marginBottom: 8, borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr>
-                                <th style={{ textAlign: 'left' }}>Fecha</th>
-                                <th style={{ textAlign: 'left' }}>Factura</th>
-                                <th style={{ textAlign: 'right' }}>Cant.</th>
-                                <th style={{ textAlign: 'right' }}>Usadas</th>
-                                <th style={{ textAlign: 'right' }}>Disp.</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {comprasPrepago.map(c => (
-                                <tr key={c.id}>
-                                  <td>{new Date(c.fecha_compra).toLocaleDateString()}</td>
-                                  <td>
-                                    {editingFacturaId === c.id ? (
-                                      <Input
-                                        size="small"
-                                        value={editingFacturaValue}
-                                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingFacturaValue(e.target.value)}
-                                        onPressEnter={() => handleGuardarFactura(c.id)}
-                                        onBlur={() => handleGuardarFactura(c.id)}
-                                        autoFocus
-                                      />
-                                    ) : (
-                                      <span
-                                        onClick={() => { setEditingFacturaId(c.id); setEditingFacturaValue(c.numero_factura || ''); }}
-                                        style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
-                                      >
-                                        {c.numero_factura || '(sin factura)'}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td style={{ textAlign: 'right' }}>{c.cantidad}</td>
-                                  <td style={{ textAlign: 'right' }}>{c.cantidad_usada}</td>
-                                  <td style={{ textAlign: 'right' }}>{c.disponible}</td>
-                                </tr>
-                              ))}
-                              {comprasPrepago.length === 0 && (
-                                <tr><td colSpan={5} style={{ color: '#999' }}>Sin compras cargadas</td></tr>
-                              )}
-                            </tbody>
-                          </table>
-                        )}
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <Input
-                            size="small"
-                            type="number"
-                            min={1}
-                            placeholder="Cantidad"
-                            value={nuevaCompra.cantidad}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNuevaCompra({ ...nuevaCompra, cantidad: e.target.value })}
-                            style={{ width: 90 }}
-                          />
-                          <Input
-                            size="small"
-                            placeholder="Nro factura (opcional)"
-                            value={nuevaCompra.numero_factura}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNuevaCompra({ ...nuevaCompra, numero_factura: e.target.value })}
-                          />
-                          <Button size="small" onClick={handleAgregarCompra}>Agregar</Button>
-                        </div>
-                      </div>
-                    )}
                       <Form.Item name="id_mayorista" label="Mayorista">
                       <Select 
                         disabled={isMayorista} 
@@ -831,24 +716,101 @@ export default function UsuariosPage() {
               </>
             )}
             <Modal
-              title="Editar límite de cuenta corriente"
-              open={!!quickEditUser}
-              onCancel={() => setQuickEditUser(null)}
-              onOk={handleGuardarQuickEdit}
-              confirmLoading={quickEditLoading}
+              title="Gestionar Créditos"
+              open={!!creditosUser}
+              onCancel={() => setCreditosUser(null)}
+              onOk={handleGuardarCreditos}
+              confirmLoading={creditosLoading}
               okText="Guardar"
             >
-              {quickEditUser && (
+              {creditosUser && (
                 <div>
-                  <p style={{ marginBottom: 8 }}>
-                    Usuario: <strong>{quickEditUser.nombre}</strong>
+                  <p style={{ marginBottom: 12 }}>
+                    Usuario: <strong>{creditosUser.nombre}</strong>
                   </p>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={quickEditValue}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuickEditValue(e.target.value)}
-                  />
+
+                  {mostrarLimiteCuentaCorriente && (
+                    <div style={{ marginBottom: 16 }}>
+                      <p style={{ fontWeight: 600, marginBottom: 4 }}>Límite de Cuenta Corriente</p>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={creditosLimiteValue}
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCreditosLimiteValue(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  {mostrarComprasPrepago && (
+                    <div>
+                      <p style={{ fontWeight: 600, marginBottom: 8 }}>Compras Prepago</p>
+                      {comprasLoading ? (
+                        <Spin size="small" />
+                      ) : (
+                        <table style={{ width: '100%', fontSize: 12, marginBottom: 8, borderCollapse: 'collapse' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ textAlign: 'left' }}>Fecha</th>
+                              <th style={{ textAlign: 'left' }}>Factura</th>
+                              <th style={{ textAlign: 'right' }}>Cant.</th>
+                              <th style={{ textAlign: 'right' }}>Usadas</th>
+                              <th style={{ textAlign: 'right' }}>Disp.</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {comprasPrepago.map(c => (
+                              <tr key={c.id}>
+                                <td>{new Date(c.fecha_compra).toLocaleDateString()}</td>
+                                <td>
+                                  {editingFacturaId === c.id ? (
+                                    <Input
+                                      size="small"
+                                      value={editingFacturaValue}
+                                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditingFacturaValue(e.target.value)}
+                                      onPressEnter={() => handleGuardarFactura(c.id)}
+                                      onBlur={() => handleGuardarFactura(c.id)}
+                                      autoFocus
+                                    />
+                                  ) : (
+                                    <span
+                                      onClick={() => { setEditingFacturaId(c.id); setEditingFacturaValue(c.numero_factura || ''); }}
+                                      style={{ cursor: 'pointer', textDecoration: 'underline dotted' }}
+                                    >
+                                      {c.numero_factura || '(sin factura)'}
+                                    </span>
+                                  )}
+                                </td>
+                                <td style={{ textAlign: 'right' }}>{c.cantidad}</td>
+                                <td style={{ textAlign: 'right' }}>{c.cantidad_usada}</td>
+                                <td style={{ textAlign: 'right' }}>{c.disponible}</td>
+                              </tr>
+                            ))}
+                            {comprasPrepago.length === 0 && (
+                              <tr><td colSpan={5} style={{ color: '#999' }}>Sin compras cargadas</td></tr>
+                            )}
+                          </tbody>
+                        </table>
+                      )}
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <Input
+                          size="small"
+                          type="number"
+                          min={1}
+                          placeholder="Cantidad"
+                          value={nuevaCompra.cantidad}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNuevaCompra({ ...nuevaCompra, cantidad: e.target.value })}
+                          style={{ width: 90 }}
+                        />
+                        <Input
+                          size="small"
+                          placeholder="Nro factura (opcional)"
+                          value={nuevaCompra.numero_factura}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNuevaCompra({ ...nuevaCompra, numero_factura: e.target.value })}
+                        />
+                        <Button size="small" onClick={handleAgregarCompra}>Agregar</Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </Modal>
