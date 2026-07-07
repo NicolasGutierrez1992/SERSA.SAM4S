@@ -18,7 +18,7 @@ import {
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
 import { Response } from 'express';
 import { UsersService } from './users.service';
-import { CreateUserDto, UpdateUserDto, QueryUsersDto } from './dto/user.dto';
+import { CreateUserDto, UpdateUserDto, QueryUsersDto, CreateCompraPrepagoDto, UpdateCompraPrepagoDto } from './dto/user.dto';
 import { User } from './entities/user.entity';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { AuthGuard } from '@nestjs/passport';
@@ -181,6 +181,47 @@ export class UsersController {
     const currentUser = req.user;
     return await this.usersService.update(id, updateUserDto, currentUser);
   }
+  @Get(':id/compras-prepago')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @SetMetadata('roles', [1, 2, 4, 5]) // 1: Admin, 2: Mayorista, 4: Facturación, 5: Técnico
+  @ApiOperation({ summary: 'Obtener compras prepago de un usuario' })
+  @ApiResponse({ status: 200, description: 'Lista de compras prepago' })
+  async getComprasPrepago(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: any
+  ) {
+    return await this.usersService.getComprasPrepago(id, req.user);
+  }
+
+  @Post(':id/compras-prepago')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @SetMetadata('roles', [1, 2, 4, 5]) // 1: Admin, 2: Mayorista, 4: Facturación, 5: Técnico
+  @ApiOperation({ summary: 'Cargar una compra prepago (lote de descargas con factura opcional)' })
+  @ApiResponse({ status: 201, description: 'Compra prepago creada' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos o usuario no es PREPAGO' })
+  async crearCompraPrepago(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreateCompraPrepagoDto,
+    @Req() req: any
+  ) {
+    return await this.usersService.crearCompraPrepago(id, dto, req.user);
+  }
+
+  @Patch(':id/compras-prepago/:compraId')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @SetMetadata('roles', [1, 2, 4, 5]) // 1: Admin, 2: Mayorista, 4: Facturación, 5: Técnico
+  @ApiOperation({ summary: 'Editar el número de factura de una compra prepago' })
+  @ApiResponse({ status: 200, description: 'Compra prepago actualizada' })
+  @ApiResponse({ status: 404, description: 'Compra prepago no encontrada' })
+  async editarCompraPrepago(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('compraId', ParseIntPipe) compraId: number,
+    @Body() dto: UpdateCompraPrepagoDto,
+    @Req() req: any
+  ) {
+    return await this.usersService.editarCompraPrepago(id, compraId, dto, req.user);
+  }
+
   //Se utiliza en el blanqueo de contraseña desde el panel de administración
   @Patch(':id/reset-password')
   @UseGuards(AuthGuard('jwt'), RolesGuard)

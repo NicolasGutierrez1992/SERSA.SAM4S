@@ -36,7 +36,7 @@ export class User {
   @Column({ type: 'text', nullable: true })
   cuit: string;
 
-  @Column({ type: 'integer', default: 5 })
+  @Column({ type: 'integer', default: 0 })
   limite_descargas: number;
 
   @Column({ type: 'integer', nullable: true })

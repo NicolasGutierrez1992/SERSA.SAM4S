@@ -1,19 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
-import { 
-  EstadoDescarga, 
-  IDescarga 
+import { Repository, In, EntityManager } from 'typeorm';
+import {
+  EstadoDescarga,
+  IDescarga
 } from '../shared/types';
 import { User } from '../users/entities/user.entity';
+import { CompraPrepago } from '../users/entities/compra-prepago.entity';
 import { Descarga } from './entities/descarga.entity';
 import { AuditoriaService } from '../auditoria/auditoria.service';
 import { Certificado } from '../certificados/entities/certificado.entity';
 import { TimezoneService } from '../common/timezone.service';
-import { 
-  ForbiddenException, 
-  NotFoundException, 
-  BadRequestException 
+import {
+  ForbiddenException,
+  NotFoundException
 } from '@nestjs/common';
 interface RegistrarDescargaData {
   usuarioId: number;
@@ -34,6 +34,9 @@ interface ValidacionDescargaDto {
   message: string;
   userType: 'CUENTA_CORRIENTE' | 'PREPAGO' | 'SIN_LIMITE';
   limiteDisponible: number;
+  saldoPrepago?: number;
+  saldoCuentaCorriente?: number;
+  limiteCuentaCorriente?: number;
 }
 
 @Injectable()
@@ -158,8 +161,8 @@ export class DescargasService {
       }
     }
 
-    // Admin (1) y Mayorista (2) siempre pueden descargar
-    if (user.rol === 1 || user.rol === 2) {
+    // Admin (1): siempre puede descargar, sin ningún tipo de límite
+    if (user.rol === 1) {
       return {
         canDownload: true,
         message: '',
@@ -168,65 +171,78 @@ export class DescargasService {
       };
     }
 
-    // Distribuidor (3) y Facturación (4) - validar según tipo_descarga
-    if (user.tipo_descarga === 'PREPAGO') {
-      // ⭐ PREPAGO: Validar límite numérico
-      if (user.limite_descargas <= 0) {
+    // ⭐ Modelo híbrido: el saldo prepago (calculado en vivo desde compras_prepago,
+    // no cacheado) se consume siempre primero, para cualquier rol.
+    const saldoPrepago = await this.obtenerSaldoPrepago(userId, this.descargaRepository.manager);
+
+    // Mayorista (2): no tiene límite de cuenta corriente. Si tiene saldo prepago se usa;
+    // si no, queda sin límite (comportamiento histórico).
+    if (user.rol === 2) {
+      if (saldoPrepago > 0) {
         return {
-          canDownload: false,
-          message: 'Debe realizar un prepago para descargar certificados',
+          canDownload: true,
+          message: '',
           userType: 'PREPAGO',
-          limiteDisponible: user.limite_descargas
+          limiteDisponible: saldoPrepago,
+          saldoPrepago
         };
       }
-      
+      return {
+        canDownload: true,
+        message: '',
+        userType: 'SIN_LIMITE',
+        limiteDisponible: -1,
+        saldoPrepago
+      };
+    }
+
+    // Distribuidor (3), Facturación (4) u otros roles: calcular también el saldo de
+    // cuenta corriente para poder informar ambos al usuario, aunque el prepago sea el que aplique.
+    // Los distribuidores (rol 3) usan estadoDistribuidor, otros usan estadoMayorista.
+    // Excepción SERSA: para distribuidores de mayorista=1, Facturado también bloquea
+    // (solo libera en Cobrado/Garantia/Bonificado); para el resto, Facturado ya libera.
+    let descargasPendientes: number;
+    if (user.rol === 3) {
+      const estadosQueBloquean = user.id_mayorista === 1
+        ? [EstadoDescarga.PENDIENTE_FACTURAR, EstadoDescarga.FACTURADO]
+        : [EstadoDescarga.PENDIENTE_FACTURAR];
+      descargasPendientes = await this.descargaRepository.count({
+        where: estadosQueBloquean.map(estado => ({ id_usuario: userId, estadoDistribuidor: estado }))
+      });
+      this.logger.log(`[canUserDownload] Distribuidor ${userId} (id_mayorista=${user.id_mayorista}), descargas pendientes: ${descargasPendientes}`);
+    } else {
+      descargasPendientes = await this.descargaRepository.count({
+        where: [
+          { id_usuario: userId, estadoMayorista: EstadoDescarga.PENDIENTE_FACTURAR },
+          { id_usuario: userId, estadoMayorista: EstadoDescarga.FACTURADO }
+        ]
+      });
+    }
+
+    const limiteCuentaCorriente = user.limite_descargas;
+    const saldoCuentaCorriente = limiteCuentaCorriente - descargasPendientes;
+
+    if (saldoPrepago > 0) {
       return {
         canDownload: true,
         message: '',
         userType: 'PREPAGO',
-        limiteDisponible: user.limite_descargas
+        limiteDisponible: saldoPrepago,
+        saldoPrepago,
+        saldoCuentaCorriente,
+        limiteCuentaCorriente
       };
     }
-      // ⭐ CUENTA_CORRIENTE: Validar descargas pendientes + facturadas
-    // Los distribuidores (rol 3) usan estadoDistribuidor, otros usan estadoMayorista
-    // IMPORTANTE: Contar descargas en PENDIENTE_FACTURAR y FACTURADO (ambos bloquean)
-    // Solo COBRADO libera el límite
-    const estadoField = user.rol === 3 ? 'estadoDistribuidor' : 'estadoMayorista';
-    
-    let descargasPendientes = await this.descargaRepository.count({
-      where: [
-        {
-          id_usuario: userId,
-          [estadoField]: EstadoDescarga.PENDIENTE_FACTURAR
-        },
-        {
-          id_usuario: userId,
-          [estadoField]: EstadoDescarga.FACTURADO
-        }
-      ]
-    });
 
-    if(user.rol === 3){
-      this.logger.log(`[canUserDownload] Usuario rol 3, contando estadoDistribuidor`);
-      descargasPendientes = await this.descargaRepository.count({
-        where: [
-          {
-            id_usuario: userId,
-            estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR
-          }
-        ]
-      });
-      this.logger.log(`[canUserDownload] Distribuidor ${userId}, descargas pendientes: ${descargasPendientes}`);
-    }
-    const limite = user.limite_descargas;
-
-    // Si descargas pendientes >= límite, bloquear (opción A)
-    if (descargasPendientes >= limite) {
+    if (descargasPendientes >= limiteCuentaCorriente) {
       return {
         canDownload: false,
-        message: `Has alcanzado el límite de descargas pendientes (${descargasPendientes} de ${limite}). No puedes descargar certificados hasta que se libere el límite.`,
+        message: `Has alcanzado el límite de descargas pendientes (${descargasPendientes} de ${limiteCuentaCorriente}). No puedes descargar certificados hasta que se libere el límite.`,
         userType: 'CUENTA_CORRIENTE',
-        limiteDisponible: limite - descargasPendientes
+        limiteDisponible: saldoCuentaCorriente,
+        saldoPrepago,
+        saldoCuentaCorriente,
+        limiteCuentaCorriente
       };
     }
 
@@ -234,7 +250,10 @@ export class DescargasService {
       canDownload: true,
       message: '',
       userType: 'CUENTA_CORRIENTE',
-      limiteDisponible: limite - descargasPendientes
+      limiteDisponible: saldoCuentaCorriente,
+      saldoPrepago,
+      saldoCuentaCorriente,
+      limiteCuentaCorriente
     };
   }
   /**
@@ -249,59 +268,96 @@ export class DescargasService {
       const validacion = await this.canUserDownload(data.usuarioId);
       if (!validacion.canDownload) {
         throw new ForbiddenException(validacion.message);
-      }      // Obtener usuario para determinar tipo_descarga
+      }      // Obtener usuario
       const userRepository = this.descargaRepository.manager.getRepository(User);
-      const user = await userRepository.findOne({ 
-        where: { id_usuario: data.usuarioId } 
+      const user = await userRepository.findOne({
+        where: { id_usuario: data.usuarioId }
       });
-
-      // ⭐ Determinar estado inicial según tipo_descarga y mayorista
-      // NUEVA LÓGICA: Distribuidores PREPAGO de mayorista ≠ 1 pueden tener estados diferentes
-      let estadoMayoristaInicial: EstadoDescarga;
-      let estadoDistribuidorInicial: EstadoDescarga;
-
-      if (user.tipo_descarga === 'PREPAGO') {
-        if (user.id_mayorista === 1) {
-          // SERSA (mayorista = 1): Ambos PREPAGO (inmutables)
-          estadoMayoristaInicial = EstadoDescarga.PREPAGO;
-          estadoDistribuidorInicial = EstadoDescarga.PREPAGO;
-          this.logger.log(`[registrarDescarga] PREPAGO de SERSA: Ambos estados = PREPAGO`);
-        } else {
-          // Otro mayorista: Distribuidor PREPAGO (inmutable), Mayorista PENDIENTE (mutable)
-          estadoMayoristaInicial = EstadoDescarga.PENDIENTE_FACTURAR;
-          estadoDistribuidorInicial = EstadoDescarga.PREPAGO;
-          this.logger.log(
-            `[registrarDescarga] PREPAGO de mayorista ${user.id_mayorista}: ` +
-            `Mayorista=PENDIENTE (mutable), Distribuidor=PREPAGO (inmutable)`
-          );
-        }
-      } else {
-        // CUENTA_CORRIENTE: Ambos PENDIENTE
-        estadoMayoristaInicial = EstadoDescarga.PENDIENTE_FACTURAR;
-        estadoDistribuidorInicial = EstadoDescarga.PENDIENTE_FACTURAR;
-        this.logger.log(`[registrarDescarga] CUENTA_CORRIENTE: Ambos estados = PENDIENTE`);
-      }
 
       // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
       const ahora = new Date();
-      const descarga = this.descargaRepository.create({
-        id_usuario: data.usuarioId,
-        id_certificado: data.controladorId,        
-        certificado_nombre: data.certificadoNombre,
-        tipo_descarga: user.tipo_descarga, // ⭐ Guardar tipo de descarga
-        estadoMayorista: estadoMayoristaInicial,
-        estadoDistribuidor: estadoDistribuidorInicial,
-        tamaño: data.tamaño,
-        updated_at: ahora.toISOString(),
-        created_at: ahora.toISOString()
+
+      // ⭐ Modelo híbrido: intentar consumir crédito prepago (FIFO, con lock) sin importar
+      // el tipo_descarga declarado del usuario; si no hay compra con saldo, cae a cuenta
+      // corriente. La determinación de qué fuente se usó ocurre DENTRO de la transacción,
+      // porque depende de si efectivamente se consiguió consumir una compra.
+      let usoPrepagoFinal = false;
+      const savedDescarga = await this.descargaRepository.manager.transaction(async manager => {
+        const descargaRepo = manager.getRepository(Descarga);
+        const compraRepo = manager.getRepository(CompraPrepago);
+
+        let idCompraConsumida: number | null = null;
+        const compra = await compraRepo
+          .createQueryBuilder('c')
+          .setLock('pessimistic_write')
+          .where('c.id_usuario = :userId', { userId: data.usuarioId })
+          .andWhere('c.cantidad > c.cantidad_usada')
+          .orderBy('c.fecha_compra', 'ASC')
+          .addOrderBy('c.id', 'ASC')
+          .getOne();
+
+        if (compra) {
+          compra.cantidad_usada += 1;
+          await compraRepo.save(compra);
+          idCompraConsumida = compra.id;
+        }
+
+        const usoPrepago = idCompraConsumida !== null;
+        usoPrepagoFinal = usoPrepago;
+
+        // Determinar estado inicial según la fuente de crédito realmente usada por ESTA descarga
+        let estadoMayoristaInicial: EstadoDescarga;
+        let estadoDistribuidorInicial: EstadoDescarga;
+
+        if (usoPrepago) {
+          if (user.id_mayorista === 1) {
+            // SERSA (mayorista = 1): Ambos PREPAGO (inmutables)
+            estadoMayoristaInicial = EstadoDescarga.PREPAGO;
+            estadoDistribuidorInicial = EstadoDescarga.PREPAGO;
+            this.logger.log(`[registrarDescarga] Prepago de SERSA: Ambos estados = PREPAGO`);
+          } else {
+            // Otro mayorista: Distribuidor PREPAGO (inmutable), Mayorista PENDIENTE (mutable)
+            estadoMayoristaInicial = EstadoDescarga.PENDIENTE_FACTURAR;
+            estadoDistribuidorInicial = EstadoDescarga.PREPAGO;
+            this.logger.log(
+              `[registrarDescarga] Prepago de mayorista ${user.id_mayorista}: ` +
+              `Mayorista=PENDIENTE (mutable), Distribuidor=PREPAGO (inmutable)`
+            );
+          }
+        } else {
+          // Sin saldo prepago: cae a cuenta corriente. Defensa ante condiciones de carrera:
+          // reconfirmar que sigue habiendo cupo de cuenta corriente en este momento.
+          const estadoField = user.rol === 3 ? 'estadoDistribuidor' : 'estadoMayorista';
+          const estadosQueBloquean = user.rol === 3 && user.id_mayorista !== 1
+            ? [EstadoDescarga.PENDIENTE_FACTURAR]
+            : [EstadoDescarga.PENDIENTE_FACTURAR, EstadoDescarga.FACTURADO];
+          const descargasPendientes = await manager.getRepository(Descarga).count({
+            where: estadosQueBloquean.map(estado => ({ id_usuario: data.usuarioId, [estadoField]: estado }))
+          });
+          if (user.rol !== 1 && user.rol !== 2 && descargasPendientes >= user.limite_descargas) {
+            throw new ForbiddenException('Has alcanzado el límite de descargas pendientes. No podés descargar hasta que se libere el límite.');
+          }
+
+          estadoMayoristaInicial = EstadoDescarga.PENDIENTE_FACTURAR;
+          estadoDistribuidorInicial = EstadoDescarga.PENDIENTE_FACTURAR;
+          this.logger.log(`[registrarDescarga] Cuenta corriente: Ambos estados = PENDIENTE`);
+        }
+
+        const descarga = descargaRepo.create({
+          id_usuario: data.usuarioId,
+          id_certificado: data.controladorId,
+          certificado_nombre: data.certificadoNombre,
+          tipo_descarga: usoPrepago ? 'PREPAGO' : 'CUENTA_CORRIENTE', // ⭐ Fuente real de crédito de ESTA descarga
+          estadoMayorista: estadoMayoristaInicial,
+          estadoDistribuidor: estadoDistribuidorInicial,
+          tamaño: data.tamaño,
+          id_compra_prepago: idCompraConsumida,
+          updated_at: ahora.toISOString(),
+          created_at: ahora.toISOString()
+        });
+
+        return await descargaRepo.save(descarga);
       });
-
-      const savedDescarga = await this.descargaRepository.save(descarga);
-
-      // ⭐ Decrementar límite solo para PREPAGO
-      if (user.tipo_descarga === 'PREPAGO') {
-        await this.decrementarLimiteDescargas(data.usuarioId, 1);
-      }
 
       // Registrar en auditoría
       await this.auditoriaService.log(
@@ -312,7 +368,7 @@ export class DescargasService {
         null,
         {
           certificado: data.certificadoNombre,
-          tipo_descarga: user.tipo_descarga
+          tipo_descarga: usoPrepagoFinal ? 'PREPAGO' : 'CUENTA_CORRIENTE'
         },
         data.ipOrigen
       );
@@ -346,6 +402,7 @@ export class DescargasService {
       referencia_pago: descarga.referencia_pago,
       numero_factura_distribuidor: descarga.numero_factura_distribuidor,
       referencia_pago_distribuidor: descarga.referencia_pago_distribuidor,
+      numeroFacturaCompraPrepago: descarga.compraPrepago?.numero_factura ?? null,
       usuario: descarga.usuario
         ? {
             nombre: descarga.usuario.nombre,
@@ -359,29 +416,19 @@ export class DescargasService {
   }
 
   /**
-   * Decrementar límite de descargas para usuarios PREPAGO
+   * Calcular (sin persistir) el saldo prepago disponible de un usuario,
+   * como suma de saldos (cantidad - cantidad_usada) de sus compras_prepago.
+   * A diferencia del diseño anterior, esto NO se cachea en users.limite_descargas
+   * (esa columna ahora es exclusivamente el límite de cuenta corriente).
    */
-  async decrementarLimiteDescargas(usuarioId: number, cantidad: number): Promise<void> {
-    const userRepository = this.descargaRepository.manager.getRepository(User);
-    const user = await userRepository.findOne({
-      where: { id_usuario: usuarioId }
-    });
-
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
-
-    // No permitir negativos
-    const nuevoLimite = Math.max(0, user.limite_descargas - cantidad);
-    
-    await userRepository.update(
-      { id_usuario: usuarioId },
-      { limite_descargas: nuevoLimite }
-    );
-
-    this.logger.log(
-      `Límite de descarga actualizado: ${user.limite_descargas} → ${nuevoLimite} (Usuario: ${usuarioId})`
-    );
+  private async obtenerSaldoPrepago(userId: number, manager: EntityManager): Promise<number> {
+    const compraRepo = manager.getRepository(CompraPrepago);
+    const { sum } = await compraRepo
+      .createQueryBuilder('c')
+      .select('COALESCE(SUM(c.cantidad - c.cantidad_usada), 0)', 'sum')
+      .where('c.id_usuario = :userId', { userId })
+      .getRawOne();
+    return Number(sum);
   }
 
   /**
@@ -518,6 +565,14 @@ export class DescargasService {
       referencia_pago_distribuidor: descarga.referencia_pago_distribuidor
     };
 
+    // El estado ya estaba libre de deuda antes de este cambio (evita re-acreditar
+    // crédito si se re-guarda el mismo estado Garantia/Bonificado dos veces)
+    const yaEstabaLibreDeuda =
+      estadoAnterior.estadoMayorista === EstadoDescarga.GARANTIA ||
+      estadoAnterior.estadoMayorista === EstadoDescarga.BONIFICADO ||
+      estadoAnterior.estadoDistribuidor === EstadoDescarga.GARANTIA ||
+      estadoAnterior.estadoDistribuidor === EstadoDescarga.BONIFICADO;
+
     this.logger.log(`[updateEstadoDescarga] Usuario ${userId} (rol ${userRole}) intenta cambiar estados`);
     this.logger.log(`[updateEstadoDescarga] Descarga ${descargaId}: tipo=${descarga.tipo_descarga}, mayorista=${idMayorista}`);
     this.logger.log(`[updateEstadoDescarga] Estado anterior:`, estadoAnterior);
@@ -601,11 +656,36 @@ export class DescargasService {
     // Guardar cambios
     const updatedDescarga = await this.descargaRepository.save(descarga);
 
-    // Restaurar límite para usuarios PREPAGO cuando se marca Garantia o Bonificado
-    if (esEstadoLibreDeuda && descarga.tipo_descarga === 'PREPAGO') {
-      const userRepository = this.descargaRepository.manager.getRepository(User);
-      await userRepository.increment({ id_usuario: descarga.id_usuario }, 'limite_descargas', 1);
-      this.logger.log(`[updateEstadoDescarga] Límite restaurado +1 para usuario PREPAGO ${descarga.id_usuario} (estado: ${nuevoEstado.estadoMayorista})`);
+    // Restaurar crédito para usuarios PREPAGO cuando se marca Garantia o Bonificado
+    // (solo si no estaba ya en un estado libre de deuda, para no acreditar dos veces)
+    const debeRestaurarCredito = esEstadoLibreDeuda && !yaEstabaLibreDeuda && descarga.tipo_descarga === 'PREPAGO';
+    if (debeRestaurarCredito) {
+      await this.descargaRepository.manager.transaction(async manager => {
+        if (descarga.id_compra_prepago) {
+          const compraRepo = manager.getRepository(CompraPrepago);
+          const compra = await compraRepo
+            .createQueryBuilder('c')
+            .setLock('pessimistic_write')
+            .where('c.id = :id', { id: descarga.id_compra_prepago })
+            .getOne();
+
+          if (compra) {
+            if (compra.cantidad_usada <= 0) {
+              this.logger.warn(`[updateEstadoDescarga] Compra ${compra.id} ya tenía cantidad_usada en 0 al restaurar crédito de descarga ${descarga.id_descarga}`);
+            }
+            compra.cantidad_usada = Math.max(0, compra.cantidad_usada - 1);
+            await compraRepo.save(compra);
+          } else {
+            this.logger.warn(`[updateEstadoDescarga] Compra ${descarga.id_compra_prepago} no encontrada al restaurar crédito de descarga ${descarga.id_descarga}`);
+          }
+        } else {
+          // Descarga histórica anterior a esta feature: no sabemos qué compra acreditar.
+          // No hay ningún campo que restaurar automáticamente (limite_descargas ya no
+          // representa saldo prepago); requiere ajuste manual si corresponde.
+          this.logger.warn(`[updateEstadoDescarga] Descarga ${descarga.id_descarga} sin id_compra_prepago — no se pudo restaurar crédito automáticamente`);
+        }
+      });
+      this.logger.log(`[updateEstadoDescarga] Crédito PREPAGO restaurado para usuario ${descarga.id_usuario} (estado: ${nuevoEstado.estadoMayorista || nuevoEstado.estadoDistribuidor})`);
     }
 
     // Registrar en auditoría
@@ -658,6 +738,7 @@ export class DescargasService {
 
     const query = this.descargaRepository.createQueryBuilder('descarga')
       .leftJoinAndSelect('descarga.usuario', 'usuario')
+      .leftJoinAndSelect('descarga.compraPrepago', 'compraPrepago')
       .where('1=1');
 
     if (usuarioId) {

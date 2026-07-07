@@ -4,7 +4,8 @@ import * as bcrypt from 'bcrypt';
 import { Injectable, BadRequestException, ConflictException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { User } from './entities/user.entity';
 import { Mayorista } from './entities/mayorista.entity';
-import { CreateUserDto, UpdateUserDto, QueryUsersDto, UserRole, UserStatus } from './dto/user.dto';
+import { CompraPrepago } from './entities/compra-prepago.entity';
+import { CreateUserDto, UpdateUserDto, QueryUsersDto, UserRole, UserStatus, CreateCompraPrepagoDto, UpdateCompraPrepagoDto } from './dto/user.dto';
 
 @Injectable()
 export class UsersService {
@@ -15,6 +16,8 @@ export class UsersService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(Mayorista)
     private readonly mayoristaRepository: Repository<Mayorista>,
+    @InjectRepository(CompraPrepago)
+    private readonly compraPrepagoRepository: Repository<CompraPrepago>,
   ) {}
   // ✅ Running in PRODUCTION mode with real AFIP integration
 
@@ -80,7 +83,12 @@ export class UsersService {
 
     // Hash de la contraseña
     const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(createUserDto.password, saltRounds);    
+    const hashedPassword = await bcrypt.hash(createUserDto.password, saltRounds);
+
+    // Por defecto se crea como CUENTA_CORRIENTE con límite 0. tipo_descarga ya no
+    // condiciona el significado de limite_descargas (siempre es el límite de cuenta
+    // corriente); el saldo prepago se carga aparte como una compra, una vez que el
+    // usuario ya existe.
     const user = this.userRepository.create({
       nombre: createUserDto.nombre,
       mail: createUserDto.email,
@@ -92,9 +100,10 @@ export class UsersService {
       limite_descargas: createUserDto.limiteDescargas !== undefined ? createUserDto.limiteDescargas : 0,
       must_change_password: true,
       celular: createUserDto.celular,
-      tipo_descarga: createUserDto.tipo_descarga || 'PREPAGO',
+      tipo_descarga: createUserDto.tipo_descarga || 'CUENTA_CORRIENTE',
     });
     const savedUser = await this.userRepository.save(user);
+
     console.log('[UsersService][create] Salida:', savedUser);
     return savedUser;
   }
@@ -254,10 +263,15 @@ export class UsersService {
     if (updateUserDto.email) updateData.mail = updateUserDto.email;
     if (updateUserDto.rol) updateData.id_rol = updateUserDto.rol;
     if (updateUserDto.status !== undefined) updateData.status = updateUserDto.status;    if (updateUserDto.id_mayorista !== undefined) updateData.id_mayorista = updateUserDto.id_mayorista;
-    if (updateUserDto.limiteDescargas !== undefined) updateData.limite_descargas = updateUserDto.limiteDescargas;
     if (updateUserDto.celular !== undefined) updateData.celular = updateUserDto.celular;
     if (updateUserDto.tipo_descarga !== undefined) updateData.tipo_descarga = updateUserDto.tipo_descarga;
-    
+
+    // limiteDescargas = límite de cuenta corriente, siempre editable manualmente
+    // (independiente de tipo_descarga; el saldo prepago se gestiona aparte vía compras_prepago).
+    if (updateUserDto.limiteDescargas !== undefined) {
+      updateData.limite_descargas = updateUserDto.limiteDescargas;
+    }
+
     // ⭐ NUEVO: Validar notification_limit - Solo admin puede editarlo, y solo para mayoristas (rol=2)
     if (updateUserDto.notification_limit !== undefined) {
       // Solo admin (rol=1) puede editar notification_limit
@@ -395,78 +409,65 @@ export class UsersService {
     return headers + rows;
   }
 
-  /**
-   * Incrementar límite de descargas para usuarios PREPAGO
-   * Se usa cuando se realiza un prepago para agregar más descargas disponibles
-   */
-  async incrementarLimiteDescargas(
-    usuarioId: number,
-    cantidad: number
-  ): Promise<User> {
-    const user = await this.userRepository.findOne({
-      where: { id_usuario: usuarioId }
-    });
-
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
+  // Valida que currentUser pueda administrar compras prepago del usuario `id`:
+  // mismo criterio de permisos que ya existe para editar limiteDescargas/tipo_descarga.
+  private async validarPermisoComprasPrepago(id: number, currentUser: any): Promise<User> {
+    const user = await this.findOne(id);
+    if (!currentUser) {
+      throw new ForbiddenException('No autenticado');
     }
-
-    // Solo para usuarios PREPAGO
-    if (user.tipo_descarga !== 'PREPAGO') {
-      throw new BadRequestException(
-        'Solo se pueden incrementar descargas en usuarios con tipo PREPAGO'
-      );
+    if (currentUser.rol === 2) {
+      if (user.id_mayorista !== currentUser.id_mayorista || user.rol !== 3) {
+        throw new BadRequestException('No tienes permisos para administrar compras prepago de este usuario');
+      }
+    } else if (![1, 4, 5].includes(currentUser.rol)) {
+      throw new BadRequestException('No tienes permisos para administrar compras prepago');
     }
-
-    const nuevoLimite = user.limite_descargas + cantidad;
-
-    await this.userRepository.update(
-      { id_usuario: usuarioId },
-      { limite_descargas: nuevoLimite }
-    );
-
-    console.log(
-      `[UsersService][incrementarLimiteDescargas] Límite de descarga incrementado: ${user.limite_descargas} → ${nuevoLimite} (Usuario: ${usuarioId})`
-    );
-
-    return this.findOne(usuarioId);
+    return user;
   }
 
-  /**
-   * Actualizar tipo de descarga de un usuario
-   * Permite cambiar entre CUENTA_CORRIENTE y PREPAGO
-   * No se permite para Admin ni Mayorista
-   */
-  async updateTipoDescarga(
-    usuarioId: number,
-    tipo: 'CUENTA_CORRIENTE' | 'PREPAGO'
-  ): Promise<User> {
-    const user = await this.userRepository.findOne({
-      where: { id_usuario: usuarioId }
+  async getComprasPrepago(id: number, currentUser: any): Promise<Array<CompraPrepago & { disponible: number }>> {
+    await this.validarPermisoComprasPrepago(id, currentUser);
+    const compras = await this.compraPrepagoRepository.find({
+      where: { id_usuario: id },
+      order: { fecha_compra: 'DESC' },
     });
-
-    if (!user) {
-      throw new NotFoundException('Usuario no encontrado');
-    }
-
-    // Validar que no sea Admin ni Mayorista
-    if (user.rol === 1 || user.rol === 2) {
-      throw new BadRequestException(
-        'No se puede cambiar tipo_descarga a administradores o mayoristas'
-      );
-    }
-
-    await this.userRepository.update(
-      { id_usuario: usuarioId },
-      { tipo_descarga: tipo }
-    );
-
-    console.log(
-      `[UsersService][updateTipoDescarga] Tipo de descarga actualizado: ${user.tipo_descarga} → ${tipo} (Usuario: ${usuarioId})`
-    );
-
-    return this.findOne(usuarioId);
+    return compras.map(c => ({ ...c, disponible: c.cantidad - c.cantidad_usada }));
   }
+
+  async crearCompraPrepago(id: number, dto: CreateCompraPrepagoDto, currentUser: any): Promise<CompraPrepago> {
+    await this.validarPermisoComprasPrepago(id, currentUser);
+
+    if (dto.cantidad <= 0) {
+      throw new BadRequestException('La cantidad debe ser mayor a 0');
+    }
+
+    const compra = this.compraPrepagoRepository.create({
+      id_usuario: id,
+      numero_factura: dto.numero_factura ?? null,
+      cantidad: dto.cantidad,
+      cantidad_usada: 0,
+      fecha_compra: new Date(),
+      created_by: currentUser.id_usuario ?? currentUser.id ?? null,
+    });
+    return this.compraPrepagoRepository.save(compra);
+  }
+
+  async editarCompraPrepago(id: number, compraId: number, dto: UpdateCompraPrepagoDto, currentUser: any): Promise<CompraPrepago> {
+    await this.validarPermisoComprasPrepago(id, currentUser);
+
+    const compra = await this.compraPrepagoRepository.findOne({ where: { id: compraId } });
+    if (!compra || compra.id_usuario !== id) {
+      throw new NotFoundException('Compra prepago no encontrada');
+    }
+
+    if (dto.numero_factura !== undefined) {
+      compra.numero_factura = dto.numero_factura || null;
+    }
+
+    return this.compraPrepagoRepository.save(compra);
+  }
+
   private getRolText(rol: number): string {
     const roles = {
       1: 'Administrador',

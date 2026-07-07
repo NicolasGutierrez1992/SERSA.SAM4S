@@ -58,6 +58,19 @@ export interface getUserResponse {
   ultimo_login: Date;
 }
 
+export interface CompraPrepago {
+  id: number;
+  id_usuario: number;
+  numero_factura: string | null;
+  cantidad: number;
+  cantidad_usada: number;
+  disponible: number;
+  fecha_compra: string;
+  created_by: number | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DownloadResponse {
   downloadId: string;
   filename: string;
@@ -81,6 +94,7 @@ export interface DescargaHistorial {
   referencia_pago?: string | null;
   numero_factura_distribuidor?: string | null;
   referencia_pago_distribuidor?: string | null;
+  numeroFacturaCompraPrepago?: string | null;
   usuario?: {
     nombre: string;
     cuit: string;
@@ -108,6 +122,9 @@ export interface ValidacionDescargaDto {
   message: string;
   userType: 'CUENTA_CORRIENTE' | 'PREPAGO' | 'SIN_LIMITE';
   limiteDisponible: number;
+  saldoPrepago?: number;
+  saldoCuentaCorriente?: number;
+  limiteCuentaCorriente?: number;
 }
 
 // ─── Cliente Axios ────────────────────────────────────────────────────────────

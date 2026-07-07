@@ -324,3 +324,22 @@ export class ResetPasswordDto {
   @Length(10, 15, { message: 'El número de celular debe tener entre 10 y 15 caracteres' })
   celular?: string;
 }
+
+export class CreateCompraPrepagoDto {
+  @ApiProperty({ example: 4, description: 'Cantidad de descargas compradas en este lote' })
+  @IsNumber()
+  @IsPositive({ message: 'La cantidad debe ser mayor a 0' })
+  cantidad: number;
+
+  @ApiPropertyOptional({ example: '2025-001', description: 'Número de factura de la compra' })
+  @IsOptional()
+  @IsString()
+  numero_factura?: string;
+}
+
+export class UpdateCompraPrepagoDto {
+  @ApiPropertyOptional({ example: '2025-001', description: 'Número de factura de la compra' })
+  @IsOptional()
+  @IsString()
+  numero_factura?: string;
+}

@@ -26,6 +26,7 @@ export interface IDescarga {
   referencia_pago?: string | null;
   numero_factura_distribuidor?: string | null;
   referencia_pago_distribuidor?: string | null;
+  numeroFacturaCompraPrepago?: string | null;
   usuario?: {
     nombre: string;
     cuit: string;

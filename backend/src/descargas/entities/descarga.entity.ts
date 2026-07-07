@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { User } from '../../users/entities/user.entity';
+import { CompraPrepago } from '../../users/entities/compra-prepago.entity';
 
 @Entity('descargas')
 export class Descarga {
@@ -110,4 +111,14 @@ export class Descarga {
   })
   @Column({ type: 'varchar', length: 255, nullable: true })
   referencia_pago_distribuidor: string;
+
+  @ApiPropertyOptional({
+    description: 'ID de la compra prepago que consumió el crédito de esta descarga (solo PREPAGO)'
+  })
+  @Column({ type: 'integer', nullable: true })
+  id_compra_prepago: number | null;
+
+  @ManyToOne(() => CompraPrepago, { nullable: true })
+  @JoinColumn({ name: 'id_compra_prepago' })
+  compraPrepago: CompraPrepago;
 }

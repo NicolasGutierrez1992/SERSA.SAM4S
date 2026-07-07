@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales } from '@/lib/api';
+import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto } from '@/lib/api';
 import Image from 'next/image';
 import ExcelJS from 'exceljs';
 import { message } from 'antd';
@@ -24,6 +24,7 @@ export default function CertificadosPage() {
   const [canDownload, setCanDownload] = useState(true);
   const [downloadMessage, setDownloadMessage] = useState('');
   const [downloadUserType, setDownloadUserType] = useState<'CUENTA_CORRIENTE' | 'PREPAGO' | "SIN_LIMITE" | null>(null);
+  const [validacionSaldos, setValidacionSaldos] = useState<ValidacionDescargaDto | null>(null);
     // Estados para filtros
   const [filtros, setFiltros] = useState({
     cuit: '',
@@ -312,7 +313,8 @@ export default function CertificadosPage() {
       setCanDownload(validacion.canDownload);
       setDownloadMessage(validacion.message);
       setDownloadUserType(validacion.userType);
-      
+      setValidacionSaldos(validacion);
+
       console.log(`[Frontend] Validación de descarga: ${validacion.canDownload}`, {
         userType: validacion.userType,
         limiteDisponible: validacion.limiteDisponible,
@@ -340,6 +342,7 @@ export default function CertificadosPage() {
 
       // ⭐ NUEVA: Re-validar límite justo antes de mostrar el modal
       const validacionFinal = await certificadosApi.validarDescarga();
+      setValidacionSaldos(validacionFinal);
       if (!validacionFinal.canDownload) {
         throw new Error(validacionFinal.message);
       }
@@ -968,14 +971,17 @@ export default function CertificadosPage() {
                     {downloadMessage}
                   </div>
                 )}
-                {(downloadUserType === 'PREPAGO') && metricas && (
-                  <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
-                    <strong>Sistema PREPAGO Activo:</strong> Tienes {metricas.limiteDescargas} descargas disponibles.
-                  </div>
-                )}
-                {(downloadUserType === 'CUENTA_CORRIENTE') && metricas && user?.rol === 3 && (
-                  <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6">
-                    <strong>Sistema CUENTA CORRIENTE Activo:</strong> Tienes {metricas.limiteDescargas! - (metricas.pendienteFacturar||0 + (user?.id_mayorista === 1 ? (metricas.pendienteCobrar || 0) : 0)) } de {metricas.limiteDescargas} descargas disponibles.
+                {validacionSaldos && downloadUserType !== 'SIN_LIMITE' && (
+                  <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-6 space-y-1">
+                    <div><strong>Prepago disponible:</strong> {validacionSaldos.saldoPrepago ?? 0}</div>
+                    {validacionSaldos.limiteCuentaCorriente !== undefined && (
+                      <div>
+                        <strong>Cuenta corriente:</strong> {validacionSaldos.saldoCuentaCorriente} de {validacionSaldos.limiteCuentaCorriente}
+                      </div>
+                    )}
+                    {(validacionSaldos.saldoPrepago ?? 0) > 0 && (
+                      <div className="text-xs text-blue-600">Se descontará primero del saldo prepago.</div>
+                    )}
                   </div>
                 )}
 
@@ -1416,6 +1422,12 @@ export default function CertificadosPage() {
                                           
                                           {/* Invoice and payment reference fields */}
                                           <div className="space-y-1 pt-2">
+                                            {descarga.tipoDescarga === 'PREPAGO' && (
+                                              <div className="text-xs">
+                                                <span className="font-semibold text-gray-700">Factura Prepago:</span>
+                                                <span className="ml-2 text-gray-600">{descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)'}</span>
+                                              </div>
+                                            )}
                                             {descarga.numero_factura && (
                                               <div className="text-xs">
                                                 <span className="font-semibold text-gray-700">Nro Factura:</span>
@@ -1428,7 +1440,7 @@ export default function CertificadosPage() {
                                                 <span className="ml-2 text-gray-600">{descarga.referencia_pago}</span>
                                               </div>
                                             )}
-                                            {!descarga.numero_factura && !descarga.referencia_pago && (
+                                            {!descarga.numero_factura && !descarga.referencia_pago && descarga.tipoDescarga !== 'PREPAGO' && (
                                               <div className="text-xs text-gray-500">
                                                 Sin datos de facturación
                                               </div>
@@ -1882,60 +1894,50 @@ export default function CertificadosPage() {
               </p>
                 </div>
 
-            {/* Aviso según tipo de descarga - PREPAGO si tipo_descarga='PREPAGO' O limite_descargas > 0, sino CUENTA_CORRIENTE */}
-            {(downloadUserType === 'PREPAGO' ) ? (
-              // PREPAGO: Se descuenta del límite disponible
+            {/* Aviso de saldos: prepago y cuenta corriente, mostrados juntos */}
+            {(validacionSaldos?.saldoPrepago ?? 0) > 0 && (
               <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 mb-4">
                 <p className="text-sm font-semibold text-purple-800 mb-2">
-                  ⚡ Sistema PREPAGO
+                  ⚡ Saldo Prepago
                 </p>
                 <p className="text-sm text-purple-700 mb-3">
-                  Esta descarga te descontará <strong>1 descarga</strong> de tu límite disponible.
+                  Esta descarga te descontará <strong>1 descarga</strong> de tu saldo prepago disponible.
                 </p>
                 <div className="bg-white rounded p-2 mb-2">
                   <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-600">Límite actual:</span>
-                    <span className="font-semibold text-gray-900">{metricas?.limiteDescargas} descargas</span>
+                    <span className="text-gray-600">Saldo prepago actual:</span>
+                    <span className="font-semibold text-gray-900">{validacionSaldos?.saldoPrepago} descargas</span>
                   </div>
                   <div className="flex justify-between text-xs">
                     <span className="text-gray-600">Después de la descarga:</span>
-                    <span className="font-semibold text-indigo-600">{Math.max(0, (metricas?.limiteDescargas || 0) - 1)} descargas</span>
+                    <span className="font-semibold text-indigo-600">{Math.max(0, (validacionSaldos?.saldoPrepago || 0) - 1)} descargas</span>
                   </div>
                 </div>
               </div>
-            ) : (
-              // CUENTA_CORRIENTE: Genera una deuda a pagar
+            )}
+            {validacionSaldos?.limiteCuentaCorriente !== undefined && (
               <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
                 <p className="text-sm font-semibold text-amber-800 mb-2">
-                  💰 Cuenta Corriente - Deuda Pendiente
+                  💰 Cuenta Corriente
                 </p>
                 <p className="text-sm text-amber-700 mb-3">
-                  Esta descarga generará un cargo en tu cuenta que deberá ser pagado.
-                </p>                <div className="bg-white rounded p-2 mb-2">
-                  <div className="flex justify-between text-xs mb-1">
-                    <span className="text-gray-600">Descargas pendientes:</span>
-                    <span className="font-semibold text-gray-900">{(metricas?.pendienteFacturar || 0)} / {(metricas?.limiteDescargas || 0)}</span>
-                  </div>
+                  {(validacionSaldos?.saldoPrepago ?? 0) > 0
+                    ? 'Si se agota tu saldo prepago, las próximas descargas generarán un cargo en tu cuenta corriente.'
+                    : 'Esta descarga generará un cargo en tu cuenta que deberá ser pagado.'}
+                </p>
+                <div className="bg-white rounded p-2 mb-2">
                   <div className="flex justify-between text-xs">
-                    <span className="text-gray-600">Después de la descarga:</span>
-                    <span className={`font-semibold ${(metricas?.pendienteFacturar || 0) + 1 >= (metricas?.limiteDescargas || 0) ? 'text-red-600' : 'text-orange-600'}`}>
-                      {(metricas?.pendienteFacturar || 0) + 1} / {(metricas?.limiteDescargas || 0)}
-                    </span>
+                    <span className="text-gray-600">Cuenta corriente disponible:</span>
+                    <span className="font-semibold text-gray-900">{validacionSaldos?.saldoCuentaCorriente} de {validacionSaldos?.limiteCuentaCorriente}</span>
                   </div>
                 </div>
-                {(metricas?.pendienteFacturar || 0) + 1 >= (metricas?.limiteDescargas || 0) && (
-                  <div className="bg-red-50 border border-red-200 rounded p-2 mt-2">
-                    <p className="text-xs text-red-700 font-semibold">
-                      ⚠️ Alcanzarás tu límite de descargas pendientes
-                    </p>
-                  </div>
-                )}
               </div>
-            )}            {/* Confirmación */}
+            )}
+            {/* Confirmación */}
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
               <p className="text-sm text-gray-700 mb-3">
-                Al descargar el certificado {(user?.tipo_descarga === 'PREPAGO' || (metricas?.limiteDescargas ?? 0) > 0) ? 
-                  'se descontará de tu límite disponible' : 
+                Al descargar el certificado {(validacionSaldos?.saldoPrepago ?? 0) > 0 ?
+                  'se descontará de tu saldo prepago disponible' :
                   'se agregará un cargo a tu cuenta que deberá ser abonado en el próximo período de facturación'}.
               </p>
               <label className="flex items-center gap-2 cursor-pointer">
