@@ -487,6 +487,8 @@ export class UsersService {
    * Ranking de usuarios con menor saldo prepago disponible (para alertar antes de que se queden sin crédito).
    * Solo incluye usuarios que tengan al menos una compra prepago cargada alguna vez.
    * Alcance: Mayorista (rol 2) ve sus propios distribuidores; Admin/Facturación (1/4) ven los mayoristas.
+   * Sin límite fijo de filas: el frontend separa "sin saldo" (0) de "bajo saldo" (>0) y
+   * acota la cantidad mostrada en cada grupo.
    */
   async getRankingSaldoPrepagoBajo(currentUser: any): Promise<Array<{ id_usuario: number; nombre: string; saldoPrepago: number }>> {
     const query = this.compraPrepagoRepository
@@ -497,8 +499,7 @@ export class UsersService {
       .addSelect('SUM(c.cantidad - c.cantidad_usada)', 'saldo')
       .groupBy('u.id_usuario')
       .addGroupBy('u.nombre')
-      .orderBy('saldo', 'ASC')
-      .limit(5);
+      .orderBy('saldo', 'ASC');
 
     if (currentUser.rol === 2) {
       query.andWhere('u.rol = :rol', { rol: 3 }).andWhere('u.id_mayorista = :idMayorista', { idMayorista: currentUser.id_mayorista });

@@ -1766,18 +1766,39 @@ export default function CertificadosPage() {
                     </svg>
                   </div>
                 ) : rankingSaldoBajo.length > 0 ? (
-                  <ul className="divide-y divide-gray-200 max-w-md">
-                    {rankingSaldoBajo.map(r => (
-                      <li key={r.id_usuario} className="py-2 flex justify-between text-sm">
-                        <span className="text-gray-700">{r.nombre}</span>
-                        <span className={`font-semibold ${r.saldoPrepago <= 0 ? 'text-red-600' : 'text-orange-600'}`}>
-                          {r.saldoPrepago} disponibles
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
+                  <div className="max-w-md space-y-6">
+                    {/* Sin saldo: se quedaron en 0, listados aparte con leyenda propia */}
+                    {rankingSaldoBajo.filter(r => r.saldoPrepago <= 0).length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">Sin saldo</p>
+                        <ul className="divide-y divide-gray-200">
+                          {rankingSaldoBajo.filter(r => r.saldoPrepago <= 0).map(r => (
+                            <li key={r.id_usuario} className="py-2 flex justify-between text-sm">
+                              <span className="text-gray-700">{r.nombre}</span>
+                              <span className="font-semibold text-red-600">0 disponibles</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Bajo saldo: tienen disponibilidad, pero poca (top 5 ascendente) */}
+                    {rankingSaldoBajo.filter(r => r.saldoPrepago > 0).length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide mb-2">Bajo saldo</p>
+                        <ul className="divide-y divide-gray-200">
+                          {rankingSaldoBajo.filter(r => r.saldoPrepago > 0).slice(0, 5).map(r => (
+                            <li key={r.id_usuario} className="py-2 flex justify-between text-sm">
+                              <span className="text-gray-700">{r.nombre}</span>
+                              <span className="font-semibold text-orange-600">{r.saldoPrepago} disponibles</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 ) : (
-                  <p className="text-sm text-gray-500">No hay usuarios con bajo saldo prepago.</p>
+                  <p className="text-sm text-gray-500">No hay usuarios con compras prepago cargadas.</p>
                 )}
               </div>
             )}
