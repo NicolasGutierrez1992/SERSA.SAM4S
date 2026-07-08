@@ -339,40 +339,6 @@ export default function UsuariosPage() {
     5: 'SANTICH',
   };
   const columns = [
-    { title: 'ID', dataIndex: 'id_usuario', key: 'id_usuario', sorter: (a: any, b: any) => a.id_usuario - b.id_usuario },
-    { title: 'Nombre', dataIndex: 'nombre', key: 'nombre', sorter: (a: any, b: any) => a.nombre.localeCompare(b.nombre) },
-    { title: 'Email', dataIndex: 'mail', key: 'mail', sorter: (a: any, b: any) => a.mail.localeCompare(b.mail) },
-    { title: 'CUIT', dataIndex: 'cuit', key: 'cuit', sorter: (a: any, b: any) => a.cuit.localeCompare(b.cuit) },
-    { title: 'Rol', dataIndex: 'rol', key: 'rol', render: (rol: number) => rol === 1 ? 'Admin' : rol === 2 ? 'Mayorista' : rol === 3 ? 'Distribuidor' : rol === 4 ? 'Facturación' : rol === 5 ? 'Técnico' : 'Usuario' },
-    { title: 'Estado', dataIndex: 'status', key: 'status', render: (s: number) => s === 1 ? 'Activo' : s === 2 ? 'Suspendido' : 'Inactivo', sorter: (a: any, b: any) => a.status - b.status },
-    {
-      title: 'Mayorista',
-      dataIndex: 'id_mayorista',
-      key: 'id_mayorista',
-      render: (id: number) => MAYORISTAS_MAP[id] || '-',
-    },    { title: 'Límite Descargas', dataIndex: 'limite_descargas', key: 'limite_descargas', sorter: (a: any, b: any) => a.limite_descargas - b.limite_descargas },
-    { 
-      title: 'Tipo Descarga', 
-      dataIndex: 'tipo_descarga', 
-      key: 'tipo_descarga', 
-      render: (tipo: string) => {
-        const color = tipo === 'PREPAGO' ? '#ef4444' : '#3b82f6';
-        const label = tipo === 'PREPAGO' ? 'Prepago' : 'Cuenta Corriente';
-        return <span style={{ color, fontWeight: 500 }}>{label}</span>;
-      }
-    },    ...(currentUser?.rol === 1 ? [{
-      title: 'Límite Notificación',
-      dataIndex: 'notification_limit',
-      key: 'notification_limit',
-      render: (limit: number, record: any) => {
-        // Solo mostrar para mayoristas (rol=2)
-        if (record.rol !== 2) return '-';
-        // Si no hay valor, mostrar 100 (default)
-        const displayValue = limit !== null && limit !== undefined ? limit : 100;
-        return <span style={{ fontWeight: 500, color: '#0ea5e9' }}>{displayValue}</span>;
-      }
-    }] : []),
-  //  { title: 'Último Login', dataIndex: 'ultimo_login', key: 'ultimo_login', sorter: (a: any, b: any) => (a.ultimo_login || '').localeCompare(b.ultimo_login || '') },
     {
       title: 'Acciones',
       key: 'acciones',
@@ -402,7 +368,33 @@ export default function UsuariosPage() {
           />
         </>
       )
-    }
+    },
+    { title: 'Nombre', dataIndex: 'nombre', key: 'nombre', sorter: (a: any, b: any) => a.nombre.localeCompare(b.nombre) },
+    { title: 'Email', dataIndex: 'mail', key: 'mail', sorter: (a: any, b: any) => a.mail.localeCompare(b.mail) },
+    { title: 'CUIT', dataIndex: 'cuit', key: 'cuit', sorter: (a: any, b: any) => a.cuit.localeCompare(b.cuit) },
+    { title: 'Rol', dataIndex: 'rol', key: 'rol', render: (rol: number) => rol === 1 ? 'Admin' : rol === 2 ? 'Mayorista' : rol === 3 ? 'Distribuidor' : rol === 4 ? 'Facturación' : rol === 5 ? 'Técnico' : 'Usuario' },
+    { title: 'Estado', dataIndex: 'status', key: 'status', render: (s: number) => s === 1 ? 'Activo' : s === 2 ? 'Suspendido' : 'Inactivo', sorter: (a: any, b: any) => a.status - b.status },
+    {
+      title: 'Mayorista',
+      dataIndex: 'id_mayorista',
+      key: 'id_mayorista',
+      render: (id: number) => MAYORISTAS_MAP[id] || '-',
+    },
+    { title: 'Límite Cuenta Corriente', dataIndex: 'limite_descargas', key: 'limite_descargas', sorter: (a: any, b: any) => a.limite_descargas - b.limite_descargas },
+    { title: 'Saldo Prepago', dataIndex: 'saldoPrepago', key: 'saldoPrepago', sorter: (a: any, b: any) => (a.saldoPrepago ?? 0) - (b.saldoPrepago ?? 0), render: (saldo: number) => saldo ?? 0 },
+    ...(currentUser?.rol === 1 ? [{
+      title: 'Límite Notificación',
+      dataIndex: 'notification_limit',
+      key: 'notification_limit',
+      render: (limit: number, record: any) => {
+        // Solo mostrar para mayoristas (rol=2)
+        if (record.rol !== 2) return '-';
+        // Si no hay valor, mostrar 100 (default)
+        const displayValue = limit !== null && limit !== undefined ? limit : 100;
+        return <span style={{ fontWeight: 500, color: '#0ea5e9' }}>{displayValue}</span>;
+      }
+    }] : []),
+  //  { title: 'Último Login', dataIndex: 'ultimo_login', key: 'ultimo_login', sorter: (a: any, b: any) => (a.ultimo_login || '').localeCompare(b.ultimo_login || '') },
   ];
 
   // Función para resetear contraseña

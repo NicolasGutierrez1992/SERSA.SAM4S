@@ -140,10 +140,25 @@ export class UsersService {
       mayoristas.forEach(m => mayoristaMap.set(m.id_usuario, m.nombre));
     }
 
+    // Saldo prepago (en vivo, no cacheado) de los usuarios de esta página
+    const userIds = data.map(u => u.id_usuario);
+    const saldoMap = new Map<number, number>();
+    if (userIds.length > 0) {
+      const saldos = await this.compraPrepagoRepository
+        .createQueryBuilder('c')
+        .select('c.id_usuario', 'id_usuario')
+        .addSelect('SUM(c.cantidad - c.cantidad_usada)', 'saldo')
+        .where('c.id_usuario IN (:...userIds)', { userIds })
+        .groupBy('c.id_usuario')
+        .getRawMany();
+      saldos.forEach(s => saldoMap.set(Number(s.id_usuario), Number(s.saldo)));
+    }
+
     return {
       data: data.map(u => ({
         ...u,
         nombreMayorista: u.id_mayorista ? (mayoristaMap.get(u.id_mayorista) ?? null) : null,
+        saldoPrepago: saldoMap.get(u.id_usuario) ?? 0,
       })),
       total,
       page,
@@ -466,6 +481,39 @@ export class UsersService {
     }
 
     return this.compraPrepagoRepository.save(compra);
+  }
+
+  /**
+   * Ranking de usuarios con menor saldo prepago disponible (para alertar antes de que se queden sin crédito).
+   * Solo incluye usuarios que tengan al menos una compra prepago cargada alguna vez.
+   * Alcance: Mayorista (rol 2) ve sus propios distribuidores; Admin/Facturación (1/4) ven los mayoristas.
+   */
+  async getRankingSaldoPrepagoBajo(currentUser: any): Promise<Array<{ id_usuario: number; nombre: string; saldoPrepago: number }>> {
+    const query = this.compraPrepagoRepository
+      .createQueryBuilder('c')
+      .innerJoin('c.usuario', 'u')
+      .select('u.id_usuario', 'id_usuario')
+      .addSelect('u.nombre', 'nombre')
+      .addSelect('SUM(c.cantidad - c.cantidad_usada)', 'saldo')
+      .groupBy('u.id_usuario')
+      .addGroupBy('u.nombre')
+      .orderBy('saldo', 'ASC')
+      .limit(5);
+
+    if (currentUser.rol === 2) {
+      query.andWhere('u.rol = :rol', { rol: 3 }).andWhere('u.id_mayorista = :idMayorista', { idMayorista: currentUser.id_mayorista });
+    } else if (currentUser.rol === 1 || currentUser.rol === 4) {
+      query.andWhere('u.rol = :rol', { rol: 2 });
+    } else {
+      return [];
+    }
+
+    const rows = await query.getRawMany();
+    return rows.map(r => ({
+      id_usuario: Number(r.id_usuario),
+      nombre: r.nombre,
+      saldoPrepago: Number(r.saldo),
+    }));
   }
 
   private getRolText(rol: number): string {

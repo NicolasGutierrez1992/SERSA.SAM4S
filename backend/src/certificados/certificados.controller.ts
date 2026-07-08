@@ -437,6 +437,8 @@ export class CertificadosController {
       const descargasSemana = descargasSemanaResult.descargas.length;
       const pendienteFacturar = pendienteFacturarResult.descargas.length;
       const pendienteCobrar = facturadosResult.descargas.length;
+      const descargasPrepago = descargasTotalesResult.descargas.filter(d => d.tipoDescarga === 'PREPAGO').length;
+      const descargasCuentaCorriente = descargasTotales - descargasPrepago;
 
       this.logger.log(`[Métricas Admin/Facturador] Totales=${descargasTotales}, Semana=${descargasSemana}, Pendiente=${pendienteFacturar}, Cobrar=${pendienteCobrar}`);
 
@@ -445,6 +447,8 @@ export class CertificadosController {
         descargasSemana,
         pendienteFacturar,
         pendienteCobrar,
+        descargasPrepago,
+        descargasCuentaCorriente,
         rol: user.rol
       };
       
@@ -489,6 +493,11 @@ export class CertificadosController {
       const pendienteFacturarDistribuidor = pendienteDistribuidorResult.descargas.length;
       const descargasPropiasTotal = descargasPropiasTotalResult.descargas.length;
       const descargasTotales = descargasTotalesMayoristaResult.total;
+      const descargasPrepago = descargasTotalesMayoristaResult.descargas.filter(d => d.tipoDescarga === 'PREPAGO').length;
+      const descargasCuentaCorriente = descargasTotalesMayoristaResult.descargas.length - descargasPrepago;
+
+      // Saldo prepago propio del mayorista (no tiene límite de cuenta corriente)
+      const validacionMayorista = await this.descargasService.canUserDownload(userId);
 
       this.logger.log(`[Métricas Mayorista] PendienteMayorista=${pendienteFacturarMayorista}, PendienteDistribuidor=${pendienteFacturarDistribuidor}, PropiasTotal=${descargasPropiasTotal}, Total=${descargasTotales}`);
 
@@ -497,6 +506,9 @@ export class CertificadosController {
         pendienteFacturarDistribuidor,
         descargasPropiasTotal,
         descargasTotales,
+        descargasPrepago,
+        descargasCuentaCorriente,
+        saldoPrepago: validacionMayorista.saldoPrepago ?? 0,
         rol: user.rol
       };
         } 
@@ -538,6 +550,11 @@ export class CertificadosController {
       const porcentajeLimite = limiteDescargas > 0
         ? Math.round((pendienteFacturar / limiteDescargas) * 100)
         : 0;
+      const descargasPrepago = totalDistribuidorResult.descargas.filter(d => d.tipoDescarga === 'PREPAGO').length;
+      const descargasCuentaCorriente = totalDistribuidorResult.descargas.length - descargasPrepago;
+
+      // Saldo prepago/cuenta corriente en vivo (misma lógica que valida el flujo de descarga)
+      const validacionDistribuidor = await this.descargasService.canUserDownload(userId);
 
       this.logger.log(`[Métricas Distribuidor] Pendientes=${pendientesResult.descargas.length}, Facturados=${facturadosResult.descargas.length}, Total=${descargasTotales}, Límite=${limiteDescargas}, Porcentaje=${porcentajeLimite}%`);
 
@@ -547,6 +564,11 @@ export class CertificadosController {
         descargasTotales,
         limiteDescargas,
         porcentajeLimite,
+        descargasPrepago,
+        descargasCuentaCorriente,
+        saldoPrepago: validacionDistribuidor.saldoPrepago ?? 0,
+        saldoCuentaCorriente: validacionDistribuidor.saldoCuentaCorriente,
+        limiteCuentaCorriente: validacionDistribuidor.limiteCuentaCorriente,
         rol: user.rol
       };
     } else {

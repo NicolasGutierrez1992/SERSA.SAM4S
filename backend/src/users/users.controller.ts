@@ -104,6 +104,15 @@ export class UsersController {
   ): Promise<User[]> {
     return await this.usersService.getDistribuidoresByMayorista(mayoristaId);
   }
+  @Get('ranking-saldo-prepago')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @SetMetadata('roles', [1, 2, 4]) // 1: Admin, 2: Mayorista, 4: Facturación
+  @ApiOperation({ summary: 'Ranking de usuarios con menor saldo prepago disponible' })
+  @ApiResponse({ status: 200, description: 'Lista de hasta 5 usuarios con menor saldo prepago' })
+  async getRankingSaldoPrepago(@Req() req: any) {
+    return await this.usersService.getRankingSaldoPrepagoBajo(req.user);
+  }
+
   @Get('export/csv')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @SetMetadata('roles', [1, 4]) // 1: Admin, 4: Facturación

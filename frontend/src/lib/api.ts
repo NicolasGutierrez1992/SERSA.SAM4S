@@ -115,6 +115,17 @@ export interface MetricasPersonales {
   pendienteCobrar?: number;
   limiteDescargas?: number;
   porcentajeLimite?: number;
+  descargasPrepago?: number;
+  descargasCuentaCorriente?: number;
+  saldoPrepago?: number;
+  saldoCuentaCorriente?: number;
+  limiteCuentaCorriente?: number;
+}
+
+export interface RankingSaldoPrepagoBajo {
+  id_usuario: number;
+  nombre: string;
+  saldoPrepago: number;
 }
 
 export interface ValidacionDescargaDto {
@@ -314,6 +325,11 @@ export const certificadosApi = {
 
   getMetricas: async (): Promise<MetricasPersonales> => {
     const response = await api.get<MetricasPersonales>('/certificados/metricas');
+    return response.data;
+  },
+
+  getRankingSaldoPrepagoBajo: async (): Promise<RankingSaldoPrepagoBajo[]> => {
+    const response = await api.get<RankingSaldoPrepagoBajo[]>('/users/ranking-saldo-prepago');
     return response.data;
   },
 

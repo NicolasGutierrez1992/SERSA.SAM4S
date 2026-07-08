@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto } from '@/lib/api';
+import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto, type RankingSaldoPrepagoBajo } from '@/lib/api';
 import Image from 'next/image';
 import ExcelJS from 'exceljs';
 import { message } from 'antd';
@@ -48,6 +48,7 @@ export default function CertificadosPage() {
 
   // Estados para métricas
   const [metricas, setMetricas] = useState<MetricasPersonales | null>(null);
+  const [rankingSaldoBajo, setRankingSaldoBajo] = useState<RankingSaldoPrepagoBajo[]>([]);
 
   // Estados para modal de facturación
   const [showFacturacionModal, setShowFacturacionModal] = useState(false);
@@ -233,10 +234,17 @@ export default function CertificadosPage() {
       console.log('Métricas cargadas:', metricasData);
       console.log('Porcentaje límite:', metricasData.porcentajeLimite);
       console.log('Límite de descargas:', metricasData.limiteDescargas);
-        
+
       setMetricas(metricasData);
     } catch (error) {
       console.error('Error cargando métricas:', error);
+    }
+    // Ranking de bajo saldo prepago: solo aplica a Admin/Facturación/Mayorista (el backend rechaza otros roles)
+    try {
+      const ranking = await certificadosApi.getRankingSaldoPrepagoBajo();
+      setRankingSaldoBajo(ranking);
+    } catch (error) {
+      setRankingSaldoBajo([]);
     }
   };  // Función para cargar historial según rol
   const loadHistorial = async (page = 1) => {
@@ -681,6 +689,9 @@ export default function CertificadosPage() {
                         <dl>
                           <dt className="text-sm font-medium text-gray-500 truncate">Descargas Totales</dt>
                           <dd className="text-lg font-medium text-gray-900">{metricas.descargasTotales}</dd>
+                          {metricas.descargasPrepago !== undefined && (
+                            <dd className="text-xs text-gray-500">{metricas.descargasPrepago} prepago / {metricas.descargasCuentaCorriente} cuenta corriente</dd>
+                          )}
                         </dl>
                       </div>
                     </div>
@@ -748,6 +759,25 @@ export default function CertificadosPage() {
             {/* ========== MAYORISTA (Rol 2) ========== */}
             {user?.rol === 2 && (
               <>
+                {/* 0. Saldo Prepago */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Saldo Prepago</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.saldoPrepago ?? 0}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* 1. Pendiente Mayorista */}
                 <div className="bg-white overflow-hidden shadow rounded-lg">
                   <div className="p-5">
@@ -818,6 +848,9 @@ export default function CertificadosPage() {
                         <dl>
                           <dt className="text-sm font-medium text-gray-500 truncate">Descargas Totales</dt>
                           <dd className="text-lg font-medium text-gray-900">{metricas.descargasTotales ?? '-'}</dd>
+                          {metricas.descargasPrepago !== undefined && (
+                            <dd className="text-xs text-gray-500">{metricas.descargasPrepago} prepago / {metricas.descargasCuentaCorriente} cuenta corriente</dd>
+                          )}
                         </dl>
                       </div>
                     </div>
@@ -827,6 +860,25 @@ export default function CertificadosPage() {
             )}            {/* ========== DISTRIBUIDOR (Rol 3) ========== */}
             {user?.rol === 3 && (
               <>
+                {/* 0. Saldo Prepago */}
+                <div className="bg-white overflow-hidden shadow rounded-lg">
+                  <div className="p-5">
+                    <div className="flex items-center">
+                      <div className="flex-shrink-0">
+                        <svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                        </svg>
+                      </div>
+                      <div className="ml-5 w-0 flex-1">
+                        <dl>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Saldo Prepago</dt>
+                          <dd className="text-lg font-medium text-gray-900">{metricas.saldoPrepago ?? 0}</dd>
+                        </dl>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* 1. Pendiente de Facturar */}
                 <div className="bg-white overflow-hidden shadow rounded-lg">
                   <div className="p-5">
@@ -880,7 +932,7 @@ export default function CertificadosPage() {
                       </div>
                       <div className="ml-5 w-0 flex-1">
                         <dl>
-                          <dt className="text-sm font-medium text-gray-500 truncate">Uso del Límite</dt>
+                          <dt className="text-sm font-medium text-gray-500 truncate">Uso Cuenta Corriente</dt>
                           <dd className="text-lg font-medium text-gray-900">
                             {/*Si el es distribuidor de SERSA (id_mayorista = 1), se debe contar tambien las descargas pendietes de cobro*/}
                             {(metricas.pendienteFacturar || 0) + (user?.id_mayorista === 1 ? (metricas.pendienteCobrar || 0) : 0)}/{metricas.limiteDescargas != 0 ? metricas.limiteDescargas : '∞'}
@@ -904,6 +956,9 @@ export default function CertificadosPage() {
                         <dl>
                           <dt className="text-sm font-medium text-gray-500 truncate">Descargas Totales</dt>
                           <dd className="text-lg font-medium text-gray-900">{metricas.descargasTotales ?? '-'}</dd>
+                          {metricas.descargasPrepago !== undefined && (
+                            <dd className="text-xs text-gray-500">{metricas.descargasPrepago} prepago / {metricas.descargasCuentaCorriente} cuenta corriente</dd>
+                          )}
                         </dl>
                       </div>
                     </div>
@@ -911,7 +966,28 @@ export default function CertificadosPage() {
                 </div>
               </>
             )}
-            
+
+          </div>
+        )}
+
+        {/* Ranking de bajo saldo prepago (Admin, Facturación, Mayorista) */}
+        {rankingSaldoBajo.length > 0 && (
+          <div className="mb-8 bg-white overflow-hidden shadow rounded-lg">
+            <div className="p-5">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">
+                ⚠️ Bajo saldo prepago {user?.rol === 2 ? '(tus distribuidores)' : '(mayoristas)'}
+              </h3>
+              <ul className="divide-y divide-gray-200">
+                {rankingSaldoBajo.map(r => (
+                  <li key={r.id_usuario} className="py-2 flex justify-between text-sm">
+                    <span className="text-gray-700">{r.nombre}</span>
+                    <span className={`font-semibold ${r.saldoPrepago <= 0 ? 'text-red-600' : 'text-orange-600'}`}>
+                      {r.saldoPrepago} disponibles
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         )}
 
@@ -1422,12 +1498,6 @@ export default function CertificadosPage() {
                                           
                                           {/* Invoice and payment reference fields */}
                                           <div className="space-y-1 pt-2">
-                                            {descarga.tipoDescarga === 'PREPAGO' && (
-                                              <div className="text-xs">
-                                                <span className="font-semibold text-gray-700">Factura Prepago:</span>
-                                                <span className="ml-2 text-gray-600">{descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)'}</span>
-                                              </div>
-                                            )}
                                             {descarga.numero_factura && (
                                               <div className="text-xs">
                                                 <span className="font-semibold text-gray-700">Nro Factura:</span>
@@ -1440,7 +1510,7 @@ export default function CertificadosPage() {
                                                 <span className="ml-2 text-gray-600">{descarga.referencia_pago}</span>
                                               </div>
                                             )}
-                                            {!descarga.numero_factura && !descarga.referencia_pago && descarga.tipoDescarga !== 'PREPAGO' && (
+                                            {!descarga.numero_factura && !descarga.referencia_pago && (
                                               <div className="text-xs text-gray-500">
                                                 Sin datos de facturación
                                               </div>
@@ -1464,11 +1534,6 @@ export default function CertificadosPage() {
                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>
                                           {descarga.estadoMayorista}
                                         </span>
-                                        {descarga.tipoDescarga === 'PREPAGO' && (
-                                          <span className="text-xs text-gray-600">
-                                            <span className="font-semibold">Factura Prepago:</span> {descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)'}
-                                          </span>
-                                        )}
                                         {descarga.numero_factura && (
                                           <span className="text-xs text-gray-600">
                                             <span className="font-semibold">Nro Factura:</span> {descarga.numero_factura}
@@ -1486,6 +1551,11 @@ export default function CertificadosPage() {
                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoDistribuidor)}`}>
                                           {descarga.estadoDistribuidor}
                                         </span>
+                                        {descarga.tipoDescarga === 'PREPAGO' && (
+                                          <span className="text-xs text-gray-600">
+                                            <span className="font-semibold">Factura Prepago:</span> {descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)'}
+                                          </span>
+                                        )}
                                         {descarga.numero_factura_distribuidor && (
                                           <span className="text-xs text-gray-600">
                                             <span className="font-semibold">Nro Factura (Distribuidor):</span> {descarga.numero_factura_distribuidor}
