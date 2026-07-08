@@ -482,7 +482,7 @@ export default function UsuariosPage() {
       {/* Header */}
       <header className="bg-white shadow">
         <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
+          <div className="flex flex-wrap justify-between items-center py-4 gap-y-2">
             <div className="flex items-center">
               <button
                 disabled={currentUser?.rol === 3}
@@ -501,23 +501,23 @@ export default function UsuariosPage() {
                 className="h-6 w-auto mr-3"
               />
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Certificados SAM4S</h1>
-                <p className="text-sm text-gray-600">Gestión y descarga de certificados</p>
+                <h1 className="text-base sm:text-xl font-bold text-gray-900">Certificados SAM4S</h1>
+                <p className="text-sm text-gray-600 hidden sm:block">Gestión y descarga de certificados</p>
               </div>
             </div>
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center flex-wrap gap-2">
               <div className="text-right">
                 {mounted && (
                   <>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-gray-900 truncate max-w-[120px] sm:max-w-none">
                       {currentUser?.nombre}
                     </p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500 hidden sm:block">
                       {currentUser?.rol != null ? getRoleName(currentUser.rol) : ''} • CUIT: {currentUser?.cuit}
                     </p>
                   </>
                 )}
-                
+
               </div>
               <Button
                 icon={<DownloadOutlined />}
@@ -528,7 +528,7 @@ export default function UsuariosPage() {
               </Button>
               {!isMayorista && (
                 <Button
-                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  className="inline-flex items-center px-2 sm:px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
                   onClick={openAddUser}
                 >
                   Agregar Usuario
