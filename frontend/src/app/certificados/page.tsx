@@ -10,7 +10,7 @@ import { message } from 'antd';
 export default function CertificadosPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'descarga' | 'historial'>('descarga');
+  const [activeTab, setActiveTab] = useState<'descarga' | 'historial' | 'saldoPrepago'>('descarga');
   
   // Estados para descarga
   const [descargaData, setDescargaData] = useState<CreateDescargaRequest>({
@@ -49,6 +49,7 @@ export default function CertificadosPage() {
   // Estados para métricas
   const [metricas, setMetricas] = useState<MetricasPersonales | null>(null);
   const [rankingSaldoBajo, setRankingSaldoBajo] = useState<RankingSaldoPrepagoBajo[]>([]);
+  const [rankingLoading, setRankingLoading] = useState(false);
 
   // Estados para modal de facturación
   const [showFacturacionModal, setShowFacturacionModal] = useState(false);
@@ -109,10 +110,15 @@ export default function CertificadosPage() {
     });
   };
 
+  // El cambio masivo bloquea PREPAGO: Admin/Facturación miran estadoMayorista,
+  // Mayorista mira tipoDescarga (misma condición que ya usa el dropdown individual de Estado Distribuidor)
+  const esBulkBloqueada = (descarga: DescargaHistorial) =>
+    user?.rol === 2 ? descarga.tipoDescarga === 'PREPAGO' : descarga.estadoMayorista === 'PREPAGO';
+
   const toggleSelectAll = () => {
     const selectableIds = new Set(
       historial
-        .filter(d => d.estadoMayorista !== 'PREPAGO')
+        .filter(d => !esBulkBloqueada(d))
         .map(d => d.id)
     );
 
@@ -145,21 +151,31 @@ export default function CertificadosPage() {
         const descarga = historial.find(d => d.id === downloadId);
         if (!descarga) continue;
 
-        if (descarga.estadoMayorista === 'PREPAGO') {
+        if (esBulkBloqueada(descarga)) {
           failedCount++;
-          errors.push(`${descarga.controladorId}: Estado Mayorista PREPAGO - Inmutable`);
+          errors.push(`${descarga.controladorId}: PREPAGO - Inmutable`);
           continue;
         }
 
-        // Construir datos de actualización
-        const updateData: any = { estadoMayorista: bulkNuevoEstado };
+        // Construir datos de actualización según quién hace el cambio masivo
+        const updateData: any = user?.rol === 2
+          ? { estadoDistribuidor: bulkNuevoEstado }
+          : { estadoMayorista: bulkNuevoEstado };
 
-        if (bulkNuevoEstado === 'Facturado' && bulkFacturaData.numero_factura) {
-          updateData.numero_factura = bulkFacturaData.numero_factura;
-        }
-
-        if (bulkNuevoEstado === 'Cobrado' && bulkFacturaData.referencia_pago) {
-          updateData.referencia_pago = bulkFacturaData.referencia_pago;
+        if (user?.rol === 2) {
+          if (bulkNuevoEstado === 'Facturado' && bulkFacturaData.numero_factura) {
+            updateData.numero_factura_distribuidor = bulkFacturaData.numero_factura;
+          }
+          if (bulkNuevoEstado === 'Cobrado' && bulkFacturaData.referencia_pago) {
+            updateData.referencia_pago_distribuidor = bulkFacturaData.referencia_pago;
+          }
+        } else {
+          if (bulkNuevoEstado === 'Facturado' && bulkFacturaData.numero_factura) {
+            updateData.numero_factura = bulkFacturaData.numero_factura;
+          }
+          if (bulkNuevoEstado === 'Cobrado' && bulkFacturaData.referencia_pago) {
+            updateData.referencia_pago = bulkFacturaData.referencia_pago;
+          }
         }
 
         await certificadosApi.cambiarEstado(downloadId, updateData);
@@ -239,14 +255,24 @@ export default function CertificadosPage() {
     } catch (error) {
       console.error('Error cargando métricas:', error);
     }
-    // Ranking de bajo saldo prepago: solo aplica a Admin/Facturación/Mayorista (el backend rechaza otros roles)
+  };
+
+  // Ranking de bajo saldo prepago: se consulta bajo demanda (solo al abrir la pestaña),
+  // no se precarga con las métricas. Solo aplica a Admin/Facturación/Mayorista
+  // (el backend rechaza otros roles).
+  const loadRankingSaldoBajo = async () => {
+    setRankingLoading(true);
     try {
       const ranking = await certificadosApi.getRankingSaldoPrepagoBajo();
       setRankingSaldoBajo(ranking);
     } catch (error) {
+      console.error('Error cargando ranking de saldo prepago:', error);
       setRankingSaldoBajo([]);
+    } finally {
+      setRankingLoading(false);
     }
-  };  // Función para cargar historial según rol
+  };
+  // Función para cargar historial según rol
   const loadHistorial = async (page = 1) => {
     setHistorialLoading(true);
     // Construir filtrosFinal con tipos correctos
@@ -583,9 +609,10 @@ export default function CertificadosPage() {
     }
   };
 
-  const validSelectedCount = Array.from(selectedDownloadIds).filter(id =>
-    historial.find(d => d.id === id && d.estadoMayorista !== 'PREPAGO')
-  ).length;  const handleLogout = () => {
+  const validSelectedCount = Array.from(selectedDownloadIds).filter(id => {
+    const d = historial.find(d => d.id === id);
+    return d && !esBulkBloqueada(d);
+  }).length;  const handleLogout = () => {
       authApi.logout();
     };
   
@@ -970,27 +997,6 @@ export default function CertificadosPage() {
           </div>
         )}
 
-        {/* Ranking de bajo saldo prepago (Admin, Facturación, Mayorista) */}
-        {rankingSaldoBajo.length > 0 && (
-          <div className="mb-8 bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <h3 className="text-sm font-medium text-gray-700 mb-3">
-                ⚠️ Bajo saldo prepago {user?.rol === 2 ? '(tus distribuidores)' : '(mayoristas)'}
-              </h3>
-              <ul className="divide-y divide-gray-200">
-                {rankingSaldoBajo.map(r => (
-                  <li key={r.id_usuario} className="py-2 flex justify-between text-sm">
-                    <span className="text-gray-700">{r.nombre}</span>
-                    <span className={`font-semibold ${r.saldoPrepago <= 0 ? 'text-red-600' : 'text-orange-600'}`}>
-                      {r.saldoPrepago} disponibles
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )}
-
         {/* Tabs */}
         <div className="bg-white shadow rounded-lg">
           <div className="border-b border-gray-200">
@@ -1021,6 +1027,21 @@ export default function CertificadosPage() {
               >
                 Historial
               </button>
+              {(user?.rol === 1 || user?.rol === 2 || user?.rol === 4) && (
+                <button
+                  onClick={() => {
+                    setActiveTab('saldoPrepago');
+                    loadRankingSaldoBajo();
+                  }}
+                  className={`${
+                    activeTab === 'saldoPrepago'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-4 px-6 border-b-2 font-medium text-sm`}
+                >
+                  ⚠️ Bajo Saldo Prepago
+                </button>
+              )}
             </nav>
           </div>
 
@@ -1187,7 +1208,7 @@ export default function CertificadosPage() {
                   className="mb-4 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded shadow"
                 >                  Exportar a Excel
                 </button>
-                {/* Botón de cambio masivo de estado - solo para Admin y Facturación */}                {(user?.rol === 1 || user?.rol === 4) && (
+                {/* Botón de cambio masivo de estado - Admin/Facturación (Estado Mayorista) y Mayorista (Estado Distribuidor) */}                {(user?.rol === 1 || user?.rol === 4 || user?.rol === 2) && (
                   <button
                     onClick={handleBulkStatusChange}
                     disabled={validSelectedCount === 0}
@@ -1351,14 +1372,14 @@ export default function CertificadosPage() {
                       <table>
                         <thead className="bg-gray-50">
                           <tr>
-                            {(user?.rol === 1 || user?.rol === 4) && (
+                            {(user?.rol === 1 || user?.rol === 4 || user?.rol === 2) && (
                               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                                 <input
                                   type="checkbox"
-                                  checked={selectedDownloadIds.size > 0 && selectedDownloadIds.size === historial.filter(d => d.estadoMayorista !== 'PREPAGO').length}
+                                  checked={selectedDownloadIds.size > 0 && selectedDownloadIds.size === historial.filter(d => !esBulkBloqueada(d)).length}
                                   onChange={toggleSelectAll}
                                   className="rounded"
-                                  title="Seleccionar todos (excepto Estado Mayorista PREPAGO)"
+                                  title="Seleccionar todos (excepto PREPAGO)"
                                 />
                               </th>
                             )}
@@ -1391,15 +1412,15 @@ export default function CertificadosPage() {
                           {historial.map((descarga) => {
                             const esUltimo = descarga.controladorId && ultimosPorControlador[descarga.controladorId] === descarga.id;
                             return (
-                              <tr key={descarga.id}>                                {(user?.rol === 1 || user?.rol === 4) && (
+                              <tr key={descarga.id}>                                {(user?.rol === 1 || user?.rol === 4 || user?.rol === 2) && (
                                   <td className="px-3 py-4 whitespace-nowrap text-sm">
                                     <input
                                       type="checkbox"
-                                      checked={selectedDownloadIds.has(descarga.id) && descarga.estadoMayorista !== 'PREPAGO'}
-                                      onChange={() => descarga.estadoMayorista !== 'PREPAGO' && toggleSelectDownload(descarga.id)}
-                                      disabled={descarga.estadoMayorista === 'PREPAGO'}
+                                      checked={selectedDownloadIds.has(descarga.id) && !esBulkBloqueada(descarga)}
+                                      onChange={() => !esBulkBloqueada(descarga) && toggleSelectDownload(descarga.id)}
+                                      disabled={esBulkBloqueada(descarga)}
                                       className="rounded disabled:opacity-40 disabled:cursor-not-allowed"
-                                      title={descarga.estadoMayorista === 'PREPAGO' ? 'Estado Mayorista PREPAGO no puede modificarse' : 'Seleccionar para cambio masivo'}
+                                      title={esBulkBloqueada(descarga) ? 'PREPAGO no puede modificarse' : 'Seleccionar para cambio masivo'}
                                     />
                                   </td>
                                 )}<td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.controladorId || descarga.certificadoNombre}</td>
@@ -1731,6 +1752,35 @@ export default function CertificadosPage() {
                 )}
               </div>
             )}
+
+            {activeTab === 'saldoPrepago' && (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  ⚠️ Bajo Saldo Prepago {user?.rol === 2 ? '(tus distribuidores)' : '(mayoristas)'}
+                </h3>
+                {rankingLoading ? (
+                  <div className="flex justify-center py-6">
+                    <svg className="animate-spin h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                ) : rankingSaldoBajo.length > 0 ? (
+                  <ul className="divide-y divide-gray-200 max-w-md">
+                    {rankingSaldoBajo.map(r => (
+                      <li key={r.id_usuario} className="py-2 flex justify-between text-sm">
+                        <span className="text-gray-700">{r.nombre}</span>
+                        <span className={`font-semibold ${r.saldoPrepago <= 0 ? 'text-red-600' : 'text-orange-600'}`}>
+                          {r.saldoPrepago} disponibles
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-gray-500">No hay usuarios con bajo saldo prepago.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>      </div>
 
@@ -1741,7 +1791,7 @@ export default function CertificadosPage() {
             {!bulkResults ? (
               <>
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Cambio de Estado Masivo
+                  Cambio de Estado Masivo{user?.rol === 2 ? ' (Estado Distribuidor)' : ''}
                 </h3>
                 <p className="text-sm text-gray-600 mb-6">
                   {validSelectedCount} descarga{validSelectedCount !== 1 ? 's' : ''} seleccionada{validSelectedCount !== 1 ? 's' : ''}
@@ -1764,6 +1814,12 @@ export default function CertificadosPage() {
                     <option value="Pendiente de Facturar">Pendiente de Facturar</option>
                     <option value="Facturado">Facturado</option>
                     <option value="Cobrado">Cobrado</option>
+                    {user?.rol === 2 && (
+                      <>
+                        <option value="Garantia">Garantia</option>
+                        <option value="Bonificado">Bonificado</option>
+                      </>
+                    )}
                   </select>
                 </div>
 
