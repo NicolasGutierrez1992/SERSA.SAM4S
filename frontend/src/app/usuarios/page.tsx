@@ -713,7 +713,10 @@ export default function UsuariosPage() {
               onCancel={() => setCreditosUser(null)}
               onOk={handleGuardarCreditos}
               confirmLoading={creditosLoading}
-              okText="Guardar"
+              okText={<span style={{ color: '#fff' }}>Guardar</span>}
+              cancelText={<span style={{ color: '#fff' }}>Cancelar</span>}
+              okButtonProps={{ style: { background: '#6366f1', borderColor: '#6366f1', color: '#fff' }, className: 'hover:bg-indigo-700 hover:border-indigo-700' }}
+              cancelButtonProps={{ style: { background: '#6366f1', borderColor: '#6366f1', color: '#fff' }, className: 'hover:bg-indigo-700 hover:border-indigo-700' }}
             >
               {creditosUser && (
                 <div>
