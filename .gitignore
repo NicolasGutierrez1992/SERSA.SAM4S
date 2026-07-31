@@ -104,3 +104,4 @@ docker-compose.override.yml
 
 # Documentación histórica de sesiones (mover a _docs_historicos/ o eliminar)
 _docs_historicos/
+POS-GestionCloud.code-workspace
