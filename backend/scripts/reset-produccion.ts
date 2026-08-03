@@ -53,8 +53,6 @@ async function main() {
 
     if (!confirmado) {
       console.log('\nDry-run finalizado. Volvé a correr con --confirm para aplicar los cambios.');
-      await queryRunner.release();
-      await AppDataSource.destroy();
       return;
     }
 
