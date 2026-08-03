@@ -1756,7 +1756,7 @@ export default function CertificadosPage() {
             {activeTab === 'saldoPrepago' && (
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">
-                  ⚠️ Bajo Saldo Prepago {user?.rol === 2 ? '(tus distribuidores)' : '(mayoristas)'}
+                  ⚠️ Bajo Saldo Prepago {user?.rol === 2 ? '(tus distribuidores)' : '(mayoristas y distribuidores SERSA)'}
                 </h3>
                 {rankingLoading ? (
                   <div className="flex justify-center py-6">

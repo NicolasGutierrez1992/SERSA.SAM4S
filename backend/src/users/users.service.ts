@@ -1,5 +1,5 @@
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, FindOptionsWhere, In } from 'typeorm';
+import { Repository, FindOptionsWhere, In, Brackets } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Injectable, BadRequestException, ConflictException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
 import { User } from './entities/user.entity';
@@ -486,7 +486,8 @@ export class UsersService {
   /**
    * Ranking de usuarios con menor saldo prepago disponible (para alertar antes de que se queden sin crédito).
    * Solo incluye usuarios que tengan al menos una compra prepago cargada alguna vez.
-   * Alcance: Mayorista (rol 2) ve sus propios distribuidores; Admin/Facturación (1/4) ven los mayoristas.
+   * Alcance: Mayorista (rol 2) ve sus propios distribuidores; Admin/Facturación (1/4) ven los mayoristas
+   * más los distribuidores del mayorista SERSA (id_mayorista = 1).
    * Sin límite fijo de filas: el frontend separa "sin saldo" (0) de "bajo saldo" (>0) y
    * acota la cantidad mostrada en cada grupo.
    */
@@ -504,7 +505,15 @@ export class UsersService {
     if (currentUser.rol === 2) {
       query.andWhere('u.rol = :rol', { rol: 3 }).andWhere('u.id_mayorista = :idMayorista', { idMayorista: currentUser.id_mayorista });
     } else if (currentUser.rol === 1 || currentUser.rol === 4) {
-      query.andWhere('u.rol = :rol', { rol: 2 });
+      const SERSA_ID_MAYORISTA = 1;
+      query.andWhere(
+        new Brackets((qb) => {
+          qb.where('u.rol = :rolMayorista', { rolMayorista: 2 }).orWhere(
+            '(u.rol = :rolDistribuidor AND u.id_mayorista = :sersaId)',
+            { rolDistribuidor: 3, sersaId: SERSA_ID_MAYORISTA },
+          );
+        }),
+      );
     } else {
       return [];
     }
