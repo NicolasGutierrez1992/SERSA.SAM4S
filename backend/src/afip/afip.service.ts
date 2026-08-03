@@ -86,7 +86,6 @@ export class AfipService {
     }
 
     try {
-      /*Descomentar para produccion
       logs.push({ timestamp: new Date().toISOString(), step: 'inicio', message: `CUIT: ${config.cuit}, Fabricante: ${config.fabricante}, Marca: ${request.marca}, Modelo: ${request.modelo}, Número de Serie: ${request.numeroSerie}` });
       // 1. Login WSAA para obtener token y sign
       this.loggerService.debug('AFIP-generarCertificado', 'Llamando a loginWsaa...');
@@ -174,14 +173,6 @@ export class AfipService {
       this.loggerService.info('AFIP-generarCertificado', 'Certificado CRS generado exitosamente', { archivo: nombreArchivo, tamaño, checksum });
       logs.push({ timestamp: new Date().toISOString(), step: 'completado', message: 'Certificado CRS generado exitosamente', archivo: nombreArchivo, tamaño, checksum });
       return { certificadoPem: buffer, nombreArchivo, checksum, tamaño, logs };
-      */
-      return {
-        certificadoPem: 'PRODUCCIÓN DESHABILITADA',
-        nombreArchivo: this.generarNombreArchivo(request),
-        checksum: 'PRODUCCIÓN DESHABILITADA',
-        tamaño: 0,
-        logs
-      };
     } catch (error) {
       this.loggerService.error('AFIP', 'Error generando certificado AFIP', error);
       logs.push({ timestamp: new Date().toISOString(), step: 'error', message: error.message, error: error.stack });
