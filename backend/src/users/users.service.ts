@@ -49,8 +49,8 @@ export class UsersService {
     if (!/^\d{11}$/.test(createUserDto.cuit)) {
       throw new BadRequestException('El CUIT debe tener 11 dígitos numéricos');
     }
-        if (!createUserDto.password || createUserDto.password.length < 10) {
-      throw new BadRequestException('La contraseña debe tener al menos 10 caracteres');
+        if (!createUserDto.password || createUserDto.password.length < 6) {
+      throw new BadRequestException('La contraseña debe tener al menos 6 caracteres');
     }
 
     // Verificar si el CUIT ya existe

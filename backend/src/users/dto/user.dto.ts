@@ -286,45 +286,6 @@ export class QueryUsersDto {
   id_mayorista?: number;
 }
 
-export class ChangePasswordDto {
-    @ApiProperty({
-    example: 'NewPass123!',
-    description: 'Nueva contraseña del usuario',
-  })
-  @IsString()
-  @IsNotEmpty({ message: 'La nueva contraseña es obligatoria' })
-  @Length(6, 100, { message: 'La contraseña debe tener entre 6 y 100 caracteres' })
-  newPassword: string;
-}
-
-export class ResetPasswordDto {
-  @ApiProperty({
-    example: 'NewPass123!',
-    description: 'Nueva contraseña del usuario',
-  })
-  @IsString()
-  @IsNotEmpty({ message: 'La nueva contraseña es obligatoria' })
-  @Length(6, 100, { message: 'La contraseña debe tener entre 6 y 100 caracteres' })
-  newPassword: string;
-
-  @ApiPropertyOptional({
-    example: true,
-    description: 'Indica si el usuario debe cambiar su contraseña',
-  })
-  @IsOptional()
-  @IsBoolean({ message: 'Debe ser un valor booleano' })
-  mustChange?: boolean;
-
-   @ApiPropertyOptional({
-    example: "1112345678",
-    description: 'Numero de celular para enviar confirmacion via Whatsapp',
-  })
-  @IsOptional()
-  @IsString({ message: 'Debe ser un número de celular válido' })
-  @Length(10, 15, { message: 'El número de celular debe tener entre 10 y 15 caracteres' })
-  celular?: string;
-}
-
 export class CreateCompraPrepagoDto {
   @ApiProperty({ example: 4, description: 'Cantidad de descargas compradas en este lote' })
   @IsNumber()

@@ -19,7 +19,7 @@ export default function ChangePasswordPage() {
       message.success('Contraseña cambiada correctamente');
       router.push('/login');
     } catch (err: any) {
-      message.error('Error al cambiar la contraseña');
+      message.error(err?.response?.data?.message || 'Error al cambiar la contraseña');
     } finally {
       setLoading(false);
     }
@@ -34,7 +34,14 @@ export default function ChangePasswordPage() {
             <Form.Item name="currentPassword" label="Contraseña actual" rules={[{ required: true, message: 'Ingrese su contraseña actual' }]}>
               <Input.Password />
             </Form.Item>
-            <Form.Item name="newPassword" label="Nueva contraseña" rules={[{ required: true, message: 'Ingrese la nueva contraseña' }]}>
+            <Form.Item
+              name="newPassword"
+              label="Nueva contraseña"
+              rules={[
+                { required: true, message: 'Ingrese la nueva contraseña' },
+                { min: 6, message: 'La contraseña debe tener al menos 6 caracteres' },
+              ]}
+            >
               <Input.Password />
             </Form.Item>
             <Form.Item name="confirmPassword" label="Confirmar nueva contraseña" dependencies={["newPassword"]} rules={[{ required: true, message: 'Confirme la nueva contraseña' }, ({ getFieldValue }) => ({ validator(_, value) { if (!value || getFieldValue('newPassword') === value) { return Promise.resolve(); } return Promise.reject('Las contraseñas no coinciden'); } })]}>
