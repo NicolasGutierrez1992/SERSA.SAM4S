@@ -32,8 +32,8 @@ export default function UsuariosPage() {
   const [creditosUser, setCreditosUser] = useState<any | null>(null);
   const [creditosLimiteValue, setCreditosLimiteValue] = useState('');
   const [creditosLoading, setCreditosLoading] = useState(false);
-  // El límite de cuenta corriente no aplica a Admin (1) ni Mayorista (2)
-  const mostrarLimiteCuentaCorriente = creditosUser && ![1, 2].includes(creditosUser.rol);
+  // El límite de cuenta corriente no aplica a Admin (1), Mayorista (2) ni Técnico (5)
+  const mostrarLimiteCuentaCorriente = creditosUser && ![1, 2, 5].includes(creditosUser.rol);
   // Mayorista (2), Distribuidor (3) y Facturación (4) pueden recibir compras prepago
   const mostrarComprasPrepago = creditosUser && [2, 3, 4].includes(creditosUser.rol);
 

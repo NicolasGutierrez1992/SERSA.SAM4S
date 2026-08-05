@@ -127,7 +127,7 @@ export class DescargasService {
   }
   /**
    * Validar si un usuario puede descargar certificados
-   * Admin (1) y Mayorista (2): siempre pueden
+   * Admin (1), Mayorista (2) y Técnico (5): siempre pueden
    * Distribuidor (3) y Facturación (4): deben validar según tipo_descarga
    * 
    * CUENTA_CORRIENTE: Validar descargas pendientes >= límite configurado
@@ -196,7 +196,18 @@ export class DescargasService {
       };
     }
 
-    // Distribuidor (3), Facturación (4) u otros roles: calcular también el saldo de
+    // Técnico (5): personal interno de SERSA (siempre id_mayorista = 1), sin límite de cuenta corriente
+    if (user.rol === 5) {
+      return {
+        canDownload: true,
+        message: '',
+        userType: 'SIN_LIMITE',
+        limiteDisponible: -1,
+        saldoPrepago
+      };
+    }
+
+    // Distribuidor (3), Facturación (4): calcular también el saldo de
     // cuenta corriente para poder informar ambos al usuario, aunque el prepago sea el que aplique.
     // Los distribuidores (rol 3) usan estadoDistribuidor, otros usan estadoMayorista.
     // Excepción SERSA: para distribuidores de mayorista=1, Facturado también bloquea
@@ -334,7 +345,7 @@ export class DescargasService {
           const descargasPendientes = await manager.getRepository(Descarga).count({
             where: estadosQueBloquean.map(estado => ({ id_usuario: data.usuarioId, [estadoField]: estado }))
           });
-          if (user.rol !== 1 && user.rol !== 2 && descargasPendientes >= user.limite_descargas) {
+          if (user.rol !== 1 && user.rol !== 2 && user.rol !== 5 && descargasPendientes >= user.limite_descargas) {
             throw new ForbiddenException('Has alcanzado el límite de descargas pendientes. No podés descargar hasta que se libere el límite.');
           }
 
