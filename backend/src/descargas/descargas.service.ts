@@ -321,17 +321,23 @@ export class DescargasService {
         let estadoDistribuidorInicial: EstadoDescarga;
 
         if (usoPrepago) {
-          if (user.id_mayorista === 1) {
-            // SERSA (mayorista = 1): Ambos PREPAGO (inmutables)
+          // Dueño del crédito consumido: SERSA, o el propio Mayorista descargando con su
+          // propio saldo (comprado directamente a SERSA) -> ya está pagado, ambos estados
+          // quedan en PREPAGO e inmutables. Si en cambio es un Distribuidor consumiendo
+          // saldo asignado por su Mayorista (no-SERSA), el Mayorista todavía debe rendir
+          // cuentas con SERSA por ese consumo.
+          const actorEsDuenoDelCredito = user.id_mayorista === 1 || user.rol === 2;
+
+          if (actorEsDuenoDelCredito) {
             estadoMayoristaInicial = EstadoDescarga.PREPAGO;
             estadoDistribuidorInicial = EstadoDescarga.PREPAGO;
-            this.logger.log(`[registrarDescarga] Prepago de SERSA: Ambos estados = PREPAGO`);
+            this.logger.log(`[registrarDescarga] Prepago propio (SERSA o Mayorista): Ambos estados = PREPAGO`);
           } else {
-            // Otro mayorista: Distribuidor PREPAGO (inmutable), Mayorista PENDIENTE (mutable)
+            // Distribuidor bajo un mayorista no-SERSA: Distribuidor PREPAGO (inmutable), Mayorista PENDIENTE (mutable)
             estadoMayoristaInicial = EstadoDescarga.PENDIENTE_FACTURAR;
             estadoDistribuidorInicial = EstadoDescarga.PREPAGO;
             this.logger.log(
-              `[registrarDescarga] Prepago de mayorista ${user.id_mayorista}: ` +
+              `[registrarDescarga] Prepago de distribuidor bajo mayorista ${user.id_mayorista}: ` +
               `Mayorista=PENDIENTE (mutable), Distribuidor=PREPAGO (inmutable)`
             );
           }
@@ -526,7 +532,14 @@ export class DescargasService {
     });    
     if (!descarga) {
       throw new Error('Descarga no encontrada');
-    }    const idMayorista = await this.obtenerIdMayoristaPorUsuario(descarga.id_usuario);
+    }
+    const duenioDescarga = await this.descargaRepository.manager.getRepository(User).findOne({
+      where: { id_usuario: descarga.id_usuario },
+      select: ['id_mayorista', 'rol']
+    });
+    const idMayorista = duenioDescarga?.id_mayorista || 0;
+    // Dueño del crédito consumido: SERSA, o el propio Mayorista con su propio saldo prepago.
+    const actorEsDuenoDelCredito = idMayorista === 1 || duenioDescarga?.rol === 2;
 
     // ⭐ NUEVA LÓGICA: Validar permisos según rol
     // Distribuidor (3) y Técnico (5) nunca pueden cambiar estados
@@ -550,15 +563,15 @@ export class DescargasService {
       || nuevoEstado.estadoDistribuidor === EstadoDescarga.BONIFICADO;
 
     // ⭐ NUEVA LÓGICA: Bloqueo selectivo de PREPAGO
-    // Caso 1: PREPAGO de SERSA (mayorista = 1) - Bloquear AMBOS estados (excepto Garantia/Bonificado)
-    if (descarga.tipo_descarga === 'PREPAGO' && idMayorista === 1 && !esEstadoLibreDeuda) {
+    // Caso 1: PREPAGO ya pagado por el propio dueño (SERSA o Mayorista propio) - Bloquear AMBOS estados (excepto Garantia/Bonificado)
+    if (descarga.tipo_descarga === 'PREPAGO' && actorEsDuenoDelCredito && !esEstadoLibreDeuda) {
       throw new ForbiddenException(
-        'No se puede modificar estados de descargas PREPAGO de SERSA. El estado PREPAGO es definitivo e inmutable.'
+        'No se puede modificar estados de descargas PREPAGO. El estado PREPAGO es definitivo e inmutable.'
       );
     }
 
-    // Caso 2: PREPAGO de otro mayorista - Bloquear solo estadoDistribuidor
-    if (descarga.tipo_descarga === 'PREPAGO' && idMayorista !== 1) {
+    // Caso 2: PREPAGO de un Distribuidor bajo otro mayorista - Bloquear solo estadoDistribuidor
+    if (descarga.tipo_descarga === 'PREPAGO' && !actorEsDuenoDelCredito) {
       if (nuevoEstado.estadoDistribuidor !== undefined && 
           nuevoEstado.estadoDistribuidor !== EstadoDescarga.PREPAGO) {
         throw new ForbiddenException(

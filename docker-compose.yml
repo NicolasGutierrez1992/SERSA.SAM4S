@@ -5,7 +5,7 @@ services:
   # Base de datos PostgreSQL local (solo para desarrollo Docker)
   # ============================================================
   db:
-    image: postgres:15-alpine
+    image: postgres:18-alpine
     container_name: sersa_db
     restart: unless-stopped
     environment:
@@ -15,7 +15,7 @@ services:
     ports:
       - '5433:5432'     # Puerto local 5433 para no conflictar con Postgres local
     volumes:
-      - sersa_pgdata:/var/lib/postgresql/data
+      - sersa_pgdata:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U postgres -d db_sersa']
       interval: 10s
