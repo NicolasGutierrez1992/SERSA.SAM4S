@@ -167,6 +167,14 @@ export default function LoginPage() {
             </p>
           </div>
         </div>
+
+        {/* Versión y fecha de compilación del build actual */}
+        <p className="text-center text-xs text-gray-400">
+          v{process.env.NEXT_PUBLIC_APP_VERSION}
+          {process.env.NEXT_PUBLIC_BUILD_TIME && (
+            <> · compilado {new Date(process.env.NEXT_PUBLIC_BUILD_TIME).toLocaleString('es-AR')}</>
+          )}
+        </p>
       </div>
     </div>
   );
