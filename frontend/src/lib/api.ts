@@ -144,6 +144,9 @@ const api = axios.create({
   baseURL: API_URL,
   // Envía la cookie auth_token automáticamente en cada request
   withCredentials: true,
+  // Evita que un request quede colgado indefinidamente (ej: pestaña reactivada tras
+  // estar inactiva/throttleada por el navegador) — falla rápido en vez de tildar la UI.
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -163,10 +166,14 @@ api.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error) => {
     if (error.response?.status === 401) {
+      const isLoginRequest = error.config?.url?.includes('/auth/login');
       clearUserInfo();
-      // No redirigir con window.location.href (causa hard refresh completo).
-      // El middleware de Next.js protege las rutas via auth_token.
-      // Cada componente maneja su propio estado de error 401.
+      // Redirigir a /login para resetear todo el estado de React (evita que la UI
+      // quede "tildada" con loading flags pegados tras vencer la sesión). No aplica
+      // al propio request de login fallido, para no pisar el mensaje de error ahí.
+      if (!isLoginRequest && typeof window !== 'undefined' && window.location.pathname !== '/login') {
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   },

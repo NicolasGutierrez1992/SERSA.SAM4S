@@ -275,68 +275,73 @@ export default function CertificadosPage() {
   // Función para cargar historial según rol
   const loadHistorial = async (page = 1) => {
     setHistorialLoading(true);
-    // Construir filtrosFinal con tipos correctos
-    let filtrosFinal: any = { ...filtros, page, limit: 50 };
-    
-    // Si es Distribuidor (3) limitar por CUIT y mayorista correspondiente
-    if (user?.rol === 3) {
-      filtrosFinal.cuit = user.cuit;
-      filtrosFinal.idMayorista = String(user.id_mayorista);
-    }
-    // Mayorista (2) ver solo descargas de su propio mayorista
-    if (user?.rol === 2) {
-      filtrosFinal.idMayorista = String(user.id_mayorista);
-    }
-    // IMPORTANTE: Facturación (4) y Técnico (5) deben ver TODAS las descargas -> no forzar idMayorista aquí
-    
-    // Validar CUIT antes de hacer la petición
-    if (filtrosFinal.cuit && !/^\d{8,}$/.test(filtrosFinal.cuit)) {
-      setHistorial([]);
+    try {
+      // Construir filtrosFinal con tipos correctos
+      let filtrosFinal: any = { ...filtros, page, limit: 50 };
+
+      // Si es Distribuidor (3) limitar por CUIT y mayorista correspondiente
+      if (user?.rol === 3) {
+        filtrosFinal.cuit = user.cuit;
+        filtrosFinal.idMayorista = String(user.id_mayorista);
+      }
+      // Mayorista (2) ver solo descargas de su propio mayorista
+      if (user?.rol === 2) {
+        filtrosFinal.idMayorista = String(user.id_mayorista);
+      }
+      // IMPORTANTE: Facturación (4) y Técnico (5) deben ver TODAS las descargas -> no forzar idMayorista aquí
+
+      // Validar CUIT antes de hacer la petición
+      if (filtrosFinal.cuit && !/^\d{8,}$/.test(filtrosFinal.cuit)) {
+        setHistorial([]);
+        return;
+      }
+
+      // Limpiar filtros vacíos y undefined
+      filtrosFinal = Object.fromEntries(
+        Object.entries(filtrosFinal).filter(([_, v]) => v !== '' && v !== undefined && v !== null)
+      );
+
+      // ⭐ IMPORTANTE: Pasar userRole al backend para filtrado inteligente
+      filtrosFinal.userRole = user?.rol;
+
+      // Convertir mes y anio a número
+      if (filtrosFinal.mes) {
+        const mesNum = Number(filtrosFinal.mes);
+        if (isNaN(mesNum) || mesNum < 1 || mesNum > 12) {
+          delete filtrosFinal.mes;
+        } else {
+          filtrosFinal.mes = mesNum;
+        }
+      }
+
+      if (filtrosFinal.anio) {
+        const anioNum = Number(filtrosFinal.anio);
+        if (isNaN(anioNum) || anioNum < 2025 || anioNum > 2100) {
+          delete filtrosFinal.anio;
+        } else {
+          filtrosFinal.anio = anioNum;
+        }
+      }
+
+      // Siempre usar getHistorialDescargas con los filtros
+      const response = await certificadosApi.getHistorialDescargas(filtrosFinal);
+      let descargas = response.descargas || [];
+      // Solo filtrar por id_mayorista en frontend cuando el usuario sea Mayorista (rol 2).
+      // Facturación (4) y Técnico (5) deben ver TODAS las descargas (la fuente de la verdad debe ser el backend).
+      if (user?.rol === 2) {
+        descargas = descargas.filter(d => d.usuario?.id_mayorista === user.id_mayorista);
+        console.log('[CertificadosPage] Filtrando descargas por id_mayorista en frontend (mayorista):', user.id_mayorista, 'result:', descargas.length);
+      }
+      setHistorial(descargas);
+      setTotalRegistros(response.total ?? 0);
+      setTotalPages(response.totalPages ?? 1);
+      setCurrentPage(page);
+    } catch (error) {
+      console.error('Error cargando historial:', error);
+      message.error('Error al cargar el historial de descargas');
+    } finally {
       setHistorialLoading(false);
-      return;
     }
-    
-    // Limpiar filtros vacíos y undefined
-    filtrosFinal = Object.fromEntries(
-      Object.entries(filtrosFinal).filter(([_, v]) => v !== '' && v !== undefined && v !== null)
-    );
-    
-    // ⭐ IMPORTANTE: Pasar userRole al backend para filtrado inteligente
-    filtrosFinal.userRole = user?.rol;
-    
-    // Convertir mes y anio a número
-    if (filtrosFinal.mes) {
-      const mesNum = Number(filtrosFinal.mes);
-      if (isNaN(mesNum) || mesNum < 1 || mesNum > 12) {
-        delete filtrosFinal.mes;
-      } else {
-        filtrosFinal.mes = mesNum;
-      }
-    }
-    
-    if (filtrosFinal.anio) {
-      const anioNum = Number(filtrosFinal.anio);
-      if (isNaN(anioNum) || anioNum < 2025 || anioNum > 2100) {
-        delete filtrosFinal.anio;
-      } else {
-        filtrosFinal.anio = anioNum;
-      }
-    }
-    
-    // Siempre usar getHistorialDescargas con los filtros
-    const response = await certificadosApi.getHistorialDescargas(filtrosFinal);
-    let descargas = response.descargas || [];
-    // Solo filtrar por id_mayorista en frontend cuando el usuario sea Mayorista (rol 2).
-    // Facturación (4) y Técnico (5) deben ver TODAS las descargas (la fuente de la verdad debe ser el backend).
-    if (user?.rol === 2) {
-      descargas = descargas.filter(d => d.usuario?.id_mayorista === user.id_mayorista);
-      console.log('[CertificadosPage] Filtrando descargas por id_mayorista en frontend (mayorista):', user.id_mayorista, 'result:', descargas.length);
-    }
-    setHistorial(descargas);
-    setTotalRegistros(response.total ?? 0);
-    setTotalPages(response.totalPages ?? 1);
-    setCurrentPage(page);
-    setHistorialLoading(false);
   };   // Validar límite de descargas (ahora función reutilizable)
   // ⭐ VALIDACIÓN CENTRALIZADA EN BACKEND - Elimina fallback defectuoso
   const validarLimiteDescargas = async () => {
