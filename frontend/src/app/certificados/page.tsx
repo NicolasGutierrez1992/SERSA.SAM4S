@@ -1390,7 +1390,7 @@ export default function CertificadosPage() {
                             )}
                             <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Controlador</th>
                             <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
-                            {user?.rol === 4 && (
+                            {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>
                             )}                            {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                               <>
@@ -1430,7 +1430,7 @@ export default function CertificadosPage() {
                                   </td>
                                 )}<td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.controladorId || descarga.certificadoNombre}</td>
                                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.usuario ? descarga.usuario.nombre : descarga.usuarioId}</td>
-                                {user?.rol === 4 && (
+                                {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                                   <td className="px-3 py-4 whitespace-nowrap">
                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full `}>{descarga.usuario?.cuit}</span>
                                   </td>
