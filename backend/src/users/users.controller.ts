@@ -240,9 +240,10 @@ export class UsersController {
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
   async resetPassword(
     @Param('id', ParseIntPipe)  id: number,
-    @CurrentUser('rol') rol: number
+    @CurrentUser('rol') rol: number,
+    @CurrentUser('id') actorId: number,
   ): Promise<void> {
-    await this.usersService.resetPassword(id, rol);
+    await this.usersService.resetPassword(id, rol, actorId);
   }
 
   @Delete(':id')
@@ -253,7 +254,7 @@ export class UsersController {
   @ApiResponse({ status: 204, description: 'Usuario eliminado exitosamente' })
   @ApiResponse({ status: 404, description: 'Usuario no encontrado' })
   @ApiResponse({ status: 400, description: 'No se puede eliminar (mayorista con distribuidores)' })
-  async remove(@Param('id', ParseIntPipe) id: number): Promise<void> {
-    await this.usersService.remove(id);
+  async remove(@Param('id', ParseIntPipe) id: number, @Req() req: any): Promise<void> {
+    await this.usersService.remove(id, req.user);
   }
 }

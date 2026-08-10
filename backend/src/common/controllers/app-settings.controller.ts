@@ -4,6 +4,7 @@ import {
   Put,
   Body,
   Param,
+  Req,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -14,9 +15,12 @@ import {
   ApiOperation,
   ApiResponse,
 } from '@nestjs/swagger';
+import { Request } from 'express';
 import { AppSettingsService } from '../services/app-settings.service';
+import { AuditoriaService, AuditoriaAccion, AuditoriaEntidad } from '../../auditoria/auditoria.service';
 import { JwtAuthGuard } from '../../auth/guards/auth.guards';
 import { RequireAdmin } from '../../auth/decorators/roles.decorator';
+import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 
 interface UpdateSettingDto {
   value: string;
@@ -38,7 +42,10 @@ interface AllSettingsResponseDto extends SettingResponseDto {}
 @UseGuards(JwtAuthGuard)
 @RequireAdmin()
 export class AppSettingsController {
-  constructor(private readonly appSettingsService: AppSettingsService) {}
+  constructor(
+    private readonly appSettingsService: AppSettingsService,
+    private readonly auditoriaService: AuditoriaService,
+  ) {}
   /**
    * Obtener todas las configuraciones
    * Solo administradores
@@ -116,8 +123,23 @@ export class AppSettingsController {
   async actualizar(
     @Param('key') key: string,
     @Body() dto: UpdateSettingDto,
+    @CurrentUser('id') userId: number,
+    @Req() req: Request,
   ): Promise<{ mensaje: string }> {
+    const anterior = await this.appSettingsService.obtenerInfoSetting(key).catch(() => null);
     await this.appSettingsService.actualizarSetting(key, dto.value);
+
+    const ip = req.ip || (req as any).connection?.remoteAddress;
+    await this.auditoriaService.log(
+      userId,
+      AuditoriaAccion.ACTUALIZAR,
+      AuditoriaEntidad.APP_SETTING,
+      key,
+      anterior ? { value: anterior.value } : null,
+      { value: dto.value },
+      ip,
+    );
+
     return {
       mensaje: `Configuración ${key} actualizada a ${dto.value}`,
     };

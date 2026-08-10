@@ -9,7 +9,7 @@ import { CommonModule } from '../common/common.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Auditoria, Descarga]),
-    CommonModule,
+    forwardRef(() => CommonModule),
   ],
   controllers: [AuditoriaController],
   providers: [AuditoriaService],

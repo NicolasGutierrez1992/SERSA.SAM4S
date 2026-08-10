@@ -6,6 +6,7 @@ import { User } from './entities/user.entity';
 import { Mayorista } from './entities/mayorista.entity';
 import { CompraPrepago } from './entities/compra-prepago.entity';
 import { CreateUserDto, UpdateUserDto, QueryUsersDto, UserRole, UserStatus, CreateCompraPrepagoDto, UpdateCompraPrepagoDto } from './dto/user.dto';
+import { AuditoriaService, AuditoriaAccion, AuditoriaEntidad } from '../auditoria/auditoria.service';
 
 @Injectable()
 export class UsersService {
@@ -18,8 +19,15 @@ export class UsersService {
     private readonly mayoristaRepository: Repository<Mayorista>,
     @InjectRepository(CompraPrepago)
     private readonly compraPrepagoRepository: Repository<CompraPrepago>,
+    private readonly auditoriaService: AuditoriaService,
   ) {}
   // ✅ Running in PRODUCTION mode with real AFIP integration
+
+  // Nunca se debe registrar el hash de password en el log de auditoría.
+  private sanitizeUserForAudit(user: User | Partial<User>): Record<string, unknown> {
+    const { password, ...rest } = user as User;
+    return rest;
+  }
 
   async create(createUserDto: CreateUserDto, creatorUser?: any): Promise<User> {
     console.log('[UsersService][create] Entrada:', createUserDto);
@@ -103,6 +111,15 @@ export class UsersService {
       tipo_descarga: createUserDto.tipo_descarga || 'CUENTA_CORRIENTE',
     });
     const savedUser = await this.userRepository.save(user);
+
+    await this.auditoriaService.log(
+      creatorUser?.id ?? null,
+      AuditoriaAccion.CREAR,
+      AuditoriaEntidad.USER,
+      savedUser.id_usuario,
+      null,
+      this.sanitizeUserForAudit(savedUser),
+    );
 
     console.log('[UsersService][create] Salida:', savedUser);
     return savedUser;
@@ -303,10 +320,21 @@ export class UsersService {
     }
     
     console.log('[UsersService][update] updateData:', updateData);
+    const antes = this.sanitizeUserForAudit(user);
     Object.assign(user, updateData);
     console.log('[UsersService][update] user después de assign:', user);
     const updatedUser = await this.userRepository.save(user);
     console.log('[UsersService][update] Salida:', updatedUser);
+
+    await this.auditoriaService.log(
+      currentUser?.id ?? null,
+      AuditoriaAccion.ACTUALIZAR,
+      AuditoriaEntidad.USER,
+      updatedUser.id_usuario,
+      antes,
+      this.sanitizeUserForAudit(updatedUser),
+    );
+
     return updatedUser;
   }
 
@@ -342,13 +370,13 @@ export class UsersService {
     console.log('[UsersService][updateLastLogin] Salida: OK');
   }
 
-  async resetPassword(id: number, rol: number): Promise<void> {
+  async resetPassword(id: number, rol: number, actorId?: number | null): Promise<void> {
     console.log('[UsersService][resetPassword] UserEditable:', id);
     console.log('[UsersService][resetPassword] rolCurrentUser:', rol);
 
     const user = await this.userRepository.findOne({ where: { id_usuario: id } });
     if (!user) throw new Error('Usuario no encontrado');
-    // ADMIN puede resetear a cualquier usuario 
+    // ADMIN puede resetear a cualquier usuario
     if(rol !== UserRole.ADMINISTRADOR ){
       //A los usuarios Administradores y Facturacion No se le puede resetar la contraseña
       if (user.rol === UserRole.ADMINISTRADOR || user.rol === UserRole.FACTURACION) {
@@ -359,18 +387,28 @@ export class UsersService {
     const nuevaPassword = process.env.DEFAULT_USER_PASSWORD || 'certificados';
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(nuevaPassword, saltRounds);
-    
+
 
     user.password = hashedPassword;
     user.must_change_password = true;
     await this.userRepository.save(user);
+
+    await this.auditoriaService.log(
+      actorId ?? null,
+      AuditoriaAccion.ACTUALIZAR,
+      AuditoriaEntidad.USER,
+      id,
+      null,
+      { accion: 'reset_password' },
+    );
+
     console.log('[UsersService][resetPassword] Salida: OK');
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: number, currentUser?: any): Promise<void> {
     console.log('[UsersService][remove] Entrada:', id);
     const user = await this.findOne(id);
-    
+
     // Verificar si el usuario es mayorista y tiene distribuidores asociados
     if (user.rol === UserRole.MAYORISTA) {
       const distribuidores = await this.userRepository.count({
@@ -382,6 +420,16 @@ export class UsersService {
     }
 
     await this.userRepository.remove(user);
+
+    await this.auditoriaService.log(
+      currentUser?.id ?? null,
+      AuditoriaAccion.ELIMINAR,
+      AuditoriaEntidad.USER,
+      id,
+      this.sanitizeUserForAudit(user),
+      null,
+    );
+
     console.log('[UsersService][remove] Salida: OK');
   }
 
@@ -465,7 +513,18 @@ export class UsersService {
       fecha_compra: new Date(),
       created_by: currentUser.id_usuario ?? currentUser.id ?? null,
     });
-    return this.compraPrepagoRepository.save(compra);
+    const saved = await this.compraPrepagoRepository.save(compra);
+
+    await this.auditoriaService.log(
+      currentUser?.id ?? null,
+      AuditoriaAccion.CREAR,
+      AuditoriaEntidad.COMPRA_PREPAGO,
+      saved.id,
+      null,
+      { id_usuario: id, cantidad: saved.cantidad, numero_factura: saved.numero_factura },
+    );
+
+    return saved;
   }
 
   async editarCompraPrepago(id: number, compraId: number, dto: UpdateCompraPrepagoDto, currentUser: any): Promise<CompraPrepago> {
@@ -476,11 +535,23 @@ export class UsersService {
       throw new NotFoundException('Compra prepago no encontrada');
     }
 
+    const antes = { numero_factura: compra.numero_factura };
     if (dto.numero_factura !== undefined) {
       compra.numero_factura = dto.numero_factura || null;
     }
 
-    return this.compraPrepagoRepository.save(compra);
+    const saved = await this.compraPrepagoRepository.save(compra);
+
+    await this.auditoriaService.log(
+      currentUser?.id ?? null,
+      AuditoriaAccion.ACTUALIZAR,
+      AuditoriaEntidad.COMPRA_PREPAGO,
+      saved.id,
+      antes,
+      { numero_factura: saved.numero_factura },
+    );
+
+    return saved;
   }
 
   /**

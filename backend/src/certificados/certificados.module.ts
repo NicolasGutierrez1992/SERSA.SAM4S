@@ -15,6 +15,7 @@ import { SharedAuthModule } from '../auth/shared-auth.module';
 import { EncryptionService } from '../common/encryption.service';
 import { CertificadoMigrationService } from '../common/certificado-migration.service';
 import { TimezoneService } from '../common/timezone.service';
+import { AuditoriaModule } from '../auditoria/auditoria.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { TimezoneService } from '../common/timezone.service';
     forwardRef(() => DescargasModule),
     SharedAuthModule,
     UsersModule,
+    AuditoriaModule,
   ],
   controllers: [CertificadosController, CertificadoMaestroController, CertificadoAdminController],
   providers: [CertificadosService, CertificadoMaestroService, EncryptionService, CertificadoMigrationService, TimezoneService],

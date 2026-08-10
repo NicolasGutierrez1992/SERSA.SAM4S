@@ -13,6 +13,7 @@ export enum AuditoriaAccion {
   ACTUALIZAR = 'ACTUALIZAR',
   ELIMINAR = 'ELIMINAR',
   LOGIN = 'LOGIN',
+  LOGIN_FALLIDO = 'LOGIN_FALLIDO',
   LOGOUT = 'LOGOUT',
   DESCARGAR = 'DESCARGAR',
 }
@@ -22,6 +23,9 @@ export enum AuditoriaEntidad {
   CERTIFICADO = 'CERTIFICADO',
   DESCARGA = 'DESCARGA',
   NOTIFICACION = 'NOTIFICACION',
+  APP_SETTING = 'APP_SETTING',
+  COMPRA_PREPAGO = 'COMPRA_PREPAGO',
+  CERTIFICADO_MAESTRO = 'CERTIFICADO_MAESTRO',
 }
 export enum Mayoristas{
   SERSA = 1,
@@ -73,7 +77,7 @@ export class AuditoriaService {
   }
 
   async log(
-    userId: number,
+    userId: number | null,
     accion: AuditoriaAccion,
     entidadTipo: AuditoriaEntidad,
     entidadId?: string | number,

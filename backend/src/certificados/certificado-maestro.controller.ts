@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Req,
   UseGuards,
   UseInterceptors,
   UploadedFile,
@@ -19,10 +20,13 @@ import {
   ApiConsumes
 } from '@nestjs/swagger';
 import type { Multer } from 'multer';
+import type { Request } from 'express';
 import { CertificadoMaestroService } from './certificado-maestro.service';
 import { AfipFilesService } from '../afip/services/afip-files.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guards';
 import { RequireAdmin } from '../auth/decorators/roles.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { AuditoriaService, AuditoriaAccion, AuditoriaEntidad } from '../auditoria/auditoria.service';
 import {
   CertificadoMaestroResponseDto,
   CertificadoMaestroInfoDto,
@@ -35,6 +39,7 @@ export class CertificadoMaestroController {
   constructor(
     private readonly certificadoMaestroService: CertificadoMaestroService,
     private readonly afipFilesService: AfipFilesService,
+    private readonly auditoriaService: AuditoriaService,
   ) {}
 
   /**
@@ -71,13 +76,28 @@ export class CertificadoMaestroController {
   async uploadCertificado(
     @UploadedFile() pfxFile: Multer.File,
     @Body('password') password: string,
-    @Body('certificado_identificador') certificado_identificador?: string,
+    @Body('certificado_identificador') certificado_identificador: string | undefined,
+    @CurrentUser('id') userId: number,
+    @Req() req: Request,
   ): Promise<CertificadoMaestroResponseDto> {
-    return await this.certificadoMaestroService.cargarCertificadoMaestro({
+    const resultado = await this.certificadoMaestroService.cargarCertificadoMaestro({
       pfxFile,
       password,
       certificado_identificador,
     });
+
+    const ip = req.ip || (req as any).connection?.remoteAddress;
+    await this.auditoriaService.log(
+      userId,
+      AuditoriaAccion.CREAR,
+      AuditoriaEntidad.CERTIFICADO_MAESTRO,
+      certificado_identificador ?? null,
+      null,
+      { archivo: pfxFile?.originalname, identificador: certificado_identificador },
+      ip,
+    );
+
+    return resultado;
   }
 
   /**
@@ -123,6 +143,8 @@ export class CertificadoMaestroController {
   @ApiResponse({ status: 400, description: 'Archivo inválido o faltante' })
   async uploadRootRti(
     @UploadedFile() file: Multer.File,
+    @CurrentUser('id') userId: number,
+    @Req() req: Request,
   ): Promise<{ success: boolean; message: string }> {
     if (!file) {
       throw new BadRequestException('Se requiere el archivo rootRtiFile');
@@ -131,6 +153,18 @@ export class CertificadoMaestroController {
       throw new BadRequestException('El archivo Root_RTI debe tener extensión .txt');
     }
     await this.afipFilesService.cargarArchivoRootRTI(file.buffer, file.originalname);
+
+    const ip = req.ip || (req as any).connection?.remoteAddress;
+    await this.auditoriaService.log(
+      userId,
+      AuditoriaAccion.CREAR,
+      AuditoriaEntidad.CERTIFICADO_MAESTRO,
+      'ROOT_RTI',
+      null,
+      { archivo: file.originalname },
+      ip,
+    );
+
     return { success: true, message: 'Root_RTI cargado y encriptado correctamente en base de datos' };
   }
 }

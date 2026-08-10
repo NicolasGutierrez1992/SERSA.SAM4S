@@ -3,12 +3,14 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { LoginDto, ChangePasswordDto, JwtPayload, LoginResponse } from './dto/auth.dto';
+import { AuditoriaService, AuditoriaAccion, AuditoriaEntidad } from '../auditoria/auditoria.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly auditoriaService: AuditoriaService,
   ) {}
 
   async validateUser(cuit: string, password: string): Promise<any> {
@@ -39,9 +41,32 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto, ip?: string): Promise<LoginResponse> {
-    const user = await this.validateUser(loginDto.cuit, loginDto.password);
-    
+    let user: any;
+    try {
+      user = await this.validateUser(loginDto.cuit, loginDto.password);
+    } catch (error) {
+      await this.auditoriaService.log(
+        null,
+        AuditoriaAccion.LOGIN_FALLIDO,
+        AuditoriaEntidad.USER,
+        null,
+        null,
+        { cuit: loginDto.cuit, motivo: error?.message },
+        ip,
+      );
+      throw error;
+    }
+
     if (!user) {
+      await this.auditoriaService.log(
+        null,
+        AuditoriaAccion.LOGIN_FALLIDO,
+        AuditoriaEntidad.USER,
+        null,
+        null,
+        { cuit: loginDto.cuit, motivo: 'Credenciales inválidas' },
+        ip,
+      );
       throw new UnauthorizedException('Credenciales inválidas');
     }    // Actualizar último login
     await this.usersService.updateLastLogin(user.id_usuario);    // Crear payload JWT
@@ -55,7 +80,18 @@ export class AuthService {
       status: user.status,
     };
 
-    const access_token = this.jwtService.sign(payload);         
+    const access_token = this.jwtService.sign(payload);
+
+    await this.auditoriaService.log(
+      user.id_usuario,
+      AuditoriaAccion.LOGIN,
+      AuditoriaEntidad.USER,
+      user.id_usuario,
+      null,
+      null,
+      ip,
+    );
+
     return {
       access_token,
       user: {
@@ -71,6 +107,18 @@ export class AuthService {
         limite_descargas: user.limite_descargas
       },
     };
+  }
+
+  async logout(userId: number, ip?: string): Promise<void> {
+    await this.auditoriaService.log(
+      userId,
+      AuditoriaAccion.LOGOUT,
+      AuditoriaEntidad.USER,
+      userId,
+      null,
+      null,
+      ip,
+    );
   }
   
   async changePassword(userId: number, changePasswordDto: ChangePasswordDto): Promise<void> {

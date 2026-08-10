@@ -53,10 +53,18 @@ export class AuthController {
   }
 
   @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Cerrar sesión (limpia cookie)' })
   @ApiResponse({ status: 204, description: 'Sesión cerrada' })
-  async logout(@Res({ passthrough: true }) res: Response): Promise<void> {
+  async logout(
+    @CurrentUser('id') userId: number,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<void> {
+    const ip = (req as any).ip || (req as any).connection?.remoteAddress;
+    await this.authService.logout(userId, ip);
     res.clearCookie('auth_token', { path: '/' });
   }
 

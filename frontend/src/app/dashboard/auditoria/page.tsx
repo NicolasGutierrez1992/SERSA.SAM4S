@@ -11,11 +11,18 @@ import {
   type AuditoriaLog,
   type AuditoriaStatistics,
 } from '@/lib/api';
+import api from '@/lib/api';
+
+interface UsuarioOption {
+  id_usuario: number;
+  nombre: string;
+  cuit: string;
+}
 
 const { RangePicker } = DatePicker;
 
-const ACCIONES = ['CREAR', 'ACTUALIZAR', 'ELIMINAR', 'LOGIN', 'LOGOUT', 'DOWNLOAD', 'UPDATE', 'ERROR', 'DESCARGAR'];
-const ENTIDADES = ['USER', 'CERTIFICADO', 'DESCARGA', 'NOTIFICACION'];
+const ACCIONES = ['CREAR', 'ACTUALIZAR', 'ELIMINAR', 'LOGIN', 'LOGIN_FALLIDO', 'LOGOUT', 'DOWNLOAD', 'UPDATE', 'ERROR', 'DESCARGAR'];
+const ENTIDADES = ['USER', 'CERTIFICADO', 'DESCARGA', 'NOTIFICACION', 'APP_SETTING', 'COMPRA_PREPAGO', 'CERTIFICADO_MAESTRO'];
 
 const accionColor: Record<string, string> = {
   DOWNLOAD: 'text-indigo-700 bg-indigo-50',
@@ -24,6 +31,7 @@ const accionColor: Record<string, string> = {
   ELIMINAR: 'text-red-700 bg-red-50',
   CREAR: 'text-green-700 bg-green-50',
   LOGIN: 'text-gray-700 bg-gray-100',
+  LOGIN_FALLIDO: 'text-red-700 bg-red-50',
   LOGOUT: 'text-gray-700 bg-gray-100',
 };
 
@@ -41,7 +49,10 @@ export default function AuditoriaPage() {
 
   const [accion, setAccion] = useState<string | undefined>();
   const [objetivoTipo, setObjetivoTipo] = useState<string | undefined>();
+  const [actorId, setActorId] = useState<number | undefined>();
   const [rango, setRango] = useState<[Dayjs, Dayjs] | null>(null);
+
+  const [usuarios, setUsuarios] = useState<UsuarioOption[]>([]);
 
   useEffect(() => {
     authApi
@@ -56,9 +67,17 @@ export default function AuditoriaPage() {
       .catch(() => router.replace('/login'));
   }, [router]);
 
+  useEffect(() => {
+    if (checkingAccess) return;
+    api.get('/users', { params: { limit: 1000 } })
+      .then((res) => setUsuarios(res.data?.data ?? []))
+      .catch((err) => console.error('Error cargando usuarios para el filtro:', err));
+  }, [checkingAccess]);
+
   const filtros = {
     accion,
     objetivo_tipo: objetivoTipo,
+    actor_id: actorId,
     fecha_desde: rango ? rango[0].format('YYYY-MM-DD') : undefined,
     fecha_hasta: rango ? rango[1].format('YYYY-MM-DD') : undefined,
   };
@@ -92,7 +111,7 @@ export default function AuditoriaPage() {
     cargarLogs(1);
     cargarStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [checkingAccess, accion, objetivoTipo, rango]);
+  }, [checkingAccess, accion, objetivoTipo, actorId, rango]);
 
   const handleExportCsv = async () => {
     try {
@@ -183,6 +202,21 @@ export default function AuditoriaPage() {
 
           {/* Filtros */}
           <div className="flex flex-wrap items-center gap-3">
+            <Select
+              placeholder="Usuario"
+              allowClear
+              showSearch
+              style={{ width: 220 }}
+              value={actorId}
+              onChange={setActorId}
+              filterOption={(input: string, option: any) =>
+                (option?.label as string ?? '').toLowerCase().includes(input.toLowerCase())
+              }
+              options={usuarios.map((u) => ({
+                value: u.id_usuario,
+                label: `${u.nombre} (${u.cuit})`,
+              }))}
+            />
             <Select
               placeholder="Acción"
               allowClear
