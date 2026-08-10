@@ -85,6 +85,7 @@ export default function CertificadosPage() {
   const [pendingDownloadData, setPendingDownloadData] = useState<CreateDescargaRequest | null>(null);
   const [downloadConfirmLoading, setDownloadConfirmLoading] = useState(false);
   const [acceptDownloadConfirm, setAcceptDownloadConfirm] = useState(false);
+  const [acceptRedownloadConfirm, setAcceptRedownloadConfirm] = useState(false);
   
   const toggleRowExpanded = (downloadId: string) => {
     setExpandedRows(prev => {
@@ -380,11 +381,19 @@ export default function CertificadosPage() {
       }
 
       // ⭐ NUEVA: Re-validar límite justo antes de mostrar el modal
-      const validacionFinal = await certificadosApi.validarDescarga();
+      // (incluye chequeo de si este mismo usuario ya descargó este certificado antes)
+      const validacionFinal = await certificadosApi.validarDescarga({
+        marca: descargaData.marca,
+        modelo: descargaData.modelo,
+        numeroSerie: descargaData.numeroSerie,
+      });
       setValidacionSaldos(validacionFinal);
       if (!validacionFinal.canDownload) {
         throw new Error(validacionFinal.message);
       }
+
+      // Si ya descargó este certificado antes, exige un segundo checkbox de confirmación
+      setAcceptRedownloadConfirm(false);
 
       // Guardar los datos pendientes y mostrar modal de confirmación
       setPendingDownloadData({ ...descargaData });
@@ -428,6 +437,7 @@ export default function CertificadosPage() {
       setShowDownloadConfirmModal(false);
       setPendingDownloadData(null);
       setAcceptDownloadConfirm(false);
+      setAcceptRedownloadConfirm(false);
 
       // 5. Limpiar formulario y recargar métricas
       setDescargaData({
@@ -459,6 +469,7 @@ export default function CertificadosPage() {
     setShowDownloadConfirmModal(false);
     setPendingDownloadData(null);
     setAcceptDownloadConfirm(false);
+    setAcceptRedownloadConfirm(false);
     setDescargaError('');
   };  const handleEstadoChange = async (downloadId: string, nuevoEstado: string, rol: number, userid: number, tipoDescarga?: string, idMayorista?: number) => {
     try {
@@ -2111,6 +2122,33 @@ export default function CertificadosPage() {
                 </div>
               </div>
             )}
+            {/* Aviso: este usuario ya descargó este certificado antes */}
+            {validacionSaldos?.yaDescargado && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4">
+                <p className="text-sm font-semibold text-red-800 mb-2">
+                  ⚠️ Ya descargaste este certificado
+                </p>
+                <p className="text-sm text-red-700 mb-3">
+                  {validacionSaldos.fechaUltimaDescarga
+                    ? `Ya descargaste este mismo certificado el ${new Date(validacionSaldos.fechaUltimaDescarga).toLocaleString('es-AR')}. `
+                    : 'Ya descargaste este mismo certificado antes. '}
+                  Si volvés a descargarlo, se generará un nuevo cargo/descuento adicional.
+                </p>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    id="confirmRedownload"
+                    className="h-4 w-4 rounded border-gray-300"
+                    checked={acceptRedownloadConfirm}
+                    onChange={(e) => setAcceptRedownloadConfirm(e.target.checked)}
+                  />
+                  <span className="text-sm text-red-800">
+                    Entiendo que ya descargué este certificado y quiero descargarlo de nuevo
+                  </span>
+                </label>
+              </div>
+            )}
+
             {/* Confirmación */}
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
               <p className="text-sm text-gray-700 mb-3">
@@ -2143,7 +2181,11 @@ export default function CertificadosPage() {
               </button>
               <button
                 onClick={handleConfirmarDescarga}
-                disabled={downloadConfirmLoading || !acceptDownloadConfirm}
+                disabled={
+                  downloadConfirmLoading ||
+                  !acceptDownloadConfirm ||
+                  (validacionSaldos?.yaDescargado && !acceptRedownloadConfirm)
+                }
                 className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {downloadConfirmLoading ? (

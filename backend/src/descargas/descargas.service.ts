@@ -37,6 +37,8 @@ interface ValidacionDescargaDto {
   saldoPrepago?: number;
   saldoCuentaCorriente?: number;
   limiteCuentaCorriente?: number;
+  yaDescargado?: boolean;
+  fechaUltimaDescarga?: Date;
 }
 
 @Injectable()
@@ -125,6 +127,24 @@ export class DescargasService {
     // La notificación se envía vía mail
     await this.auditoriaService.notificarExcesoDescargas(mayoristaId, totalPendientes);
   }
+  /**
+   * Verificar si este usuario ya descargó este certificado antes.
+   * Chequeo por usuario+certificado (no global): que otro usuario haya
+   * descargado el mismo certificado es un caso legítimo y no debe avisar.
+   */
+  async yaDescargoCertificado(userId: number, idCertificado: string): Promise<{ yaDescargado: boolean; fechaUltimaDescarga?: Date }> {
+    const ultimaDescarga = await this.descargaRepository.findOne({
+      where: { id_usuario: userId, id_certificado: idCertificado },
+      order: { created_at: 'DESC' },
+    });
+
+    if (!ultimaDescarga) {
+      return { yaDescargado: false };
+    }
+
+    return { yaDescargado: true, fechaUltimaDescarga: ultimaDescarga.created_at };
+  }
+
   /**
    * Validar si un usuario puede descargar certificados
    * Admin (1), Mayorista (2) y Técnico (5): siempre pueden

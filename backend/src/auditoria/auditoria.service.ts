@@ -1,9 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Auditoria } from './entities/auditoria.entity';
+import { Descarga } from '../descargas/entities/descarga.entity';
 import { CreateAuditoriaDto } from './dto/create-auditoria.dto';
 import { AppSettingsService } from '../common/services/app-settings.service';
+
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export enum AuditoriaAccion {
   CREAR = 'CREAR',
@@ -32,8 +35,37 @@ export class AuditoriaService {
   constructor(
     @InjectRepository(Auditoria)
     private readonly auditoriaRepository: Repository<Auditoria>,
+    @InjectRepository(Descarga)
+    private readonly descargaRepository: Repository<Descarga>,
     private readonly appSettingsService: AppSettingsService,
   ) {}
+
+  /**
+   * Para logs de CERTIFICADO/DESCARGA, objetivo_id guarda el UUID interno de la
+   * fila `descargas`, no el número de controlador. Resuelve ese UUID contra
+   * `descargas.id_certificado` para mostrar algo legible en la UI.
+   */
+  private async resolverReferenciasLegibles(logs: Auditoria[]): Promise<Array<Auditoria & { objetivo_referencia: string | null }>> {
+    const idsDescarga = Array.from(new Set(
+      logs
+        .filter(l => ['CERTIFICADO', 'DESCARGA'].includes(l.objetivo_tipo) && l.objetivo_id && UUID_REGEX.test(l.objetivo_id))
+        .map(l => l.objetivo_id),
+    ));
+
+    let referenciaPorId = new Map<string, string>();
+    if (idsDescarga.length > 0) {
+      const descargas = await this.descargaRepository.find({
+        where: { id_descarga: In(idsDescarga) },
+        select: ['id_descarga', 'id_certificado'],
+      });
+      referenciaPorId = new Map(descargas.map(d => [d.id_descarga, d.id_certificado]));
+    }
+
+    return logs.map(log => ({
+      ...log,
+      objetivo_referencia: (log.objetivo_id && referenciaPorId.get(log.objetivo_id)) || null,
+    }));
+  }
 
   async create(createAuditoriaDto: CreateAuditoriaDto): Promise<Auditoria> {
     const auditoria = this.auditoriaRepository.create(createAuditoriaDto);
@@ -81,7 +113,8 @@ export class AuditoriaService {
 
     const queryBuilder = this.auditoriaRepository
       .createQueryBuilder('auditoria')
-      .leftJoinAndSelect('auditoria.actor', 'actor');
+      .leftJoin('auditoria.actor', 'actor')
+      .addSelect(['actor.id_usuario', 'actor.nombre', 'actor.cuit', 'actor.rol']);
 
     if (actor_id !== undefined) {
       queryBuilder.andWhere('auditoria.actor_id = :actor_id', { actor_id });
@@ -111,8 +144,10 @@ export class AuditoriaService {
       .orderBy('auditoria.timestamp', 'DESC')
       .getManyAndCount();
 
+    const data = await this.resolverReferenciasLegibles(logs);
+
     return {
-      data: logs,
+      data,
       total,
       page,
       limit,
@@ -126,7 +161,7 @@ export class AuditoriaService {
     const headers = 'ID,Usuario,Acción,Entidad,Entidad ID,IP,Fecha\n';
     const rows = logs.map(log => {
       const usuario = log.actor?.nombre || 'N/A';
-      const entidadId = log.objetivo_id || '';
+      const entidadId = log.objetivo_referencia || log.objetivo_id || '';
       
       return `${log.id_auditoria},"${usuario}","${log.accion}","${log.objetivo_tipo}","${entidadId}","${log.ip}","${log.timestamp.toISOString()}"`;
     }).join('\n');

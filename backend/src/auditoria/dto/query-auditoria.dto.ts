@@ -1,7 +1,9 @@
 import { IsString, IsNumber, IsOptional } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class QueryAuditoriaDto {
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   actor_id?: number;
 
@@ -26,10 +28,12 @@ export class QueryAuditoriaDto {
   fecha_hasta?: string;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   page?: number;
 
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   limit?: number;
 }

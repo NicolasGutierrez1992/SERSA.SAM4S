@@ -136,6 +136,8 @@ export interface ValidacionDescargaDto {
   saldoPrepago?: number;
   saldoCuentaCorriente?: number;
   limiteCuentaCorriente?: number;
+  yaDescargado?: boolean;
+  fechaUltimaDescarga?: string;
 }
 
 // ─── Cliente Axios ────────────────────────────────────────────────────────────
@@ -340,8 +342,8 @@ export const certificadosApi = {
     return response.data;
   },
 
-  validarDescarga: async (): Promise<ValidacionDescargaDto> => {
-    const response = await api.get<ValidacionDescargaDto>('/certificados/validar-descarga');
+  validarDescarga: async (params?: { marca?: string; modelo?: string; numeroSerie?: string }): Promise<ValidacionDescargaDto> => {
+    const response = await api.get<ValidacionDescargaDto>('/certificados/validar-descarga', { params });
     return response.data;
   },
 
@@ -386,6 +388,70 @@ export const certificadosApi = {
     formData.append('rootRtiFile', file);
     const response = await api.post('/certificados-maestro/upload-root-rti', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return response.data;
+  },
+};
+
+// ─── Auditoría API (solo Administradores) ─────────────────────────────────────
+
+export interface AuditoriaLog {
+  id_auditoria: string;
+  actor_id: number | null;
+  accion: string;
+  objetivo_tipo: string;
+  objetivo_id: string | null;
+  /** Número de controlador (id_certificado) cuando el objetivo es una descarga/certificado */
+  objetivo_referencia: string | null;
+  antes: unknown;
+  despues: unknown;
+  ip: string | null;
+  timestamp: string;
+  actor?: {
+    id_usuario: number;
+    nombre: string;
+    cuit: string;
+    rol: number;
+  };
+}
+
+export interface AuditoriaStatistics {
+  totalAcciones: number;
+  accionesPorTipo: Array<{ accion: string; total: number }>;
+  entidadesPorTipo: Array<{ objetivo_tipo: string; total: number }>;
+  usuariosActivos: Array<{ actor_id: number; total: number }>;
+}
+
+export interface AuditoriaQueryParams {
+  actor_id?: number;
+  accion?: string;
+  objetivo_tipo?: string;
+  objetivo_id?: string;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  page?: number;
+  limit?: number;
+}
+
+export const auditoriaApi = {
+  getAll: async (
+    params?: AuditoriaQueryParams,
+  ): Promise<{ data: AuditoriaLog[]; total: number; page: number; limit: number; totalPages: number }> => {
+    const response = await api.get('/auditoria', { params });
+    return response.data;
+  },
+
+  getStatistics: async (fechaDesde?: string, fechaHasta?: string): Promise<AuditoriaStatistics> => {
+    const response = await api.get<AuditoriaStatistics>('/auditoria/statistics', {
+      params: { fecha_desde: fechaDesde, fecha_hasta: fechaHasta },
+    });
+    return response.data;
+  },
+
+  exportCsv: async (params?: AuditoriaQueryParams): Promise<Blob> => {
+    const response = await api.get('/auditoria/export/csv', {
+      params,
+      responseType: 'blob',
     });
     return response.data;
   },

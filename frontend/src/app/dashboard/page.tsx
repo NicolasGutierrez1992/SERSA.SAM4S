@@ -203,6 +203,34 @@ export default function DashboardPage() {
                 </span>
               </div>            )}
 
+            {/* Auditoría - Solo Admin */}
+            {(user?.rol === 1) && (
+              <div className="relative group bg-white p-6 focus-within:ring-2 focus-within:ring-inset focus-within:ring-indigo-500 rounded-lg shadow hover:shadow-md transition-shadow cursor-pointer"
+                   onClick={() => router.push('/dashboard/auditoria')}>
+
+                <div>
+                  <span className="rounded-lg inline-flex p-3 bg-indigo-50 text-indigo-700 ring-4 ring-white">
+                    {/* Icono de lupa/auditoría */}
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M17 10.5a6.5 6.5 0 11-13 0 6.5 6.5 0 0113 0z" />
+                    </svg>
+                  </span>
+                </div>
+                <div className="mt-8">
+                  <h3 className="text-lg font-medium">
+                    <span className="absolute inset-0" aria-hidden="true" />
+                    AUDITORÍA
+                  </h3>
+                  <p className="mt-2 text-sm text-gray-500">
+                    Ver el registro de actividad de usuarios en el sistema
+                  </p>
+                </div>
+                <span className="pointer-events-none absolute top-6 right-6 text-gray-300 group-hover:text-gray-400" aria-hidden="true">
+                  <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 24 24">
+                  </svg>
+                </span>
+              </div>            )}
+
           </div>
           <div className="mt-10 mb-4" />
           {/* Stats Grid - Estado del Certificado (Solo Admin) */}

@@ -93,23 +93,39 @@ export class CertificadosController {
     summary: 'Validar si usuario puede descargar',
     description: 'Valida si el usuario tiene límite disponible para descargar certificados'
   })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Validación completada',
     schema: {
       properties: {
         canDownload: { type: 'boolean' },
         message: { type: 'string' },
         userType: { type: 'string', enum: ['CUENTA_CORRIENTE', 'PREPAGO', 'SIN_LIMITE'] },
-        limiteDisponible: { type: 'number' }
+        limiteDisponible: { type: 'number' },
+        yaDescargado: { type: 'boolean' },
+        fechaUltimaDescarga: { type: 'string', format: 'date-time' }
       }
     }
   })
+  @ApiQuery({ name: 'marca', required: false, description: 'Marca del controlador, para chequear si ya se descargó ese certificado' })
+  @ApiQuery({ name: 'modelo', required: false, description: 'Modelo del controlador (IA o RA)' })
+  @ApiQuery({ name: 'numeroSerie', required: false, description: 'Número de serie del controlador' })
   @RequireAuthenticated()
   async validarDescarga(
-    @CurrentUser('id') userId: number
+    @CurrentUser('id') userId: number,
+    @Query('marca') marca?: string,
+    @Query('modelo') modelo?: string,
+    @Query('numeroSerie') numeroSerie?: string,
   ): Promise<any> {
-    return await this.descargasService.canUserDownload(userId);
+    const validacion = await this.descargasService.canUserDownload(userId);
+
+    if (marca && modelo && numeroSerie && /^\d+$/.test(numeroSerie)) {
+      const idCertificado = `SE${marca}${modelo}-${numeroSerie.padStart(10, '0')}`;
+      const chequeoRedescarga = await this.descargasService.yaDescargoCertificado(userId, idCertificado);
+      return { ...validacion, ...chequeoRedescarga };
+    }
+
+    return validacion;
   }
 
   /**
