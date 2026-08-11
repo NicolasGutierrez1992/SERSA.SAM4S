@@ -1,6 +1,6 @@
 {
   "name": "sersa",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Sistema web full stack con Next.js y Nest.js",
   "private": true,
   "workspaces": [

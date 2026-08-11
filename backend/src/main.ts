@@ -60,7 +60,7 @@ async function bootstrap() {
     const config = new DocumentBuilder()
       .setTitle('SERSA API')
       .setDescription('Sistema de gestión de certificados CRS')
-      .setVersion('1.0.0')
+      .setVersion('1.1.0')
       .addBearerAuth()
       .addCookieAuth('auth_token')
       .addTag('Health Check', 'Endpoints de estado del sistema')
