@@ -1192,10 +1192,19 @@ export default function CertificadosPage() {
 
                       // ⭐ Agregar columnas de facturación SOLO si el usuario NO es distribuidor (rol ≠ 3)
                       if (user?.rol !== 3) {
+                        // Un lado (mayorista/distribuidor) queda en estado PREPAGO (inmutable) cuando
+                        // esa descarga se pagó con saldo prepago: nunca pasa por el flujo normal de
+                        // facturación, así que su referencia_pago queda vacía por diseño. En ese caso
+                        // la referencia real es el N° de factura de la compra prepago consumida.
+                        const refPrepago = descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)';
                         baseData['Número de Factura'] = descarga.numero_factura || '-';
-                        baseData['Referencia de Pago'] = descarga.referencia_pago || '-';
+                        baseData['Referencia de Pago'] = descarga.estadoMayorista === 'PREPAGO'
+                          ? refPrepago
+                          : (descarga.referencia_pago || '-');
                         baseData['Nro Factura Distribuidor'] = descarga.numero_factura_distribuidor || '-';
-                        baseData['Referencia Pago Distribuidor'] = descarga.referencia_pago_distribuidor || '-';
+                        baseData['Referencia Pago Distribuidor'] = descarga.estadoDistribuidor === 'PREPAGO'
+                          ? refPrepago
+                          : (descarga.referencia_pago_distribuidor || '-');
                       }
 
                       return baseData;
