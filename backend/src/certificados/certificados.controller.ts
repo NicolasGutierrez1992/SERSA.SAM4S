@@ -39,6 +39,10 @@ import {
   UpdateEstadoDescargaDto,
   DownloadResponseDto,
 } from '../descargas/dto/descarga.dto';
+import {
+  IniciarGeneracionResponseDto,
+  EstadoGeneracionResponseDto,
+} from './dto/generacion-job.dto';
 import { QueryDescargasDto } from '../descargas/dto/query-descargas.dto';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/dto/user.dto';
@@ -63,33 +67,56 @@ export class CertificadosController {
    */
   @Post('descargar')
   @ApiOperation({
-    summary: 'Generar y descargar certificado CRS',
+    summary: 'Iniciar generación de certificado CRS (asíncrono)',
     description:
-      'Genera certificado CRS conectándose a AFIP (WSAA + WSCERT) y respetando límites de usuario',
+      'Valida los datos y arranca la generación contra AFIP (WSAA + WSCERT) en background. ' +
+      'Devuelve un jobId de inmediato — consultar el resultado con GET /certificados/descargar/job/:jobId/estado, ' +
+      'porque el llamado a AFIP puede tardar 30-40s, más de lo que aguantan algunos proxies/edges intermedios.',
   })
   @ApiResponse({
-    status: 201,
-    description: 'Certificado generado exitosamente',
-    type: DownloadResponseDto,
+    status: 202,
+    description: 'Generación iniciada, consultar estado con el jobId',
+    type: IniciarGeneracionResponseDto,
   })
-  @ApiResponse({ status: 400, description: 'Datos inválidos o error AFIP' })
+  @ApiResponse({ status: 400, description: 'Datos inválidos' })
   @ApiResponse({ status: 403, description: 'Límite de descargas alcanzado' })
   @Throttle({ default: { limit: 30, ttl: 60000 } })
   @RequireAuthenticated()
-  @HttpCode(HttpStatus.CREATED)
+  @HttpCode(HttpStatus.ACCEPTED)
   async descargarCertificado(
     @Body() createDescargaDto: CreateDescargaDto,
     @CurrentUser('id') userId: number,
     @Req() req: Request,
-  ): Promise<DownloadResponseDto> {
+  ): Promise<IniciarGeneracionResponseDto> {
     const ip = req.ip || req.connection.remoteAddress;
-    //Validar limites antes de enviar descargas
 
-    return await this.certificadosService.generarCertificado(
+    return await this.certificadosService.iniciarGeneracion(
       userId,
       createDescargaDto,
       ip,
     );
+  }
+
+  /**
+   * Estado de un job de generación iniciado por POST /certificados/descargar
+   */
+  @Get('descargar/job/:jobId/estado')
+  @ApiOperation({
+    summary: 'Consultar estado de un job de generación',
+    description:
+      'PROCESANDO mientras sigue en curso; COMPLETADO con los datos de la descarga generada; ' +
+      'ERROR con un mensaje seguro para mostrar al usuario.',
+  })
+  @ApiParam({ name: 'jobId' })
+  @ApiResponse({ status: 200, type: EstadoGeneracionResponseDto })
+  @ApiResponse({ status: 404, description: 'Job no encontrado o expirado' })
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  @RequireAuthenticated()
+  async estadoGeneracion(
+    @Param('jobId') jobId: string,
+    @CurrentUser('id') userId: number,
+  ): Promise<EstadoGeneracionResponseDto> {
+    return this.certificadosService.getEstadoJob(jobId, userId);
   }
 
   /**

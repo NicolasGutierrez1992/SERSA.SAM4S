@@ -87,9 +87,11 @@ export default function CertificadosPage() {
   const [acceptDownloadConfirm, setAcceptDownloadConfirm] = useState(false);
   const [acceptRedownloadConfirm, setAcceptRedownloadConfirm] = useState(false);
 
-  // ⭐ Estado del modal de resultado de la generación (éxito / error / posible-timeout)
+  // ⭐ Estado del modal de resultado de la generación
+  // procesando: esperando el resultado del job en background (polling)
+  // exito / error / timeout: resultado final (timeout = no se pudo confirmar a tiempo)
   const [generacionResultModal, setGeneracionResultModal] = useState<{
-    tipo: 'exito' | 'error' | 'timeout';
+    tipo: 'procesando' | 'exito' | 'error' | 'timeout';
     mensaje: string;
   } | null>(null);
 
@@ -433,90 +435,89 @@ export default function CertificadosPage() {
     await loadHistorial(1);
   };
 
-  // ⭐ Generar certificado (llama a AFIP) — ya NO descarga el archivo automáticamente,
-  // eso quedó separado: el usuario lo descarga desde el historial una vez generado.
+  // ⭐ Generar certificado: el POST inicial sólo arranca el job y responde rápido
+  // (jobId); el trabajo real contra AFIP sigue en background en el servidor.
+  // El frontend hace polling del estado — así el resultado nunca depende de que
+  // una única conexión HTTP aguante abierta los 30-40s que puede tardar AFIP.
   const handleConfirmarGeneracion = async () => {
     if (!pendingDownloadData) return;
     setDownloadConfirmLoading(true);
     setDescargaError('');
 
     try {
-      const response = await certificadosApi.descargarCertificado(pendingDownloadData);
+      const { jobId } = await certificadosApi.descargarCertificado(pendingDownloadData);
 
-      // Cerrar modal de confirmación
+      // Cerrar modal de confirmación y mostrar el de resultado en estado "procesando"
       setShowDownloadConfirmModal(false);
       setPendingDownloadData(null);
       setAcceptDownloadConfirm(false);
       setAcceptRedownloadConfirm(false);
-
-      // Limpiar formulario (éxito confirmado, no hace falta conservar los datos) y recargar métricas/límites
-      setDescargaData({
-        controladorId: '',
-        marca: 'SH',
-        modelo: 'IA',
-        numeroSerie: ''
-      });
-      await validarLimiteDescargas();
-      await loadMetricas();
-
-      // Resaltar la fila nueva cuando se refresque el historial
-      setUltimoGeneradoId(response.downloadId);
-
-      message.success('Certificado generado correctamente');
       setGeneracionResultModal({
-        tipo: 'exito',
-        mensaje: 'El certificado se generó correctamente y ya está disponible para descargar en el historial.',
+        tipo: 'procesando',
+        mensaje: 'Generando el certificado en AFIP. Puede tardar hasta un minuto, no cierres esta ventana...',
       });
 
-    } catch (error: any) {
-      console.error('Error en generación de certificado:', error);
-
-      // Cerrar el modal de confirmación pero conservar los datos del formulario
-      // (marca/modelo/serie) por si el usuario decide reintentar.
-      const datosEnviados = pendingDownloadData;
-      setShowDownloadConfirmModal(false);
-      setPendingDownloadData(null);
-      setAcceptDownloadConfirm(false);
-      setAcceptRedownloadConfirm(false);
-
-      // Cualquier error acá (timeout de cliente, 500 real, timeout de proxy/gateway
-      // cortando la conexión, etc.) puede corresponder a una generación que en
-      // realidad terminó bien del lado del servidor — no confiamos en el tipo de
-      // error para decidir, verificamos contra el backend antes de avisar "falló".
-      let posibleExito = false;
-      try {
-        const verificacion = await certificadosApi.validarDescarga({
-          marca: datosEnviados?.marca,
-          modelo: datosEnviados?.modelo,
-          numeroSerie: datosEnviados?.numeroSerie,
-        });
-        if (verificacion.yaDescargado && verificacion.fechaUltimaDescarga) {
-          const minutosDesdeUltima =
-            (Date.now() - new Date(verificacion.fechaUltimaDescarga).getTime()) / 60000;
-          posibleExito = minutosDesdeUltima < 2;
+      // Polling del estado del job hasta COMPLETADO/ERROR o agotar el margen
+      const intervaloMs = 3000;
+      const maxIntentos = 30; // ~90s de margen (el peor caso medido con AFIP fue ~40s)
+      let resultadoFinal: Awaited<ReturnType<typeof certificadosApi.getEstadoGeneracion>> | null = null;
+      for (let intento = 0; intento < maxIntentos; intento++) {
+        await new Promise((resolve) => setTimeout(resolve, intervaloMs));
+        try {
+          const estado = await certificadosApi.getEstadoGeneracion(jobId);
+          if (estado.status !== 'PROCESANDO') {
+            resultadoFinal = estado;
+            break;
+          }
+        } catch (pollError) {
+          // Un fallo puntual de la consulta de estado no corta el polling.
+          console.error('Error consultando estado de generación:', pollError);
         }
-      } catch (verifyError) {
-        // No se pudo verificar: por seguridad, tratamos como "posible éxito" en
-        // vez de asumir que falló, para no arriesgar una generación duplicada.
-        console.error('No se pudo verificar el resultado de la generación:', verifyError);
-        posibleExito = true;
       }
 
-      if (posibleExito) {
-        const mensaje = 'No pudimos confirmar el resultado de la generación, pero es posible que el certificado '
-          + 'se haya generado igual del lado del servidor. Antes de reintentar, revisá el historial para evitar '
-          + 'generar uno duplicado.';
-        setDescargaError(mensaje);
-        setGeneracionResultModal({ tipo: 'timeout', mensaje });
-      } else {
-        const mensaje = error.response?.data?.message
-          || (error.message === 'Network Error'
-            ? 'Error de conexión. Verifique que el servidor esté funcionando.'
-            : error.message || 'Error al generar el certificado. Por favor, inténtelo nuevamente.');
+      if (resultadoFinal?.status === 'COMPLETADO') {
+        setDescargaData({ controladorId: '', marca: 'SH', modelo: 'IA', numeroSerie: '' });
+        await validarLimiteDescargas();
+        await loadMetricas();
+        setUltimoGeneradoId(resultadoFinal.downloadId || null);
+
+        message.success('Certificado generado correctamente');
+        setGeneracionResultModal({
+          tipo: 'exito',
+          mensaje: 'El certificado se generó correctamente y ya está disponible para descargar en el historial.',
+        });
+      } else if (resultadoFinal?.status === 'ERROR') {
+        const mensaje = resultadoFinal.message || 'Error al generar el certificado. Por favor, inténtelo nuevamente.';
         setDescargaError(mensaje);
         message.error(mensaje);
         setGeneracionResultModal({ tipo: 'error', mensaje });
+      } else {
+        // Se agotó el polling sin resultado — no asumimos que falló, el job puede
+        // seguir corriendo en el servidor más allá de nuestra ventana de espera.
+        const mensaje = 'La generación está tardando más de lo esperado y no pudimos confirmar el resultado. '
+          + 'Es posible que el certificado se haya generado igual del lado del servidor. '
+          + 'Antes de reintentar, revisá el historial para evitar generar uno duplicado.';
+        setDescargaError(mensaje);
+        setGeneracionResultModal({ tipo: 'timeout', mensaje });
       }
+    } catch (error: any) {
+      console.error('Error iniciando generación de certificado:', error);
+
+      // Esto sólo puede pasar por una validación rápida que falló (antes de tocar
+      // AFIP) o un problema de red al mandar el POST inicial — el job ni llegó a
+      // crearse del lado del servidor, así que acá sí es un error real directo.
+      setShowDownloadConfirmModal(false);
+      setPendingDownloadData(null);
+      setAcceptDownloadConfirm(false);
+      setAcceptRedownloadConfirm(false);
+
+      const mensaje = error.response?.data?.message
+        || (error.message === 'Network Error'
+          ? 'Error de conexión. Verifique que el servidor esté funcionando.'
+          : error.message || 'Error al generar el certificado. Por favor, inténtelo nuevamente.');
+      setDescargaError(mensaje);
+      message.error(mensaje);
+      setGeneracionResultModal({ tipo: 'error', mensaje });
     } finally {
       setDownloadConfirmLoading(false);
     }
@@ -2290,11 +2291,17 @@ export default function CertificadosPage() {
         </div>
       )}
 
-      {/* Modal de resultado de la generación: éxito, error o posible-timeout */}
+      {/* Modal de resultado de la generación: procesando, éxito, error o posible-timeout */}
       {generacionResultModal && (
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
             <div className="flex items-center gap-3 mb-4">
+              {generacionResultModal.tipo === 'procesando' && (
+                <svg className="animate-spin h-8 w-8 text-indigo-600 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              )}
               {generacionResultModal.tipo === 'exito' && (
                 <svg className="h-8 w-8 text-green-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -2311,6 +2318,7 @@ export default function CertificadosPage() {
                 </svg>
               )}
               <h3 className="text-lg font-medium text-gray-900">
+                {generacionResultModal.tipo === 'procesando' && 'Generando certificado...'}
                 {generacionResultModal.tipo === 'exito' && 'Certificado generado'}
                 {generacionResultModal.tipo === 'error' && 'No se pudo generar el certificado'}
                 {generacionResultModal.tipo === 'timeout' && 'No pudimos confirmar el resultado'}

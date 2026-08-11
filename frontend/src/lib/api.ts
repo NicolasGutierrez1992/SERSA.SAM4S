@@ -79,6 +79,20 @@ export interface DownloadResponse {
   checksum: string;
 }
 
+export interface IniciarGeneracionResponse {
+  jobId: string;
+  status: 'PROCESANDO';
+}
+
+export interface EstadoGeneracionResponse {
+  status: 'PROCESANDO' | 'COMPLETADO' | 'ERROR';
+  downloadId?: string;
+  filename?: string;
+  size?: number;
+  checksum?: string;
+  message?: string;
+}
+
 export interface DescargaHistorial {
   id: string;
   usuarioId: number;
@@ -303,10 +317,15 @@ export const getUserById = async (id: number): Promise<getUserResponse> => {
 // ─── Certificados API ─────────────────────────────────────────────────────────
 
 export const certificadosApi = {
-  descargarCertificado: async (data: CreateDescargaRequest): Promise<DownloadResponse> => {
-    // Timeout mayor al global (30s): esta llamada depende de un round-trip SOAP
-    // a AFIP (WSAA + WSCert) que puede demorar más que el resto de los endpoints.
-    const response = await api.post<DownloadResponse>('/certificados/descargar', data, { timeout: 60000 });
+  // Inicia la generación (asíncrona): el backend responde de inmediato con un
+  // jobId y arranca el llamado a AFIP en background. Ver getEstadoGeneracion.
+  descargarCertificado: async (data: CreateDescargaRequest): Promise<IniciarGeneracionResponse> => {
+    const response = await api.post<IniciarGeneracionResponse>('/certificados/descargar', data);
+    return response.data;
+  },
+
+  getEstadoGeneracion: async (jobId: string): Promise<EstadoGeneracionResponse> => {
+    const response = await api.get<EstadoGeneracionResponse>(`/certificados/descargar/job/${jobId}/estado`);
     return response.data;
   },
 
