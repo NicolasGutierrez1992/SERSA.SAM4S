@@ -54,7 +54,7 @@
     "fullstack",
     "web-application"
   ],
-  "author": "Tu Nombre",
+  "author": "Gutierrez Gustavo Nicolas",
   "license": "MIT",
   "dependencies": {
     "antd": "^5.28.0"
