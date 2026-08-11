@@ -171,25 +171,65 @@ export class AuditoriaService {
     }).join('\n');
     
     return headers + rows;
-  }  async getStatistics(fechaDesde?: string, fechaHasta?: string) {
-    const queryBuilder = this.auditoriaRepository.createQueryBuilder('auditoria');
+  }
 
-    // Usar zona horaria de Argentina para filtros de fecha (como en descargas)
+  private queryConFiltroFecha(fechaDesde?: string, fechaHasta?: string) {
+    const qb = this.auditoriaRepository.createQueryBuilder('auditoria');
     if (fechaDesde && fechaHasta) {
-      queryBuilder.andWhere('(auditoria.timestamp AT TIME ZONE \'America/Argentina/Buenos_Aires\')::date BETWEEN :fechaDesde AND :fechaHasta', {
+      qb.andWhere('(auditoria.timestamp AT TIME ZONE \'America/Argentina/Buenos_Aires\')::date BETWEEN :fechaDesde AND :fechaHasta', {
         fechaDesde,
-        fechaHasta
+        fechaHasta,
       });
     }
+    return qb;
+  }
 
-    const totalAcciones = await queryBuilder.getCount();
+  async getStatistics(fechaDesde?: string, fechaHasta?: string) {
+    const totalAcciones = await this.queryConFiltroFecha(fechaDesde, fechaHasta).getCount();
 
-    // Estadísticas básicas por ahora
+    const accionesPorTipoRaw = await this.queryConFiltroFecha(fechaDesde, fechaHasta)
+      .select('auditoria.accion', 'accion')
+      .addSelect('COUNT(*)', 'total')
+      .groupBy('auditoria.accion')
+      .orderBy('total', 'DESC')
+      .getRawMany();
+
+    const entidadesPorTipoRaw = await this.queryConFiltroFecha(fechaDesde, fechaHasta)
+      .select('auditoria.objetivo_tipo', 'objetivo_tipo')
+      .addSelect('COUNT(*)', 'total')
+      .groupBy('auditoria.objetivo_tipo')
+      .orderBy('total', 'DESC')
+      .getRawMany();
+
+    const usuariosActivosRaw = await this.queryConFiltroFecha(fechaDesde, fechaHasta)
+      .leftJoin('auditoria.actor', 'actor')
+      .andWhere('auditoria.actor_id IS NOT NULL')
+      .select('auditoria.actor_id', 'actor_id')
+      .addSelect('actor.nombre', 'nombre')
+      .addSelect('COUNT(*)', 'total')
+      .groupBy('auditoria.actor_id')
+      .addGroupBy('actor.nombre')
+      .orderBy('total', 'DESC')
+      .limit(10)
+      .getRawMany();
+
+    const actividadPorDiaRaw = await this.queryConFiltroFecha(fechaDesde, fechaHasta)
+      .select('(auditoria.timestamp AT TIME ZONE \'America/Argentina/Buenos_Aires\')::date', 'fecha')
+      .addSelect('COUNT(*)', 'total')
+      .groupBy('fecha')
+      .orderBy('fecha', 'ASC')
+      .getRawMany();
+
     return {
       totalAcciones,
-      accionesPorTipo: [],
-      entidadesPorTipo: [],
-      usuariosActivos: [],
+      accionesPorTipo: accionesPorTipoRaw.map(r => ({ accion: r.accion, total: Number(r.total) })),
+      entidadesPorTipo: entidadesPorTipoRaw.map(r => ({ objetivo_tipo: r.objetivo_tipo, total: Number(r.total) })),
+      usuariosActivos: usuariosActivosRaw.map(r => ({
+        actor_id: Number(r.actor_id),
+        nombre: r.nombre ?? 'Usuario eliminado',
+        total: Number(r.total),
+      })),
+      actividadPorDia: actividadPorDiaRaw.map(r => ({ fecha: r.fecha, total: Number(r.total) })),
     };
   }
 

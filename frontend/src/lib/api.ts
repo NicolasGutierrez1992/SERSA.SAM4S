@@ -419,7 +419,8 @@ export interface AuditoriaStatistics {
   totalAcciones: number;
   accionesPorTipo: Array<{ accion: string; total: number }>;
   entidadesPorTipo: Array<{ objetivo_tipo: string; total: number }>;
-  usuariosActivos: Array<{ actor_id: number; total: number }>;
+  usuariosActivos: Array<{ actor_id: number; nombre: string; total: number }>;
+  actividadPorDia: Array<{ fecha: string; total: number }>;
 }
 
 export interface AuditoriaQueryParams {
