@@ -86,7 +86,21 @@ export default function CertificadosPage() {
   const [downloadConfirmLoading, setDownloadConfirmLoading] = useState(false);
   const [acceptDownloadConfirm, setAcceptDownloadConfirm] = useState(false);
   const [acceptRedownloadConfirm, setAcceptRedownloadConfirm] = useState(false);
-  
+
+  // ⭐ Estado del modal de resultado de la generación (éxito / error / posible-timeout)
+  const [generacionResultModal, setGeneracionResultModal] = useState<{
+    tipo: 'exito' | 'error' | 'timeout';
+    mensaje: string;
+  } | null>(null);
+
+  // ⭐ Fila resaltada en el historial por ser la recién generada
+  const [ultimoGeneradoId, setUltimoGeneradoId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!ultimoGeneradoId) return;
+    const t = setTimeout(() => setUltimoGeneradoId(null), 8000);
+    return () => clearTimeout(t);
+  }, [ultimoGeneradoId]);
+
   const toggleRowExpanded = (downloadId: string) => {
     setExpandedRows(prev => {
       const newSet = new Set(prev);
@@ -412,34 +426,30 @@ export default function CertificadosPage() {
     }
   };
 
-  // ⭐ NUEVA: Confirmar descarga después de aceptar el modal
-  const handleConfirmarDescarga = async () => {
+  // Ir al historial: usado desde el modal de resultado (éxito o posible-timeout)
+  const irAHistorial = async () => {
+    setGeneracionResultModal(null);
+    setActiveTab('historial');
+    await loadHistorial(1);
+  };
+
+  // ⭐ Generar certificado (llama a AFIP) — ya NO descarga el archivo automáticamente,
+  // eso quedó separado: el usuario lo descarga desde el historial una vez generado.
+  const handleConfirmarGeneracion = async () => {
     if (!pendingDownloadData) return;
     setDownloadConfirmLoading(true);
     setDescargaError('');
 
     try {
-      // 1. Generar certificado
       const response = await certificadosApi.descargarCertificado(pendingDownloadData);
-      
-      // 2. Descargar archivo automáticamente
-      const blob = await certificadosApi.descargarArchivo(response.downloadId);
-      
-      // 3. Crear enlace de descarga
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = response.filename;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);      // 4. Cerrar modal
+
+      // Cerrar modal de confirmación
       setShowDownloadConfirmModal(false);
       setPendingDownloadData(null);
       setAcceptDownloadConfirm(false);
       setAcceptRedownloadConfirm(false);
 
-      // 5. Limpiar formulario y recargar métricas
+      // Limpiar formulario (éxito confirmado, no hace falta conservar los datos) y recargar métricas/límites
       setDescargaData({
         controladorId: '',
         marca: 'SH',
@@ -448,18 +458,44 @@ export default function CertificadosPage() {
       });
       await validarLimiteDescargas();
       await loadMetricas();
-      
-      message.success('Certificado descargado exitosamente');
-      
+
+      // Resaltar la fila nueva cuando se refresque el historial
+      setUltimoGeneradoId(response.downloadId);
+
+      message.success('Certificado generado correctamente');
+      setGeneracionResultModal({
+        tipo: 'exito',
+        mensaje: 'El certificado se generó correctamente y ya está disponible para descargar en el historial.',
+      });
+
     } catch (error: any) {
-      console.error('Error en descarga:', error);
-      
-      if (error.response?.data?.message) {
-        setDescargaError(error.response.data.message);
-      } else if (error.message === 'Network Error') {
-        setDescargaError('Error de conexión. Verifique que el servidor esté funcionando.');
+      console.error('Error en generación de certificado:', error);
+
+      // Cerrar el modal de confirmación pero conservar los datos del formulario
+      // (marca/modelo/serie) por si el usuario decide reintentar.
+      setShowDownloadConfirmModal(false);
+      setPendingDownloadData(null);
+      setAcceptDownloadConfirm(false);
+      setAcceptRedownloadConfirm(false);
+
+      // Un timeout del cliente NO significa necesariamente que la generación falló:
+      // el backend puede haber seguido procesando el llamado a AFIP y terminado OK.
+      const esTimeout = error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '');
+
+      if (esTimeout) {
+        const mensaje = 'La generación está tardando más de lo esperado y no pudimos confirmar el resultado. '
+          + 'Es posible que el certificado se haya generado igual del lado del servidor. '
+          + 'Antes de reintentar, revisá el historial para evitar generar uno duplicado.';
+        setDescargaError(mensaje);
+        setGeneracionResultModal({ tipo: 'timeout', mensaje });
       } else {
-        setDescargaError(error.message || 'Error al descargar certificado. Por favor, inténtelo nuevamente.');
+        const mensaje = error.response?.data?.message
+          || (error.message === 'Network Error'
+            ? 'Error de conexión. Verifique que el servidor esté funcionando.'
+            : error.message || 'Error al generar el certificado. Por favor, inténtelo nuevamente.');
+        setDescargaError(mensaje);
+        message.error(mensaje);
+        setGeneracionResultModal({ tipo: 'error', mensaje });
       }
     } finally {
       setDownloadConfirmLoading(false);
@@ -1077,7 +1113,7 @@ export default function CertificadosPage() {
             {activeTab === 'descarga' && user?.rol !== 4 && (
               <div className="max-w-md mx-auto">
                 <h3 className="text-lg font-medium text-gray-900 mb-6">
-                  Descargar Nuevo Certificado
+                  Generar Nuevo Certificado
                 </h3>
                 {downloadMessage && (
                   <div className="bg-yellow-50 border border-yellow-200 text-yellow-700 px-4 py-3 rounded mb-6">
@@ -1166,7 +1202,7 @@ export default function CertificadosPage() {
                     ) : !canDownload ? (
                       'SOLICITAR LIMITE A TU PROVEEDOR'
                     ) : (
-                      'Descargar Certificado'
+                      'Generar Certificado'
                     )}
                   </button>
                 </form>
@@ -1436,8 +1472,9 @@ export default function CertificadosPage() {
                         <tbody className="bg-white divide-y divide-gray-200">
                           {historial.map((descarga) => {
                             const esUltimo = descarga.controladorId && ultimosPorControlador[descarga.controladorId] === descarga.id;
+                            const esRecienGenerado = descarga.id === ultimoGeneradoId;
                             return (
-                              <tr key={descarga.id}>                                {(user?.rol === 1 || user?.rol === 4 || user?.rol === 2) && (
+                              <tr key={descarga.id} className={esRecienGenerado ? 'bg-green-50 ring-2 ring-inset ring-green-300' : ''}>                                {(user?.rol === 1 || user?.rol === 4 || user?.rol === 2) && (
                                   <td className="px-3 py-4 whitespace-nowrap text-sm">
                                     <input
                                       type="checkbox"
@@ -1448,7 +1485,14 @@ export default function CertificadosPage() {
                                       title={esBulkBloqueada(descarga) ? 'PREPAGO no puede modificarse' : 'Seleccionar para cambio masivo'}
                                     />
                                   </td>
-                                )}<td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.controladorId || descarga.certificadoNombre}</td>
+                                )}<td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">
+                                  {descarga.controladorId || descarga.certificadoNombre}
+                                  {esRecienGenerado && (
+                                    <span className="ml-2 inline-block bg-green-100 text-green-800 text-xs font-semibold px-2 py-0.5 rounded-full align-middle">
+                                      Nuevo
+                                    </span>
+                                  )}
+                                </td>
                                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900">{descarga.usuario ? descarga.usuario.nombre : descarga.usuarioId}</td>
                                 {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                                   <td className="px-3 py-4 whitespace-nowrap">
@@ -2078,7 +2122,7 @@ export default function CertificadosPage() {
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-medium text-gray-900">
-                Confirmar Descarga de Certificado
+                Confirmar Generación de Certificado
               </h3>
               <svg className="h-6 w-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -2158,10 +2202,17 @@ export default function CertificadosPage() {
               </div>
             )}
 
+            {/* Error de descarga (ej. falla de AFIP) — el form de más abajo queda tapado por este modal */}
+            {descargaError && (
+              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+                {descargaError}
+              </div>
+            )}
+
             {/* Confirmación */}
             <div className="bg-gray-50 rounded-lg p-4 mb-4">
               <p className="text-sm text-gray-700 mb-3">
-                Al descargar el certificado {(validacionSaldos?.saldoPrepago ?? 0) > 0 ?
+                Al generar el certificado {(validacionSaldos?.saldoPrepago ?? 0) > 0 ?
                   'se descontará de tu saldo prepago disponible' :
                   'se agregará un cargo a tu cuenta que deberá ser abonado en el próximo período de facturación'}.
               </p>
@@ -2174,7 +2225,7 @@ export default function CertificadosPage() {
                   onChange={(e) => setAcceptDownloadConfirm(e.target.checked)}
                 />
                 <span className="text-sm text-gray-700">
-                  Entiendo y acepto proceder con la descarga
+                  Entiendo y acepto proceder con la generación
                 </span>
               </label>
             </div>
@@ -2189,7 +2240,7 @@ export default function CertificadosPage() {
                 Cancelar
               </button>
               <button
-                onClick={handleConfirmarDescarga}
+                onClick={handleConfirmarGeneracion}
                 disabled={
                   downloadConfirmLoading ||
                   !acceptDownloadConfirm ||
@@ -2203,17 +2254,86 @@ export default function CertificadosPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    <span>Descargando...</span>
+                    <span>Generando...</span>
                   </>
                 ) : (
                   <span className="flex items-center gap-2">
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 01-2-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                     </svg>
-                    Descargar Certificado
+                    Generar Certificado
                   </span>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de resultado de la generación: éxito, error o posible-timeout */}
+      {generacionResultModal && (
+        <div className="fixed inset-0 bg-gray-500 bg-opacity-75 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              {generacionResultModal.tipo === 'exito' && (
+                <svg className="h-8 w-8 text-green-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              {generacionResultModal.tipo === 'error' && (
+                <svg className="h-8 w-8 text-red-600 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              {generacionResultModal.tipo === 'timeout' && (
+                <svg className="h-8 w-8 text-amber-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              )}
+              <h3 className="text-lg font-medium text-gray-900">
+                {generacionResultModal.tipo === 'exito' && 'Certificado generado'}
+                {generacionResultModal.tipo === 'error' && 'No se pudo generar el certificado'}
+                {generacionResultModal.tipo === 'timeout' && 'No pudimos confirmar el resultado'}
+              </h3>
+            </div>
+
+            <p className="text-sm text-gray-700 mb-6">
+              {generacionResultModal.mensaje}
+            </p>
+
+            <div className="flex gap-3">
+              {generacionResultModal.tipo === 'error' && (
+                <button
+                  onClick={() => setGeneracionResultModal(null)}
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
+                >
+                  Cerrar
+                </button>
+              )}
+              {generacionResultModal.tipo === 'exito' && (
+                <button
+                  onClick={irAHistorial}
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
+                >
+                  Ver en historial
+                </button>
+              )}
+              {generacionResultModal.tipo === 'timeout' && (
+                <>
+                  <button
+                    onClick={() => setGeneracionResultModal(null)}
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  >
+                    Reintentar
+                  </button>
+                  <button
+                    onClick={irAHistorial}
+                    className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md text-sm font-medium hover:bg-indigo-700"
+                  >
+                    Ver historial
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

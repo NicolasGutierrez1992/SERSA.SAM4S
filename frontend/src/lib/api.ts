@@ -304,7 +304,9 @@ export const getUserById = async (id: number): Promise<getUserResponse> => {
 
 export const certificadosApi = {
   descargarCertificado: async (data: CreateDescargaRequest): Promise<DownloadResponse> => {
-    const response = await api.post<DownloadResponse>('/certificados/descargar', data);
+    // Timeout mayor al global (30s): esta llamada depende de un round-trip SOAP
+    // a AFIP (WSAA + WSCert) que puede demorar más que el resto de los endpoints.
+    const response = await api.post<DownloadResponse>('/certificados/descargar', data, { timeout: 60000 });
     return response.data;
   },
 
