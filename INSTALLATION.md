@@ -1,193 +1,57 @@
-# 🔧 Instalación de Dependencias SERSA
+# Instalación
 
-## 📋 Estado Actual
-El proyecto está configurado con **versiones simplificadas** de los servicios para permitir desarrollo sin todas las dependencias instaladas.
+> Para arquitectura, flujo de certificados, roles y variables de entorno en detalle, ver [`README.md`](./README.md) y [`ARCHITECTURE.md`](./ARCHITECTURE.md). Esta guía es solo los pasos para dejar el proyecto corriendo localmente.
 
-## 🚀 Activar Funcionalidad Completa
+El proyecto está completo — no hay servicios "simplificados" ni mocks que activar manualmente (`MOCK_MODE` existe como variable de entorno para desarrollo sin conexión real a AFIP, pero todo el resto — TypeORM, JWT, bcrypt, AFIP real — ya está integrado).
 
-### 1. Instalar Dependencias Backend
+## Opción A — Docker Compose (recomendado)
+
+Requiere Docker Desktop instalado y corriendo.
+
 ```bash
-cd backend
-npm install @nestjs/typeorm @nestjs/jwt @nestjs/passport typeorm pg bcrypt passport passport-jwt passport-local jsonwebtoken node-forge soap helmet @nestjs/throttler
-npm install --save-dev @types/bcrypt @types/passport-jwt @types/passport-local @types/jsonwebtoken
+git clone <repo>
+cd SERSA.SAM4S
+cp backend/.env.example backend/.env.docker
+# Completar backend/.env.docker: como mínimo DB_PASSWORD, JWT_SECRET, ENCRYPTION_KEY
+# (generar valores con los comandos en README.md § Variables de entorno)
+
+docker compose up -d --build
 ```
 
-### 2. Instalar Dependencias Frontend
+- Frontend: http://localhost:3010
+- Backend: http://localhost:3011/api
+- Swagger: http://localhost:3011/api/docs
+
+Al primer arranque no hay certificado AFIP cargado — seguir "Configuración inicial" en `README.md` (subir PFX + Root_RTI desde `/dashboard/cert-archivos` como Admin).
+
+## Opción B — Local sin Docker
+
+Requiere Node.js 20.x y una instancia de PostgreSQL accesible.
+
 ```bash
-cd frontend
-npm install @tanstack/react-query @hookform/resolvers react-hook-form zod date-fns recharts tailwindcss-animate
+npm run setup          # instala dependencias de backend, frontend y raíz (workspaces)
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
+# Completar ambos .env
+
+npm run dev            # backend (:3001) + frontend (:3000) en paralelo
 ```
 
-### 3. Activar Servicios Reales
+## Verificar que todo funciona
 
-#### Backend - Reemplazar archivos simplificados:
 ```bash
-# Reemplazar servicios MOCK por versiones reales
-mv src/afip/afip.service.simplified.ts src/afip/afip.service.ts
-mv src/certificados/certificados.service.simplified.ts src/certificados/certificados.service.ts
-
-# Descomentar decoradores TypeORM en entities/
-# Descomentar imports TypeORM en servicios
+npm run lint            # ESLint en backend y frontend
+npm run build            # Build de producción de ambos
+npm run test:backend      # Tests E2E del backend (requiere una BD accesible — nunca producción)
+npm run test:frontend     # Tests E2E de Playwright (requiere el stack corriendo en :3010)
 ```
 
-#### Frontend - Descomentar providers:
-```bash
-# En src/pages/_app.tsx descomentar:
-# - QueryClientProvider
-# - AuthProvider
-```
+Estos mismos pasos corren automáticamente en cada push vía GitHub Actions (`.github/workflows/ci.yml`).
 
-## 📊 Funcionalidades por Estado
+## Problemas comunes
 
-### ✅ **Funcional Actualmente (MOCK)**
-- ✅ Estructura completa del proyecto
-- ✅ Endpoints REST documentados con Swagger
-- ✅ Sistema de autenticación básico
-- ✅ Generación de certificados MOCK
-- ✅ Frontend con páginas principales
-- ✅ Validaciones de DTOs
-- ✅ Sistema de auditoría (logs)
+**TypeORM no conecta**: verificar que Postgres esté corriendo y que `DB_HOST/PORT/USERNAME/PASSWORD/NAME` en el `.env` correspondan a una base accesible.
 
-### 🔄 **Requiere Dependencias Instaladas**
-- 🔄 Conexión real a PostgreSQL
-- 🔄 Persistencia de datos (TypeORM)
-- 🔄 JWT real con refresh tokens
-- 🔄 Integración AFIP real (WSAA/WSCERT)
-- 🔄 Hash de contraseñas con bcrypt
-- 🔄 Manejo de formularios avanzado
-- 🔄 Gráficos y reportes
+**El backend no arranca / "Variables de entorno requeridas no configuradas"**: faltan `JWT_SECRET`, `ENCRYPTION_KEY` o `DB_PASSWORD` — el arranque falla explícitamente por diseño si no están seteadas (ver `validateRequiredEnv()` en `backend/src/main.ts`).
 
-## 🎯 Scripts de Migración
-
-### Migrar Backend a Producción
-```bash
-# 1. Instalar dependencias
-npm run install:backend:full
-
-# 2. Activar TypeORM
-npm run activate:typeorm
-
-# 3. Configurar AFIP
-npm run setup:afip
-```
-
-### Migrar Frontend a Producción
-```bash
-# 1. Instalar dependencias
-npm run install:frontend:full
-
-# 2. Activar providers
-npm run activate:providers
-```
-
-## 🔐 Configuración AFIP Real
-
-### Obtener Certificados
-1. **Registrarse como fabricante** en AFIP
-2. **Solicitar certificado digital** (.pfx)
-3. **Colocar en `backend/certs/`**
-4. **Configurar variables .env**:
-```env
-AFIP_CUIT=20123456789
-AFIP_FABRICANTE=SERSA
-AFIP_CERT_PATH=./certs/sersa_certificate.pfx
-AFIP_KEY_PASSWORD=tu_password_real
-```
-
-### URLs de Producción
-```env
-# Cambiar de homologación a producción
-AFIP_WSAA_URL=https://wsaa.afip.gov.ar/ws/services/LoginCms
-AFIP_WSCERT_URL=https://certificado.afip.gov.ar/ws/services/CertificadoService
-```
-
-## 📋 Checklist de Migración
-
-### Backend
-- [ ] Instalar TypeORM y dependencias de BD
-- [ ] Instalar JWT y Passport
-- [ ] Instalar dependencias AFIP (soap, node-forge)
-- [ ] Configurar conexión PostgreSQL real
-- [ ] Obtener certificados AFIP reales
-- [ ] Descomentar decoradores en entities
-- [ ] Activar repositorios en servicios
-- [ ] Configurar variables de entorno de producción
-
-### Frontend
-- [ ] Instalar React Query
-- [ ] Instalar librerías de formularios (react-hook-form, zod)
-- [ ] Instalar librerías de gráficos (recharts)
-- [ ] Activar AuthProvider
-- [ ] Activar QueryClientProvider
-- [ ] Configurar variables de entorno
-- [ ] Probar flujos completos
-
-### Base de Datos
-- [ ] Crear base de datos `db_sersa`
-- [ ] Ejecutar script SQL existente
-- [ ] Configurar usuario `s3rs4`
-- [ ] Verificar permisos
-- [ ] Crear usuario administrador inicial
-
-## 🧪 Testing Post-Migración
-
-### Backend
-```bash
-# Verificar conexión BD
-npm run test:db
-
-# Verificar AFIP
-npm run test:afip
-
-# Tests unitarios
-npm run test
-
-# Tests e2e
-npm run test:e2e
-```
-
-### Frontend
-```bash
-# Verificar componentes
-npm run test
-
-# Verificar build
-npm run build
-
-# Verificar tipos
-npm run type-check
-```
-
-## 🚨 Troubleshooting
-
-### Error: TypeORM no conecta
-```bash
-# Verificar PostgreSQL activo
-pg_isready -h localhost -p 5432
-
-# Verificar credenciales en .env
-# Verificar que la BD existe
-```
-
-### Error: AFIP no responde
-```bash
-# Verificar certificado existe
-ls -la backend/certs/
-
-# Verificar configuración .env
-# Probar URLs de homologación primero
-```
-
-### Error: JWT inválido
-```bash
-# Verificar JWT_SECRET configurado
-# Limpiar localStorage del navegador
-# Verificar formato del token
-```
-
----
-
-**¿Necesitas instalar las dependencias ahora?**
-Ejecuta: `npm run setup:full` (cuando esté disponible)
-
-O instala manualmente siguiendo esta guía paso a paso.
+**AFIP no responde**: en desarrollo, revisar `GET /api/certificados/afip/status`; en producción, confirmar que el certificado PFX y el Root_RTI estén cargados desde el panel de Admin (`/dashboard/cert-archivos`), no en archivos locales — ya no se leen desde `backend/certs/`.

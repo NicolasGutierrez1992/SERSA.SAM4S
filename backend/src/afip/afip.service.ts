@@ -35,7 +35,8 @@ export class AfipService {
   private readonly logger = new Logger(AfipService.name);
 
   // Cache de token AFIP (válido hasta expirationTime)
-  private tokenCache: { token?: string; sign?: string; expirationTime?: Date } = {};
+  private tokenCache: { token?: string; sign?: string; expirationTime?: Date } =
+    {};
 
   constructor(
     private readonly configService: ConfigService,
@@ -44,7 +45,10 @@ export class AfipService {
     private readonly afipFilesService: AfipFilesService,
     private readonly appSettingsService: AppSettingsService,
   ) {
-    this.loggerService.info('AFIP', 'AfipService inicializado — modo BD exclusivo');
+    this.loggerService.info(
+      'AFIP',
+      'AfipService inicializado — modo BD exclusivo',
+    );
   }
 
   /**
@@ -74,27 +78,65 @@ export class AfipService {
   /**
    * Generar certificado CRS - Versión PRODUCCIÓN
    */
-  async generarCertificado(request: CertificadoRequest): Promise<CertificadoResponse> {
+  async generarCertificado(
+    request: CertificadoRequest,
+  ): Promise<CertificadoResponse> {
     const logs: any[] = [];
-    this.loggerService.info('AFIP-generarCertificado', 'Iniciando proceso de certificado', request);
+    this.loggerService.info(
+      'AFIP-generarCertificado',
+      'Iniciando proceso de certificado',
+      request,
+    );
 
     const config = await this.obtenerConfigAfip();
 
-    if (!config.cuit || !config.fabricante || !request.marca || !request.modelo || !request.numeroSerie) {
-      this.loggerService.error('AFIP-generarCertificado', 'Faltan parámetros requeridos', request);
+    if (
+      !config.cuit ||
+      !config.fabricante ||
+      !request.marca ||
+      !request.modelo ||
+      !request.numeroSerie
+    ) {
+      this.loggerService.error(
+        'AFIP-generarCertificado',
+        'Faltan parámetros requeridos',
+        request,
+      );
       throw new BadRequestException('Todos los parámetros son requeridos');
     }
 
     try {
-      logs.push({ timestamp: new Date().toISOString(), step: 'inicio', message: `CUIT: ${config.cuit}, Fabricante: ${config.fabricante}, Marca: ${request.marca}, Modelo: ${request.modelo}, Número de Serie: ${request.numeroSerie}` });
+      logs.push({
+        timestamp: new Date().toISOString(),
+        step: 'inicio',
+        message: `CUIT: ${config.cuit}, Fabricante: ${config.fabricante}, Marca: ${request.marca}, Modelo: ${request.modelo}, Número de Serie: ${request.numeroSerie}`,
+      });
       // 1. Login WSAA para obtener token y sign
-      this.loggerService.debug('AFIP-generarCertificado', 'Llamando a loginWsaa...');
+      this.loggerService.debug(
+        'AFIP-generarCertificado',
+        'Llamando a loginWsaa...',
+      );
       const { token, sign, expirationTime } = await this.loginWsaa(config);
-      this.loggerService.info('AFIP-generarCertificado', 'Token y sign obtenidos', { token: token?.substring(0, 20), sign: sign?.substring(0, 20), expirationTime });
-      logs.push({ timestamp: new Date().toISOString(), step: 'wsaa_login', message: 'Token y sign obtenidos' });
+      this.loggerService.info(
+        'AFIP-generarCertificado',
+        'Token y sign obtenidos',
+        {
+          token: token?.substring(0, 20),
+          sign: sign?.substring(0, 20),
+          expirationTime,
+        },
+      );
+      logs.push({
+        timestamp: new Date().toISOString(),
+        step: 'wsaa_login',
+        message: 'Token y sign obtenidos',
+      });
 
       // 2. Crear cliente SOAP y llamar a renovarCertificado
-      this.loggerService.debug('AFIP-generarCertificado', 'Creando cliente SOAP...');
+      this.loggerService.debug(
+        'AFIP-generarCertificado',
+        'Creando cliente SOAP...',
+      );
       const client = await soap.createClientAsync(config.wscertUrl);
       this.loggerService.info('AFIP-generarCertificado', 'Cliente SOAP creado');
       const args = {
@@ -104,103 +146,191 @@ export class AfipService {
         modelo: request.modelo,
         numeroSerie: request.numeroSerie,
         token,
-        sign
+        sign,
       };
-      this.loggerService.debug('AFIP-generarCertificado', 'Args para renovarCertificado', args);
-      logs.push({ timestamp: new Date().toISOString(), step: 'wscert_args', message: 'Args para renovarCertificado', args });
+      this.loggerService.debug(
+        'AFIP-generarCertificado',
+        'Args para renovarCertificado',
+        args,
+      );
+      logs.push({
+        timestamp: new Date().toISOString(),
+        step: 'wscert_args',
+        message: 'Args para renovarCertificado',
+        args,
+      });
 
-      this.loggerService.debug('AFIP-generarCertificado', 'Llamando a renovarCertificado en el WS...');
+      this.loggerService.debug(
+        'AFIP-generarCertificado',
+        'Llamando a renovarCertificado en el WS...',
+      );
       const [result] = await client.renovarCertificadoAsync(args);
-      this.loggerService.info('AFIP-generarCertificado', 'Resultado de renovarCertificadoResponse', result);
-      logs.push({ timestamp: new Date().toISOString(), step: 'wscert_result', message: 'Resultado de renovarCertificadoResponse', result });
+      this.loggerService.info(
+        'AFIP-generarCertificado',
+        'Resultado de renovarCertificadoResponse',
+        result,
+      );
+      logs.push({
+        timestamp: new Date().toISOString(),
+        step: 'wscert_result',
+        message: 'Resultado de renovarCertificadoResponse',
+        result,
+      });
 
       let buffer = '';
       if (result && result.return) {
         const rta = result.return;
-        this.loggerService.info('AFIP-generarCertificado', 'Procesando respuesta del WS', rta);
-        logs.push({ timestamp: new Date().toISOString(), step: 'wscert_response', message: 'Procesando respuesta del WS', rta });
+        this.loggerService.info(
+          'AFIP-generarCertificado',
+          'Procesando respuesta del WS',
+          rta,
+        );
+        logs.push({
+          timestamp: new Date().toISOString(),
+          step: 'wscert_response',
+          message: 'Procesando respuesta del WS',
+          rta,
+        });
 
         // Leer root RTI desde BD
         let rootFileRTI = '';
         try {
-          const rootRtiBuffer = await this.afipFilesService.obtenerArchivoRootRTI();
+          const rootRtiBuffer =
+            await this.afipFilesService.obtenerArchivoRootRTI();
           rootFileRTI = rootRtiBuffer.toString('utf8').replace(/\r?\n/g, '');
-          this.loggerService.debug('AFIP-generarCertificado', 'Root RTI obtenido de BD correctamente', { size: rootFileRTI.length });
-          logs.push({ timestamp: new Date().toISOString(), step: 'root_rti_bd', message: 'Root RTI obtenido de BD correctamente' });
+          this.loggerService.debug(
+            'AFIP-generarCertificado',
+            'Root RTI obtenido de BD correctamente',
+            { size: rootFileRTI.length },
+          );
+          logs.push({
+            timestamp: new Date().toISOString(),
+            step: 'root_rti_bd',
+            message: 'Root RTI obtenido de BD correctamente',
+          });
         } catch (error) {
-          this.loggerService.error('AFIP-generarCertificado', 'Error obteniendo Root RTI de BD', error);
-          throw new BadRequestException('Root_RTI no disponible. Cargarlo desde el panel de administración.');
+          this.loggerService.error(
+            'AFIP-generarCertificado',
+            'Error obteniendo Root RTI de BD',
+            error,
+          );
+          throw new BadRequestException(
+            'Root_RTI no disponible. Cargarlo desde el panel de administración.',
+          );
         }
         buffer = '-----BEGIN CMS-----\n';
         if (rootFileRTI) {
           let cadena = rootFileRTI;
           while (cadena.length > 64) {
-            buffer += cadena.substring(0, 64) + "\n";
+            buffer += cadena.substring(0, 64) + '\n';
             cadena = cadena.substring(64);
           }
-          buffer += cadena + "\n";
-          buffer += "-----END CMS-----\n";
-          this.loggerService.info('AFIP', 'Root Cert RTI OK', { numeroSerie: request.numeroSerie });
+          buffer += cadena + '\n';
+          buffer += '-----END CMS-----\n';
+          this.loggerService.info('AFIP', 'Root Cert RTI OK', {
+            numeroSerie: request.numeroSerie,
+          });
         }
         // Cadena de certificación[1]
         if (rta.cadenaCertificacion && rta.cadenaCertificacion[1]) {
           let cadena = rta.cadenaCertificacion[1].replace(/\r?\n/g, '');
-          buffer += "-----BEGIN CERTIFICATE-----\n";
+          buffer += '-----BEGIN CERTIFICATE-----\n';
           while (cadena.length > 64) {
-            buffer += cadena.substring(0, 64) + "\n";
+            buffer += cadena.substring(0, 64) + '\n';
             cadena = cadena.substring(64);
           }
-          buffer += cadena + "\n";
-          buffer += "-----END CERTIFICATE-----\n";
-          this.loggerService.info('AFIP', '1º cert OK', { numeroSerie: request.numeroSerie });
+          buffer += cadena + '\n';
+          buffer += '-----END CERTIFICATE-----\n';
+          this.loggerService.info('AFIP', '1º cert OK', {
+            numeroSerie: request.numeroSerie,
+          });
         }
         // Certificado principal
         if (rta.certificado) {
           let cadena = rta.certificado.replace(/\r?\n/g, '');
-          buffer += "-----BEGIN CERTIFICATE-----\n";
+          buffer += '-----BEGIN CERTIFICATE-----\n';
           while (cadena.length > 64) {
-            buffer += cadena.substring(0, 64) + "\n";
+            buffer += cadena.substring(0, 64) + '\n';
             cadena = cadena.substring(64);
           }
-          buffer += cadena + "\n";
-          buffer += "-----END CERTIFICATE-----\n";
-          this.loggerService.info('AFIP', '2º cert OK', { numeroSerie: request.numeroSerie });
+          buffer += cadena + '\n';
+          buffer += '-----END CERTIFICATE-----\n';
+          this.loggerService.info('AFIP', '2º cert OK', {
+            numeroSerie: request.numeroSerie,
+          });
         }
       }
       const nombreArchivo = this.generarNombreArchivo(request);
       const checksum = this.calcularChecksum(buffer);
       const tamaño = Buffer.byteLength(buffer, 'utf8');
-      this.loggerService.info('AFIP-generarCertificado', 'Certificado CRS generado exitosamente', { archivo: nombreArchivo, tamaño, checksum });
-      logs.push({ timestamp: new Date().toISOString(), step: 'completado', message: 'Certificado CRS generado exitosamente', archivo: nombreArchivo, tamaño, checksum });
+      this.loggerService.info(
+        'AFIP-generarCertificado',
+        'Certificado CRS generado exitosamente',
+        { archivo: nombreArchivo, tamaño, checksum },
+      );
+      logs.push({
+        timestamp: new Date().toISOString(),
+        step: 'completado',
+        message: 'Certificado CRS generado exitosamente',
+        archivo: nombreArchivo,
+        tamaño,
+        checksum,
+      });
       return { certificadoPem: buffer, nombreArchivo, checksum, tamaño, logs };
     } catch (error) {
-      this.loggerService.error('AFIP', 'Error generando certificado AFIP', error);
-      logs.push({ timestamp: new Date().toISOString(), step: 'error', message: error.message, error: error.stack });
-      throw new BadRequestException(`Error AFIP: ${error.message}`);
+      this.loggerService.error(
+        'AFIP',
+        'Error generando certificado AFIP',
+        error,
+      );
+      logs.push({
+        timestamp: new Date().toISOString(),
+        step: 'error',
+        message: error.message,
+        error: error.stack,
+      });
+      // El detalle del error (posible info interna de AFIP/SOAP) queda solo en el
+      // log del servidor; al cliente se le devuelve un mensaje genérico.
+      throw new BadRequestException(
+        'No se pudo generar el certificado en AFIP. Intente nuevamente en unos minutos.',
+      );
     }
   }
 
   /**
    * Login WSAA - Obtener token y sign de AFIP (lee PFX desde BD)
    */
-  private async loginWsaa(config: AfipConfig): Promise<{ token: string; sign: string; expirationTime: Date }> {
+  private async loginWsaa(
+    config: AfipConfig,
+  ): Promise<{ token: string; sign: string; expirationTime: Date }> {
     // Verificar cache
-    if (this.tokenCache.token && this.tokenCache.expirationTime && new Date() < this.tokenCache.expirationTime) {
+    if (
+      this.tokenCache.token &&
+      this.tokenCache.expirationTime &&
+      new Date() < this.tokenCache.expirationTime
+    ) {
       this.loggerService.debug('AFIP-loginWsaa', 'Token cache válido');
       return {
         token: this.tokenCache.token,
         sign: this.tokenCache.sign,
-        expirationTime: this.tokenCache.expirationTime
+        expirationTime: this.tokenCache.expirationTime,
       };
     }
 
     try {
       // Obtener PFX y password desde BD
-      this.loggerService.debug('AFIP-loginWsaa', 'Leyendo certificado desde BD');
-      const certData = await this.certificadoMaestroService.obtenerCertificadoMaestro();
+      this.loggerService.debug(
+        'AFIP-loginWsaa',
+        'Leyendo certificado desde BD',
+      );
+      const certData =
+        await this.certificadoMaestroService.obtenerCertificadoMaestro();
       const pfxBuffer = certData.pfx;
       const keyPassword = certData.password;
-      this.loggerService.debug('AFIP-loginWsaa', 'Certificado obtenido de BD correctamente');
+      this.loggerService.debug(
+        'AFIP-loginWsaa',
+        'Certificado obtenido de BD correctamente',
+      );
 
       const p12Asn1 = forge.asn1.fromDer(pfxBuffer.toString('binary'));
       const p12 = forge.pkcs12.pkcs12FromAsn1(p12Asn1, keyPassword);
@@ -210,7 +340,9 @@ export class AfipService {
       const certBag = bags[forge.pki.oids.certBag][0];
       const certificate = certBag.cert;
 
-      const keyBags = p12.getBags({ bagType: forge.pki.oids.pkcs8ShroudedKeyBag });
+      const keyBags = p12.getBags({
+        bagType: forge.pki.oids.pkcs8ShroudedKeyBag,
+      });
       const keyBag = keyBags[forge.pki.oids.pkcs8ShroudedKeyBag][0];
       const privateKey = keyBag.key;
 
@@ -221,21 +353,25 @@ export class AfipService {
       p7.addSigner({
         key: privateKey,
         certificate: certificate,
-        digestAlgorithm: forge.pki.oids.sha256
+        digestAlgorithm: forge.pki.oids.sha256,
       });
       p7.sign();
 
       const cms = forge.asn1.toDer(p7.toAsn1()).getBytes();
       const cmsBase64 = forge.util.encode64(cms);
 
-      this.loggerService.debug('AFIP-loginWsaa', 'Creando cliente SOAP', { wsaaUrl: config.wsaaUrl });
+      this.loggerService.debug('AFIP-loginWsaa', 'Creando cliente SOAP', {
+        wsaaUrl: config.wsaaUrl,
+      });
       const client = await soap.createClientAsync(config.wsaaUrl);
       const result = await client.loginCmsAsync({ in0: cmsBase64 });
 
       const xml = result[0].loginCmsReturn;
       const tokenMatch = xml.match(/<token>(.+?)<\/token>/);
       const signMatch = xml.match(/<sign>(.+?)<\/sign>/);
-      const expirationMatch = xml.match(/<expirationTime>(.+?)<\/expirationTime>/);
+      const expirationMatch = xml.match(
+        /<expirationTime>(.+?)<\/expirationTime>/,
+      );
 
       if (!tokenMatch || !signMatch) {
         throw new Error('Error parseando respuesta WSAA');
@@ -246,13 +382,13 @@ export class AfipService {
         sign: signMatch[1],
         expirationTime: expirationMatch
           ? new Date(expirationMatch[1])
-          : new Date(Date.now() + 12 * 60 * 60 * 1000)
+          : new Date(Date.now() + 12 * 60 * 60 * 1000),
       };
 
       return {
         token: this.tokenCache.token,
         sign: this.tokenCache.sign,
-        expirationTime: this.tokenCache.expirationTime
+        expirationTime: this.tokenCache.expirationTime,
       };
     } catch (error) {
       this.loggerService.error('AFIP-loginWsaa', 'Error en login WSAA', error);
@@ -274,14 +410,14 @@ export class AfipService {
         Auth: {
           Token: credentials.token,
           Sign: credentials.sign,
-          Cuit: config.cuit
+          Cuit: config.cuit,
         },
         parametros: {
           marca: request.marca,
           modelo: request.modelo,
           numeroSerie: request.numeroSerie,
-          fabricante: config.fabricante
-        }
+          fabricante: config.fabricante,
+        },
       });
       return result[0];
     } catch (error) {
@@ -324,7 +460,9 @@ export class AfipService {
    * Calcular checksum SHA256
    */
   private calcularChecksum(contenido: string): string {
-    return 'sha256:' + crypto.createHash('sha256').update(contenido).digest('hex');
+    return (
+      'sha256:' + crypto.createHash('sha256').update(contenido).digest('hex')
+    );
   }
 
   /**
@@ -335,23 +473,46 @@ export class AfipService {
 
     try {
       const config = await this.obtenerConfigAfip();
-      if (!config.cuit) errors.push('AFIP_CUIT no configurado (configurar en app_settings)');
-      if (!config.fabricante) errors.push('AFIP_FABRICANTE no configurado (configurar en app_settings)');
-      if (!config.wsaaUrl) errors.push('AFIP_WSAA_URL no configurado (configurar en app_settings)');
-      if (!config.wscertUrl) errors.push('AFIP_WSCERT_WSDL no configurado (configurar en app_settings)');
+      if (!config.cuit)
+        errors.push('AFIP_CUIT no configurado (configurar en app_settings)');
+      if (!config.fabricante)
+        errors.push(
+          'AFIP_FABRICANTE no configurado (configurar en app_settings)',
+        );
+      if (!config.wsaaUrl)
+        errors.push(
+          'AFIP_WSAA_URL no configurado (configurar en app_settings)',
+        );
+      if (!config.wscertUrl)
+        errors.push(
+          'AFIP_WSCERT_WSDL no configurado (configurar en app_settings)',
+        );
 
       // Verificar que exista certificado en BD
-      const existeCert = await this.certificadoMaestroService.existeCertificadoMaestro();
-      if (!existeCert) errors.push('Certificado PFX no cargado en base de datos (subir desde panel)');
+      const existeCert =
+        await this.certificadoMaestroService.existeCertificadoMaestro();
+      if (!existeCert)
+        errors.push(
+          'Certificado PFX no cargado en base de datos (subir desde panel)',
+        );
 
       // Verificar que exista Root_RTI en BD
       const existeRootRti = await this.afipFilesService.existeArchivoRootRTI();
-      if (!existeRootRti) errors.push('Root_RTI.txt no cargado en base de datos (subir desde panel)');
+      if (!existeRootRti)
+        errors.push(
+          'Root_RTI.txt no cargado en base de datos (subir desde panel)',
+        );
     } catch (error: any) {
-      errors.push(`Error validando configuración: ${error?.message ?? String(error)}`);
+      errors.push(
+        `Error validando configuración: ${error?.message ?? String(error)}`,
+      );
     }
 
-    this.loggerService.info('AFIP', `Configuración AFIP validada — ${errors.length === 0 ? 'OK' : 'Errores'}`, { errors });
+    this.loggerService.info(
+      'AFIP',
+      `Configuración AFIP validada — ${errors.length === 0 ? 'OK' : 'Errores'}`,
+      { errors },
+    );
     return { valid: errors.length === 0, errors };
   }
 }

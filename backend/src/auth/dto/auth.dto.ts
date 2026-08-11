@@ -1,6 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsNotEmpty, Length, Matches, MinLength } from 'class-validator';
-
+import {
+  IsString,
+  IsNotEmpty,
+  Length,
+  Matches,
+  MinLength,
+} from 'class-validator';
 
 export class LoginDto {
   @ApiProperty({
@@ -38,10 +43,11 @@ export class ChangePasswordDto {
   })
   @IsString()
   @IsNotEmpty({ message: 'La nueva contraseña es obligatoria' })
-  @Length(6, 100, { message: 'La contraseña debe tener entre 6 y 100 caracteres' })
+  @Length(6, 100, {
+    message: 'La contraseña debe tener entre 6 y 100 caracteres',
+  })
   newPassword: string;
 }
-
 
 export interface JwtPayload {
   id: number;
@@ -51,14 +57,20 @@ export interface JwtPayload {
   mustChangePassword: boolean;
   id_mayorista?: number;
   status?: number;
+  /** Nonce anti-CSRF: el cliente debe reenviarlo en el header X-CSRF-Token en cada request mutante. */
+  csrfToken?: string;
 }
 
 export class LoginResponse {
   // Token used internally by the controller to set the httpOnly cookie; not sent in the response body
   access_token: string;
 
+  // Nonce anti-CSRF de esta sesión — el frontend lo guarda y lo reenvía como header en requests mutantes.
+  csrfToken: string;
+
   @ApiProperty({
-    description: 'Información del usuario logueado (el token viaja en cookie httpOnly)',
+    description:
+      'Información del usuario logueado (el token viaja en cookie httpOnly)',
     type: Object,
   })
   user: {

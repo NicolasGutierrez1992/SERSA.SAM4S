@@ -6,7 +6,13 @@ import { Descarga } from '../descargas/entities/descarga.entity';
 import { CreateAuditoriaDto } from './dto/create-auditoria.dto';
 import { AppSettingsService } from '../common/services/app-settings.service';
 
-const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+// Cuenta administradora "de sistema" — sus propias acciones no se muestran en
+// auditoría (ni en el listado ni en las métricas): no aporta valor de
+// seguimiento ver la actividad del propio dueño de la cuenta.
+const CUIT_EXCLUIDO_DE_AUDITORIA = '00000000000';
 
 export enum AuditoriaAccion {
   CREAR = 'CREAR',
@@ -27,12 +33,12 @@ export enum AuditoriaEntidad {
   COMPRA_PREPAGO = 'COMPRA_PREPAGO',
   CERTIFICADO_MAESTRO = 'CERTIFICADO_MAESTRO',
 }
-export enum Mayoristas{
+export enum Mayoristas {
   SERSA = 1,
   OLICART = 2,
-  MARINUCCI =3,
+  MARINUCCI = 3,
   COLOMA = 4,
-  SANTICH = 5
+  SANTICH = 5,
 }
 @Injectable()
 export class AuditoriaService {
@@ -49,12 +55,21 @@ export class AuditoriaService {
    * fila `descargas`, no el número de controlador. Resuelve ese UUID contra
    * `descargas.id_certificado` para mostrar algo legible en la UI.
    */
-  private async resolverReferenciasLegibles(logs: Auditoria[]): Promise<Array<Auditoria & { objetivo_referencia: string | null }>> {
-    const idsDescarga = Array.from(new Set(
-      logs
-        .filter(l => ['CERTIFICADO', 'DESCARGA'].includes(l.objetivo_tipo) && l.objetivo_id && UUID_REGEX.test(l.objetivo_id))
-        .map(l => l.objetivo_id),
-    ));
+  private async resolverReferenciasLegibles(
+    logs: Auditoria[],
+  ): Promise<Array<Auditoria & { objetivo_referencia: string | null }>> {
+    const idsDescarga = Array.from(
+      new Set(
+        logs
+          .filter(
+            (l) =>
+              ['CERTIFICADO', 'DESCARGA'].includes(l.objetivo_tipo) &&
+              l.objetivo_id &&
+              UUID_REGEX.test(l.objetivo_id),
+          )
+          .map((l) => l.objetivo_id),
+      ),
+    );
 
     let referenciaPorId = new Map<string, string>();
     if (idsDescarga.length > 0) {
@@ -62,12 +77,15 @@ export class AuditoriaService {
         where: { id_descarga: In(idsDescarga) },
         select: ['id_descarga', 'id_certificado'],
       });
-      referenciaPorId = new Map(descargas.map(d => [d.id_descarga, d.id_certificado]));
+      referenciaPorId = new Map(
+        descargas.map((d) => [d.id_descarga, d.id_certificado]),
+      );
     }
 
-    return logs.map(log => ({
+    return logs.map((log) => ({
       ...log,
-      objetivo_referencia: (log.objetivo_id && referenciaPorId.get(log.objetivo_id)) || null,
+      objetivo_referencia:
+        (log.objetivo_id && referenciaPorId.get(log.objetivo_id)) || null,
     }));
   }
 
@@ -84,7 +102,7 @@ export class AuditoriaService {
     valoresAnteriores?: any,
     valoresNuevos?: any,
     ip?: string,
-    metadata?: any
+    metadata?: any,
   ): Promise<void> {
     try {
       const auditoria = this.auditoriaRepository.create({
@@ -96,7 +114,7 @@ export class AuditoriaService {
         despues: valoresNuevos || null,
         ip: ip || '0.0.0.0',
       });
-      
+
       await this.auditoriaRepository.save(auditoria);
     } catch (error) {
       console.error('Error al registrar auditoría:', error);
@@ -112,13 +130,21 @@ export class AuditoriaService {
       fecha_desde,
       fecha_hasta,
       page = 1,
-      limit = 20
+      limit = 20,
     } = queryDto;
 
     const queryBuilder = this.auditoriaRepository
       .createQueryBuilder('auditoria')
       .leftJoin('auditoria.actor', 'actor')
-      .addSelect(['actor.id_usuario', 'actor.nombre', 'actor.cuit', 'actor.rol']);
+      .addSelect([
+        'actor.id_usuario',
+        'actor.nombre',
+        'actor.cuit',
+        'actor.rol',
+      ])
+      .andWhere('(actor.cuit IS NULL OR actor.cuit != :cuitExcluido)', {
+        cuitExcluido: CUIT_EXCLUIDO_DE_AUDITORIA,
+      });
 
     if (actor_id !== undefined) {
       queryBuilder.andWhere('auditoria.actor_id = :actor_id', { actor_id });
@@ -129,17 +155,25 @@ export class AuditoriaService {
     }
 
     if (objetivo_tipo) {
-      queryBuilder.andWhere('auditoria.objetivo_tipo = :objetivo_tipo', { objetivo_tipo });
-    }    if (objetivo_id !== undefined) {
-      queryBuilder.andWhere('auditoria.objetivo_id = :objetivo_id', { objetivo_id });
+      queryBuilder.andWhere('auditoria.objetivo_tipo = :objetivo_tipo', {
+        objetivo_tipo,
+      });
+    }
+    if (objetivo_id !== undefined) {
+      queryBuilder.andWhere('auditoria.objetivo_id = :objetivo_id', {
+        objetivo_id,
+      });
     }
 
     // Filtros de fecha usando zona horaria de Argentina (como en descargas)
     if (fecha_desde && fecha_hasta) {
-      queryBuilder.andWhere('(auditoria.timestamp AT TIME ZONE \'America/Argentina/Buenos_Aires\')::date BETWEEN :fecha_desde AND :fecha_hasta', {
-        fecha_desde,
-        fecha_hasta
-      });
+      queryBuilder.andWhere(
+        "(auditoria.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')::date BETWEEN :fecha_desde AND :fecha_hasta",
+        {
+          fecha_desde,
+          fecha_hasta,
+        },
+      );
     }
 
     const [logs, total] = await queryBuilder
@@ -160,48 +194,74 @@ export class AuditoriaService {
   }
 
   async exportToCSV(queryDto: any = {}): Promise<string> {
-    const { data: logs } = await this.findAll({ ...queryDto, page: 1, limit: 10000 });
+    const { data: logs } = await this.findAll({
+      ...queryDto,
+      page: 1,
+      limit: 10000,
+    });
 
     const headers = 'ID,Usuario,Acción,Entidad,Entidad ID,IP,Fecha\n';
-    const rows = logs.map(log => {
-      const usuario = log.actor?.nombre || 'N/A';
-      const entidadId = log.objetivo_referencia || log.objetivo_id || '';
-      
-      return `${log.id_auditoria},"${usuario}","${log.accion}","${log.objetivo_tipo}","${entidadId}","${log.ip}","${log.timestamp.toISOString()}"`;
-    }).join('\n');
-    
+    const rows = logs
+      .map((log) => {
+        const usuario = log.actor?.nombre || 'N/A';
+        const entidadId = log.objetivo_referencia || log.objetivo_id || '';
+
+        return `${log.id_auditoria},"${usuario}","${log.accion}","${log.objetivo_tipo}","${entidadId}","${log.ip}","${log.timestamp.toISOString()}"`;
+      })
+      .join('\n');
+
     return headers + rows;
   }
 
   private queryConFiltroFecha(fechaDesde?: string, fechaHasta?: string) {
-    const qb = this.auditoriaRepository.createQueryBuilder('auditoria');
+    const qb = this.auditoriaRepository
+      .createQueryBuilder('auditoria')
+      .andWhere(
+        '(auditoria.actor_id IS NULL OR auditoria.actor_id NOT IN (SELECT id_usuario FROM users WHERE cuit = :cuitExcluido))',
+        { cuitExcluido: CUIT_EXCLUIDO_DE_AUDITORIA },
+      );
     if (fechaDesde && fechaHasta) {
-      qb.andWhere('(auditoria.timestamp AT TIME ZONE \'America/Argentina/Buenos_Aires\')::date BETWEEN :fechaDesde AND :fechaHasta', {
-        fechaDesde,
-        fechaHasta,
-      });
+      qb.andWhere(
+        "(auditoria.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')::date BETWEEN :fechaDesde AND :fechaHasta",
+        {
+          fechaDesde,
+          fechaHasta,
+        },
+      );
     }
     return qb;
   }
 
   async getStatistics(fechaDesde?: string, fechaHasta?: string) {
-    const totalAcciones = await this.queryConFiltroFecha(fechaDesde, fechaHasta).getCount();
+    const totalAcciones = await this.queryConFiltroFecha(
+      fechaDesde,
+      fechaHasta,
+    ).getCount();
 
-    const accionesPorTipoRaw = await this.queryConFiltroFecha(fechaDesde, fechaHasta)
+    const accionesPorTipoRaw = await this.queryConFiltroFecha(
+      fechaDesde,
+      fechaHasta,
+    )
       .select('auditoria.accion', 'accion')
       .addSelect('COUNT(*)', 'total')
       .groupBy('auditoria.accion')
       .orderBy('total', 'DESC')
       .getRawMany();
 
-    const entidadesPorTipoRaw = await this.queryConFiltroFecha(fechaDesde, fechaHasta)
+    const entidadesPorTipoRaw = await this.queryConFiltroFecha(
+      fechaDesde,
+      fechaHasta,
+    )
       .select('auditoria.objetivo_tipo', 'objetivo_tipo')
       .addSelect('COUNT(*)', 'total')
       .groupBy('auditoria.objetivo_tipo')
       .orderBy('total', 'DESC')
       .getRawMany();
 
-    const usuariosActivosRaw = await this.queryConFiltroFecha(fechaDesde, fechaHasta)
+    const usuariosActivosRaw = await this.queryConFiltroFecha(
+      fechaDesde,
+      fechaHasta,
+    )
       .leftJoin('auditoria.actor', 'actor')
       .andWhere('auditoria.actor_id IS NOT NULL')
       .select('auditoria.actor_id', 'actor_id')
@@ -213,8 +273,14 @@ export class AuditoriaService {
       .limit(10)
       .getRawMany();
 
-    const actividadPorDiaRaw = await this.queryConFiltroFecha(fechaDesde, fechaHasta)
-      .select('(auditoria.timestamp AT TIME ZONE \'America/Argentina/Buenos_Aires\')::date', 'fecha')
+    const actividadPorDiaRaw = await this.queryConFiltroFecha(
+      fechaDesde,
+      fechaHasta,
+    )
+      .select(
+        "(auditoria.timestamp AT TIME ZONE 'America/Argentina/Buenos_Aires')::date",
+        'fecha',
+      )
       .addSelect('COUNT(*)', 'total')
       .groupBy('fecha')
       .orderBy('fecha', 'ASC')
@@ -222,50 +288,75 @@ export class AuditoriaService {
 
     return {
       totalAcciones,
-      accionesPorTipo: accionesPorTipoRaw.map(r => ({ accion: r.accion, total: Number(r.total) })),
-      entidadesPorTipo: entidadesPorTipoRaw.map(r => ({ objetivo_tipo: r.objetivo_tipo, total: Number(r.total) })),
-      usuariosActivos: usuariosActivosRaw.map(r => ({
+      accionesPorTipo: accionesPorTipoRaw.map((r) => ({
+        accion: r.accion,
+        total: Number(r.total),
+      })),
+      entidadesPorTipo: entidadesPorTipoRaw.map((r) => ({
+        objetivo_tipo: r.objetivo_tipo,
+        total: Number(r.total),
+      })),
+      usuariosActivos: usuariosActivosRaw.map((r) => ({
         actor_id: Number(r.actor_id),
         nombre: r.nombre ?? 'Usuario eliminado',
         total: Number(r.total),
       })),
-      actividadPorDia: actividadPorDiaRaw.map(r => ({ fecha: r.fecha, total: Number(r.total) })),
+      actividadPorDia: actividadPorDiaRaw.map((r) => ({
+        fecha: r.fecha,
+        total: Number(r.total),
+      })),
     };
   }
 
   async cleanup(diasRetencion: number = 365): Promise<number> {
     const fechaCorte = new Date();
     fechaCorte.setDate(fechaCorte.getDate() - diasRetencion);
-    
+
     const result = await this.auditoriaRepository
       .createQueryBuilder()
       .delete()
       .where('timestamp < :fechaCorte', { fechaCorte })
       .execute();
-    
-    return result.affected || 0;
-  }     
 
-  async notificarExcesoDescargas(mayoristaId: number, totalPendientes: number): Promise<void> {
+    return result.affected || 0;
+  }
+
+  async notificarExcesoDescargas(
+    mayoristaId: number,
+    totalPendientes: number,
+  ): Promise<void> {
     //obtener mayorista con id en enum Mayoristas
     const mayorista = Mayoristas[mayoristaId];
     if (!mayorista) {
-      console.error(`Mayorista con ID ${mayoristaId} no encontrado en el enum.`);
+      console.error(
+        `Mayorista con ID ${mayoristaId} no encontrado en el enum.`,
+      );
       return;
     }
 
     // Lógica para enviar notificación al administrador
-    console.log(`Notificación: El mayorista ${mayorista} tiene ${totalPendientes} descargas pendientes de facturar.`);
+    console.log(
+      `Notificación: El mayorista ${mayorista} tiene ${totalPendientes} descargas pendientes de facturar.`,
+    );
 
     try {
       const adminMailUser = process.env.ADMIN_MAIL_USER;
-      const adminMailTo = await this.appSettingsService.obtenerSetting('ADMIN_MAIL_TO');
+      const adminMailTo =
+        await this.appSettingsService.obtenerSetting('ADMIN_MAIL_TO');
       const clientId = process.env.GMAIL_CLIENT_ID;
       const clientSecret = process.env.GMAIL_CLIENT_SECRET;
       const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
 
-      if (!adminMailUser || !adminMailTo || !clientId || !clientSecret || !refreshToken) {
-        console.error('Faltan variables de configuración de Gmail OAuth2 para enviar notificación');
+      if (
+        !adminMailUser ||
+        !adminMailTo ||
+        !clientId ||
+        !clientSecret ||
+        !refreshToken
+      ) {
+        console.error(
+          'Faltan variables de configuración de Gmail OAuth2 para enviar notificación',
+        );
         return;
       }
 
@@ -280,9 +371,15 @@ export class AuditoriaService {
           grant_type: 'refresh_token',
         }),
       });
-      const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
+      const tokenData = (await tokenRes.json()) as {
+        access_token?: string;
+        error?: string;
+      };
       if (!tokenData.access_token) {
-        console.error('No se pudo obtener access token de Gmail:', tokenData.error);
+        console.error(
+          'No se pudo obtener access token de Gmail:',
+          tokenData.error,
+        );
         return;
       }
 
@@ -311,14 +408,17 @@ export class AuditoriaService {
 
       const encodedEmail = Buffer.from(rfc2822).toString('base64url');
 
-      const sendRes = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${tokenData.access_token}`,
-          'Content-Type': 'application/json',
+      const sendRes = await fetch(
+        'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${tokenData.access_token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ raw: encodedEmail }),
         },
-        body: JSON.stringify({ raw: encodedEmail }),
-      });
+      );
 
       if (!sendRes.ok) {
         const err = await sendRes.json();
@@ -326,7 +426,9 @@ export class AuditoriaService {
         return;
       }
 
-      console.log('Correo de notificación enviado al administrador via Gmail API.');
+      console.log(
+        'Correo de notificación enviado al administrador via Gmail API.',
+      );
     } catch (error) {
       console.error('Error enviando correo de notificación:', error);
     }

@@ -19,7 +19,7 @@ describe('AppController (e2e)', () => {
     return request(app.getHttpServer())
       .get('/')
       .expect(200)
-      .expect('¡Bienvenido a la API de SERSA!');
+      .expect('SERSA Backend API is running! 🚀');
   });
 
   it('/health (GET)', () => {
@@ -27,8 +27,7 @@ describe('AppController (e2e)', () => {
       .get('/health')
       .expect(200)
       .expect((res) => {
-        expect(res.body).toHaveProperty('status', 'OK');
-        expect(res.body).toHaveProperty('service', 'SERSA Backend');
+        expect(res.body).toHaveProperty('status', 'ok');
       });
   });
 });

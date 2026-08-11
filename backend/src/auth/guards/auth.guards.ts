@@ -1,4 +1,10 @@
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 
@@ -42,15 +48,20 @@ export class RolesGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    
+
     if (!user) {
       throw new UnauthorizedException('Usuario no autenticado');
     }
-    
+
+    // 403, no 401: el usuario SÍ está autenticado, solo no tiene el rol
+    // requerido. Con 401 el interceptor del frontend lo trataba como sesión
+    // vencida y lo deslogueaba, en vez de mostrar un error de permisos.
     if (!this.allowedRoles.includes(user.rol)) {
-      throw new UnauthorizedException('No tienes permisos para acceder a este recurso');
+      throw new ForbiddenException(
+        'No tienes permisos para acceder a este recurso',
+      );
     }
-    
+
     return true;
   }
 }
@@ -60,14 +71,14 @@ export class ActiveUserGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest();
     const user = request.user;
-    
+
     if (!user) {
       throw new UnauthorizedException('Usuario no autenticado');
     }
-    
+
     // Aquí podrías verificar en la base de datos si el usuario sigue activo
     // Por ahora asumimos que si el token es válido, el usuario está activo
-    
+
     return true;
   }
 }

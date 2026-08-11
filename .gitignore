@@ -40,6 +40,11 @@ pids/
 # Coverage directory used by tools like istanbul
 coverage/
 
+# Playwright
+frontend/playwright-report/
+frontend/test-results/
+frontend/blob-report/
+
 # Database
 *.db
 *.sqlite
@@ -81,6 +86,8 @@ backend/certs/*.pfx
 # Excepto archivos de documentación
 !backend/certs/README.md
 !backend/certs/.gitkeep
+!CLAUDE.md
+!_docs_historicos/README.md
 
 # Scripts de certificados con claves
 backend/scripts/afip/*.key

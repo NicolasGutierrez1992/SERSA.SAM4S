@@ -1,0 +1,66 @@
+name: DAST
+
+on:
+  schedule:
+    # Todos los lunes a las 07:00 UTC — separado del SAST para no competir por runners
+    - cron: '0 7 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  zap-baseline:
+    name: OWASP ZAP baseline scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generar backend/.env.docker para el scan (solo valores dummy)
+        run: |
+          cat > backend/.env.docker <<'EOF'
+          PORT=3001
+          NODE_ENV=development
+          DB_HOST=db
+          DB_PORT=5432
+          DB_USERNAME=postgres
+          DB_PASSWORD=ci_test_password
+          DB_NAME=db_sersa
+          DB_SSL=false
+          JWT_SECRET=ci-test-secret-not-for-production-use-only
+          ENCRYPTION_KEY=ci0123456789abcdef0123456789abcdef01234567
+          CORS_ORIGINS=http://localhost:3010
+          THROTTLE_TTL=60
+          THROTTLE_LIMIT=100
+          DEFAULT_USER_PASSWORD=ci-default-password
+          MOCK_MODE=true
+          EOF
+
+      - name: Levantar stack (db + backend + frontend)
+        run: docker compose up -d --build
+
+      - name: Esperar a que el frontend esté disponible
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3010 > /dev/null; then
+              echo "Frontend disponible"; exit 0
+            fi
+            sleep 5
+          done
+          echo "Frontend no respondió a tiempo"; docker compose logs; exit 1
+
+      - name: OWASP ZAP baseline scan
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: 'http://localhost:3010'
+          # Baseline = pasivo, no ataca activamente — apto para correr contra
+          # un stack real sin riesgo de corromper datos. Da falsos positivos:
+          # es informativo, no bloquea el pipeline (issue automático en su lugar).
+          cmd_options: '-a'
+          fail_action: false
+          issue_title: 'DAST (ZAP baseline) — hallazgos semanales'
+
+      - name: Logs del stack (si algo falló antes del scan)
+        if: failure()
+        run: docker compose logs
+
+      - name: Bajar el stack
+        if: always()
+        run: docker compose down -v

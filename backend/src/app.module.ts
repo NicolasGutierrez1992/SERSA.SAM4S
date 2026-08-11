@@ -1,9 +1,12 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { CsrfGuard } from './common/guards/csrf.guard';
 
 // Módulo de autenticación global PRIMERO
 import { SharedAuthModule } from './auth/shared-auth.module';
@@ -15,6 +18,7 @@ import { UsersModule } from './users/users.module';
 import { CertificadosModule } from './certificados/certificados.module';
 import { AuditoriaModule } from './auditoria/auditoria.module';
 import { AfipModule } from './afip/afip.module';
+import { BackupModule } from './backup/backup.module';
 import { AppInitializerService } from './common/app-initializer.service';
 
 @Module({
@@ -22,8 +26,9 @@ import { AppInitializerService } from './common/app-initializer.service';
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
-    }),    // Módulo de autenticación global PRIMERO
-    SharedAuthModule,    // Configuración de TypeORM con PostgreSQL
+    }),
+    ScheduleModule.forRoot(), // Módulo de autenticación global PRIMERO
+    SharedAuthModule, // Configuración de TypeORM con PostgreSQL
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => {
@@ -60,7 +65,7 @@ import { AppInitializerService } from './common/app-initializer.service';
       },
       inject: [ConfigService],
     }),
-    
+
     // Throttling para rate limiting
     ThrottlerModule.forRootAsync({
       imports: [ConfigModule],
@@ -71,7 +76,7 @@ import { AppInitializerService } from './common/app-initializer.service';
         },
       ],
       inject: [ConfigService],
-    }),    
+    }),
     // Módulos funcionales
     CommonModule,
     AuthModule,
@@ -79,8 +84,16 @@ import { AppInitializerService } from './common/app-initializer.service';
     CertificadosModule,
     AuditoriaModule,
     AfipModule,
+    BackupModule,
   ],
   controllers: [AppController],
-  providers: [AppService, AppInitializerService],
+  providers: [
+    AppService,
+    AppInitializerService,
+    // El ThrottlerModule solo registra config/storage — sin este guard global,
+    // @Throttle() en los controllers (ej. login) no tiene efecto alguno.
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: CsrfGuard },
+  ],
 })
 export class AppModule {}

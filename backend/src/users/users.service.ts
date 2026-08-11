@@ -1,12 +1,31 @@
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, FindOptionsWhere, In, Brackets } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-import { Injectable, BadRequestException, ConflictException, NotFoundException, ForbiddenException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
 import { User } from './entities/user.entity';
 import { Mayorista } from './entities/mayorista.entity';
 import { CompraPrepago } from './entities/compra-prepago.entity';
-import { CreateUserDto, UpdateUserDto, QueryUsersDto, UserRole, UserStatus, CreateCompraPrepagoDto, UpdateCompraPrepagoDto } from './dto/user.dto';
-import { AuditoriaService, AuditoriaAccion, AuditoriaEntidad } from '../auditoria/auditoria.service';
+import {
+  CreateUserDto,
+  UpdateUserDto,
+  QueryUsersDto,
+  UserRole,
+  UserStatus,
+  CreateCompraPrepagoDto,
+  UpdateCompraPrepagoDto,
+} from './dto/user.dto';
+import {
+  AuditoriaService,
+  AuditoriaAccion,
+  AuditoriaEntidad,
+} from '../auditoria/auditoria.service';
 
 @Injectable()
 export class UsersService {
@@ -24,7 +43,9 @@ export class UsersService {
   // ✅ Running in PRODUCTION mode with real AFIP integration
 
   // Nunca se debe registrar el hash de password en el log de auditoría.
-  private sanitizeUserForAudit(user: User | Partial<User>): Record<string, unknown> {
+  private sanitizeUserForAudit(
+    user: User | Partial<User>,
+  ): Record<string, unknown> {
     const { password, ...rest } = user as User;
     return rest;
   }
@@ -36,17 +57,23 @@ export class UsersService {
     // ⭐ VALIDACIÓN: Verificar qué roles puede crear el usuario actual
     if (creatorUser) {
       const rolACrear = createUserDto.rol;
-      
+
       // Admin (rol 1) puede crear cualquier rol incluido otro Admin y Facturación
       // Técnico (rol 5) puede crear Mayorista, Distribuidor, Técnico — NO Admin ni Facturación
       if (creatorUser.rol === 1 || creatorUser.rol === 5) {
         if (creatorUser.rol === 5 && rolACrear === UserRole.ADMINISTRADOR) {
-          throw new ForbiddenException('Solo un administrador puede crear otro administrador');
+          throw new ForbiddenException(
+            'Solo un administrador puede crear otro administrador',
+          );
         }
         if (creatorUser.rol === 5 && rolACrear === UserRole.FACTURACION) {
-          throw new ForbiddenException('Solo un administrador puede crear usuarios de Facturación');
+          throw new ForbiddenException(
+            'Solo un administrador puede crear usuarios de Facturación',
+          );
         }
-        this.logger.log(`[create] creador rol=${creatorUser.rol} crea usuario rol=${rolACrear}`);
+        this.logger.log(
+          `[create] creador rol=${creatorUser.rol} crea usuario rol=${rolACrear}`,
+        );
       } else {
         // Otros roles no pueden crear usuarios
         throw new ForbiddenException('No tienes permisos para crear usuarios');
@@ -57,8 +84,10 @@ export class UsersService {
     if (!/^\d{11}$/.test(createUserDto.cuit)) {
       throw new BadRequestException('El CUIT debe tener 11 dígitos numéricos');
     }
-        if (!createUserDto.password || createUserDto.password.length < 6) {
-      throw new BadRequestException('La contraseña debe tener al menos 6 caracteres');
+    if (!createUserDto.password || createUserDto.password.length < 6) {
+      throw new BadRequestException(
+        'La contraseña debe tener al menos 6 caracteres',
+      );
     }
 
     // Verificar si el CUIT ya existe
@@ -72,26 +101,35 @@ export class UsersService {
     // Validar asociación de mayorista para distribuidores
     if (createUserDto.rol === UserRole.DISTRIBUIDOR) {
       if (!createUserDto.id_mayorista) {
-        throw new BadRequestException('Los distribuidores deben tener un mayorista asociado');
+        throw new BadRequestException(
+          'Los distribuidores deben tener un mayorista asociado',
+        );
       }
       // Validar en la tabla Mayoristas
       const mayorista = await this.mayoristaRepository.findOne({
         where: { id_mayorista: createUserDto.id_mayorista },
       });
       if (!mayorista) {
-        throw new NotFoundException('El mayorista especificado no existe o no es válido');
+        throw new NotFoundException(
+          'El mayorista especificado no existe o no es válido',
+        );
       }
     }
 
     // ⭐ NUEVO: Los Técnicos siempre se crean con id_mayorista = 1 (SERSA)
     if (createUserDto.rol === UserRole.TECNICO) {
       createUserDto.id_mayorista = 1;
-      console.log('[UsersService][create] Técnico creado con id_mayorista = 1 (SERSA)');
+      console.log(
+        '[UsersService][create] Técnico creado con id_mayorista = 1 (SERSA)',
+      );
     }
 
     // Hash de la contraseña
     const saltRounds = 12;
-    const hashedPassword = await bcrypt.hash(createUserDto.password, saltRounds);
+    const hashedPassword = await bcrypt.hash(
+      createUserDto.password,
+      saltRounds,
+    );
 
     // Por defecto se crea como CUENTA_CORRIENTE con límite 0. tipo_descarga ya no
     // condiciona el significado de limite_descargas (siempre es el límite de cuenta
@@ -105,7 +143,10 @@ export class UsersService {
       rol: createUserDto.rol,
       status: createUserDto.status || UserStatus.ACTIVO,
       id_mayorista: createUserDto.id_mayorista,
-      limite_descargas: createUserDto.limiteDescargas !== undefined ? createUserDto.limiteDescargas : 0,
+      limite_descargas:
+        createUserDto.limiteDescargas !== undefined
+          ? createUserDto.limiteDescargas
+          : 0,
       must_change_password: true,
       celular: createUserDto.celular,
       tipo_descarga: createUserDto.tipo_descarga || 'CUENTA_CORRIENTE',
@@ -137,9 +178,21 @@ export class UsersService {
     const [data, total] = await this.userRepository.findAndCount({
       where,
       select: [
-        'id_usuario', 'cuit', 'nombre', 'mail', 'rol', 'status', 'limite_descargas',
-        'must_change_password', 'ultimo_login', 'id_mayorista', 'created_at', 'updated_at',
-        'celular', 'tipo_descarga', 'notification_limit',
+        'id_usuario',
+        'cuit',
+        'nombre',
+        'mail',
+        'rol',
+        'status',
+        'limite_descargas',
+        'must_change_password',
+        'ultimo_login',
+        'id_mayorista',
+        'created_at',
+        'updated_at',
+        'celular',
+        'tipo_descarga',
+        'notification_limit',
       ],
       skip: (page - 1) * limit,
       take: limit,
@@ -147,18 +200,20 @@ export class UsersService {
     });
 
     // Resolve mayorista names with a single targeted query (only the page's unique ids)
-    const mayoristaIds = [...new Set(data.map(u => u.id_mayorista).filter(Boolean))] as number[];
+    const mayoristaIds = [
+      ...new Set(data.map((u) => u.id_mayorista).filter(Boolean)),
+    ] as number[];
     const mayoristaMap = new Map<number, string>();
     if (mayoristaIds.length > 0) {
       const mayoristas = await this.userRepository.find({
         where: { id_usuario: In(mayoristaIds), rol: UserRole.MAYORISTA },
         select: ['id_usuario', 'nombre'],
       });
-      mayoristas.forEach(m => mayoristaMap.set(m.id_usuario, m.nombre));
+      mayoristas.forEach((m) => mayoristaMap.set(m.id_usuario, m.nombre));
     }
 
     // Saldo prepago (en vivo, no cacheado) de los usuarios de esta página
-    const userIds = data.map(u => u.id_usuario);
+    const userIds = data.map((u) => u.id_usuario);
     const saldoMap = new Map<number, number>();
     if (userIds.length > 0) {
       const saldos = await this.compraPrepagoRepository
@@ -168,13 +223,17 @@ export class UsersService {
         .where('c.id_usuario IN (:...userIds)', { userIds })
         .groupBy('c.id_usuario')
         .getRawMany();
-      saldos.forEach(s => saldoMap.set(Number(s.id_usuario), Number(s.saldo)));
+      saldos.forEach((s) =>
+        saldoMap.set(Number(s.id_usuario), Number(s.saldo)),
+      );
     }
 
     return {
-      data: data.map(u => ({
+      data: data.map((u) => ({
         ...u,
-        nombreMayorista: u.id_mayorista ? (mayoristaMap.get(u.id_mayorista) ?? null) : null,
+        nombreMayorista: u.id_mayorista
+          ? (mayoristaMap.get(u.id_mayorista) ?? null)
+          : null,
         saldoPrepago: saldoMap.get(u.id_usuario) ?? 0,
       })),
       total,
@@ -219,10 +278,12 @@ export class UsersService {
       where: { cuit: trimmedCuit },
     });
     if (!user) {
-      this.logger.warn('[findByCuit] Usuario no encontrado para el CUIT proporcionado');
+      this.logger.warn(
+        '[findByCuit] Usuario no encontrado para el CUIT proporcionado',
+      );
     }
     return user;
-  }  
+  }
   async findByMail(mail: string): Promise<User | null> {
     console.log('[UsersService][findByMail] Entrada:', mail);
     const user = await this.userRepository.findOne({
@@ -230,38 +291,60 @@ export class UsersService {
     });
     console.log('[UsersService][findByMail] Salida:', user);
     return user;
-  } 
-   async update(id: number, updateUserDto: UpdateUserDto, currentUser?: any): Promise<User> {
-    console.log('[UsersService][update] Entrada:', id, updateUserDto, currentUser);
+  }
+  async update(
+    id: number,
+    updateUserDto: UpdateUserDto,
+    currentUser?: any,
+  ): Promise<User> {
+    console.log(
+      '[UsersService][update] Entrada:',
+      id,
+      updateUserDto,
+      currentUser,
+    );
     const user = await this.findOne(id);
 
     // ⭐ VALIDACIÓN POR ROL
     if (currentUser) {
       // Mayorista (rol 2): Solo puede editar distribuidores del mismo mayorista
-      if (currentUser.rol === 2) { // Mayorista
+      if (currentUser.rol === 2) {
+        // Mayorista
         // 1. Solo puede editar si el usuario tiene el mismo id_mayorista
         if (user.id_mayorista !== currentUser.id_mayorista) {
-          throw new BadRequestException('No tienes permisos para editar usuarios de otro mayorista');
+          throw new BadRequestException(
+            'No tienes permisos para editar usuarios de otro mayorista',
+          );
         }
-        
+
         // 2. Solo puede editar si el usuario es distribuidor (rol 3)
         if (user.rol !== 3) {
-          throw new BadRequestException('Los mayoristas solo pueden editar distribuidores');
+          throw new BadRequestException(
+            'Los mayoristas solo pueden editar distribuidores',
+          );
         }
-        
+
         // 3. Solo puede editar estos campos: limiteDescargas y tipo_descarga
         const allowedFields = ['limiteDescargas', 'tipo_descarga'];
-        const attemptedFields = Object.keys(updateUserDto).filter(key => updateUserDto[key] !== undefined);
-        const unallowedFields = attemptedFields.filter(field => !allowedFields.includes(field));
-        
+        const attemptedFields = Object.keys(updateUserDto).filter(
+          (key) => updateUserDto[key] !== undefined,
+        );
+        const unallowedFields = attemptedFields.filter(
+          (field) => !allowedFields.includes(field),
+        );
+
         if (unallowedFields.length > 0) {
-          throw new BadRequestException(`No tienes permisos para editar los campos: ${unallowedFields.join(', ')}`);
+          throw new BadRequestException(
+            `No tienes permisos para editar los campos: ${unallowedFields.join(', ')}`,
+          );
         }
       }
       // Técnico (rol 5): Puede editar todos los usuarios, excepto el campo ROL
       else if (currentUser.rol === 5) {
         if (updateUserDto.rol !== undefined) {
-          throw new BadRequestException('No tienes permisos para cambiar el rol de un usuario');
+          throw new BadRequestException(
+            'No tienes permisos para cambiar el rol de un usuario',
+          );
         }
         console.log(`[UsersService][update] ✅ Técnico editando usuario`);
       }
@@ -271,21 +354,30 @@ export class UsersService {
       }
       // Otros roles no pueden editar
       else if (currentUser.rol !== 1 && currentUser.rol !== 4) {
-        throw new BadRequestException('No tienes permisos para editar usuarios');
+        throw new BadRequestException(
+          'No tienes permisos para editar usuarios',
+        );
       }
     }
 
     // Validar mayorista si se está actualizando
-    if (updateUserDto.id_mayorista !== undefined && user.rol === UserRole.DISTRIBUIDOR) {
+    if (
+      updateUserDto.id_mayorista !== undefined &&
+      user.rol === UserRole.DISTRIBUIDOR
+    ) {
       if (updateUserDto.id_mayorista) {
         const mayorista = await this.mayoristaRepository.findOne({
           where: { id_mayorista: updateUserDto.id_mayorista },
         });
         if (!mayorista) {
-          throw new NotFoundException('El mayorista especificado no existe o no es válido');
+          throw new NotFoundException(
+            'El mayorista especificado no existe o no es válido',
+          );
         }
       } else {
-        throw new BadRequestException('Los distribuidores deben tener un mayorista asociado');
+        throw new BadRequestException(
+          'Los distribuidores deben tener un mayorista asociado',
+        );
       }
     }
 
@@ -294,9 +386,14 @@ export class UsersService {
     if (updateUserDto.nombre) updateData.nombre = updateUserDto.nombre;
     if (updateUserDto.email) updateData.mail = updateUserDto.email;
     if (updateUserDto.rol) updateData.id_rol = updateUserDto.rol;
-    if (updateUserDto.status !== undefined) updateData.status = updateUserDto.status;    if (updateUserDto.id_mayorista !== undefined) updateData.id_mayorista = updateUserDto.id_mayorista;
-    if (updateUserDto.celular !== undefined) updateData.celular = updateUserDto.celular;
-    if (updateUserDto.tipo_descarga !== undefined) updateData.tipo_descarga = updateUserDto.tipo_descarga;
+    if (updateUserDto.status !== undefined)
+      updateData.status = updateUserDto.status;
+    if (updateUserDto.id_mayorista !== undefined)
+      updateData.id_mayorista = updateUserDto.id_mayorista;
+    if (updateUserDto.celular !== undefined)
+      updateData.celular = updateUserDto.celular;
+    if (updateUserDto.tipo_descarga !== undefined)
+      updateData.tipo_descarga = updateUserDto.tipo_descarga;
 
     // limiteDescargas = límite de cuenta corriente, siempre editable manualmente
     // (independiente de tipo_descarga; el saldo prepago se gestiona aparte vía compras_prepago).
@@ -308,17 +405,21 @@ export class UsersService {
     if (updateUserDto.notification_limit !== undefined) {
       // Solo admin (rol=1) puede editar notification_limit
       if (!currentUser || currentUser.rol !== 1) {
-        throw new BadRequestException('Solo administradores pueden editar el límite de notificación');
+        throw new BadRequestException(
+          'Solo administradores pueden editar el límite de notificación',
+        );
       }
-      
+
       // notification_limit solo se puede editar para usuarios mayoristas (rol=2)
       if (user.rol !== 2) {
-        throw new BadRequestException('El límite de notificación solo se puede asignar a usuarios mayoristas (rol=2)');
+        throw new BadRequestException(
+          'El límite de notificación solo se puede asignar a usuarios mayoristas (rol=2)',
+        );
       }
-      
+
       updateData.notification_limit = updateUserDto.notification_limit;
     }
-    
+
     console.log('[UsersService][update] updateData:', updateData);
     const antes = this.sanitizeUserForAudit(user);
     Object.assign(user, updateData);
@@ -338,21 +439,30 @@ export class UsersService {
     return updatedUser;
   }
 
-  async updatePassword(id: number, newPassword: string, mustChange = false): Promise<void> {
-    console.log('[UsersService][updatePassword] Entrada:', id, newPassword, mustChange);
+  async updatePassword(
+    id: number,
+    newPassword: string,
+    mustChange = false,
+  ): Promise<void> {
+    console.log('[UsersService][updatePassword] Entrada:', { id, mustChange });
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(newPassword, saltRounds);
-    
-    await this.userRepository.update({ id_usuario: id }, {
-      password: hashedPassword,
-      must_change_password: mustChange,
-    });
+
+    await this.userRepository.update(
+      { id_usuario: id },
+      {
+        password: hashedPassword,
+        must_change_password: mustChange,
+      },
+    );
     console.log('[UsersService][updatePassword] Salida: OK');
   }
 
   async updateLastLogin(id: number): Promise<void> {
     console.log('[UsersService][updateLastLogin] Entrada:', id);
-    const user = await this.userRepository.findOne({ where: { id_usuario: id } });
+    const user = await this.userRepository.findOne({
+      where: { id_usuario: id },
+    });
     if (!user) return;
     // Si el usuario tiene la contraseña por defecto, debe cambiarla
     const defaultPassword = process.env.DEFAULT_USER_PASSWORD || 'certificados';
@@ -363,31 +473,41 @@ export class UsersService {
     } else {
       user.must_change_password = false;
       await this.userRepository.save(user);
-    }    // Actualizar último login
+    } // Actualizar último login
     // Usar fecha actual en zona horaria de Argentina (se almacena en UTC)
     user.ultimo_login = new Date();
     await this.userRepository.save(user);
     console.log('[UsersService][updateLastLogin] Salida: OK');
   }
 
-  async resetPassword(id: number, rol: number, actorId?: number | null): Promise<void> {
+  async resetPassword(
+    id: number,
+    rol: number,
+    actorId?: number | null,
+  ): Promise<void> {
     console.log('[UsersService][resetPassword] UserEditable:', id);
     console.log('[UsersService][resetPassword] rolCurrentUser:', rol);
 
-    const user = await this.userRepository.findOne({ where: { id_usuario: id } });
+    const user = await this.userRepository.findOne({
+      where: { id_usuario: id },
+    });
     if (!user) throw new Error('Usuario no encontrado');
     // ADMIN puede resetear a cualquier usuario
-    if(rol !== UserRole.ADMINISTRADOR ){
+    if (rol !== UserRole.ADMINISTRADOR) {
       //A los usuarios Administradores y Facturacion No se le puede resetar la contraseña
-      if (user.rol === UserRole.ADMINISTRADOR || user.rol === UserRole.FACTURACION) {
-        throw new BadRequestException('No se puede resetear la contraseña de este usuario');
+      if (
+        user.rol === UserRole.ADMINISTRADOR ||
+        user.rol === UserRole.FACTURACION
+      ) {
+        throw new BadRequestException(
+          'No se puede resetear la contraseña de este usuario',
+        );
       }
     }
     // Usar contraseña por defecto del .env
     const nuevaPassword = process.env.DEFAULT_USER_PASSWORD || 'certificados';
     const saltRounds = 12;
     const hashedPassword = await bcrypt.hash(nuevaPassword, saltRounds);
-
 
     user.password = hashedPassword;
     user.must_change_password = true;
@@ -415,7 +535,9 @@ export class UsersService {
         where: { id_mayorista: id },
       });
       if (distribuidores > 0) {
-        throw new BadRequestException('No se puede eliminar un mayorista que tiene distribuidores asociados');
+        throw new BadRequestException(
+          'No se puede eliminar un mayorista que tiene distribuidores asociados',
+        );
       }
     }
 
@@ -445,7 +567,10 @@ export class UsersService {
   }
 
   async getDistribuidoresByMayorista(mayoristaId: number): Promise<User[]> {
-    console.log('[UsersService][getDistribuidoresByMayorista] Entrada:', mayoristaId);
+    console.log(
+      '[UsersService][getDistribuidoresByMayorista] Entrada:',
+      mayoristaId,
+    );
     const result = await this.userRepository.find({
       where: { id_mayorista: mayoristaId, rol: UserRole.DISTRIBUIDOR },
       select: ['id_usuario', 'nombre', 'cuit', 'mail', 'status'],
@@ -457,48 +582,72 @@ export class UsersService {
 
   async exportToCSV(queryDto: QueryUsersDto = {}): Promise<string> {
     console.log('[UsersService][exportToCSV] Entrada:', queryDto);
-    const { data: users } = await this.findAll({ ...queryDto, page: 1, limit: 10000 });
-    
-    const headers = 'ID,CUIT,Nombre,Email,Rol,Estado,Límite Descargas,Mayorista,Creado\n';
-    const rows = users.map(user => {
-      const rolText = this.getRolText(user.rol);
-      const statusText = user.status === 1 ? 'Activo' : 'Inactivo';
-      const mayoristaName = ''; // Sin relación por ahora
-      
-      return `${user.id_usuario},"${user.cuit}","${user.nombre}","${user.mail}","${rolText}","${statusText}",${user.limite_descargas},"${mayoristaName}","${user.created_at.toISOString()}"`;
-    }).join('\n');
-    
+    const { data: users } = await this.findAll({
+      ...queryDto,
+      page: 1,
+      limit: 10000,
+    });
+
+    const headers =
+      'ID,CUIT,Nombre,Email,Rol,Estado,Límite Descargas,Mayorista,Creado\n';
+    const rows = users
+      .map((user) => {
+        const rolText = this.getRolText(user.rol);
+        const statusText = user.status === 1 ? 'Activo' : 'Inactivo';
+        const mayoristaName = ''; // Sin relación por ahora
+
+        return `${user.id_usuario},"${user.cuit}","${user.nombre}","${user.mail}","${rolText}","${statusText}",${user.limite_descargas},"${mayoristaName}","${user.created_at.toISOString()}"`;
+      })
+      .join('\n');
+
     console.log('[UsersService][exportToCSV] Salida: CSV generado');
     return headers + rows;
   }
 
   // Valida que currentUser pueda administrar compras prepago del usuario `id`:
   // mismo criterio de permisos que ya existe para editar limiteDescargas/tipo_descarga.
-  private async validarPermisoComprasPrepago(id: number, currentUser: any): Promise<User> {
+  private async validarPermisoComprasPrepago(
+    id: number,
+    currentUser: any,
+  ): Promise<User> {
     const user = await this.findOne(id);
     if (!currentUser) {
       throw new ForbiddenException('No autenticado');
     }
     if (currentUser.rol === 2) {
       if (user.id_mayorista !== currentUser.id_mayorista || user.rol !== 3) {
-        throw new BadRequestException('No tienes permisos para administrar compras prepago de este usuario');
+        throw new BadRequestException(
+          'No tienes permisos para administrar compras prepago de este usuario',
+        );
       }
     } else if (![1, 4, 5].includes(currentUser.rol)) {
-      throw new BadRequestException('No tienes permisos para administrar compras prepago');
+      throw new BadRequestException(
+        'No tienes permisos para administrar compras prepago',
+      );
     }
     return user;
   }
 
-  async getComprasPrepago(id: number, currentUser: any): Promise<Array<CompraPrepago & { disponible: number }>> {
+  async getComprasPrepago(
+    id: number,
+    currentUser: any,
+  ): Promise<Array<CompraPrepago & { disponible: number }>> {
     await this.validarPermisoComprasPrepago(id, currentUser);
     const compras = await this.compraPrepagoRepository.find({
       where: { id_usuario: id },
       order: { fecha_compra: 'DESC' },
     });
-    return compras.map(c => ({ ...c, disponible: c.cantidad - c.cantidad_usada }));
+    return compras.map((c) => ({
+      ...c,
+      disponible: c.cantidad - c.cantidad_usada,
+    }));
   }
 
-  async crearCompraPrepago(id: number, dto: CreateCompraPrepagoDto, currentUser: any): Promise<CompraPrepago> {
+  async crearCompraPrepago(
+    id: number,
+    dto: CreateCompraPrepagoDto,
+    currentUser: any,
+  ): Promise<CompraPrepago> {
     await this.validarPermisoComprasPrepago(id, currentUser);
 
     if (dto.cantidad <= 0) {
@@ -521,16 +670,27 @@ export class UsersService {
       AuditoriaEntidad.COMPRA_PREPAGO,
       saved.id,
       null,
-      { id_usuario: id, cantidad: saved.cantidad, numero_factura: saved.numero_factura },
+      {
+        id_usuario: id,
+        cantidad: saved.cantidad,
+        numero_factura: saved.numero_factura,
+      },
     );
 
     return saved;
   }
 
-  async editarCompraPrepago(id: number, compraId: number, dto: UpdateCompraPrepagoDto, currentUser: any): Promise<CompraPrepago> {
+  async editarCompraPrepago(
+    id: number,
+    compraId: number,
+    dto: UpdateCompraPrepagoDto,
+    currentUser: any,
+  ): Promise<CompraPrepago> {
     await this.validarPermisoComprasPrepago(id, currentUser);
 
-    const compra = await this.compraPrepagoRepository.findOne({ where: { id: compraId } });
+    const compra = await this.compraPrepagoRepository.findOne({
+      where: { id: compraId },
+    });
     if (!compra || compra.id_usuario !== id) {
       throw new NotFoundException('Compra prepago no encontrada');
     }
@@ -562,7 +722,11 @@ export class UsersService {
    * Sin límite fijo de filas: el frontend separa "sin saldo" (0) de "bajo saldo" (>0) y
    * acota la cantidad mostrada en cada grupo.
    */
-  async getRankingSaldoPrepagoBajo(currentUser: any): Promise<Array<{ id_usuario: number; nombre: string; saldoPrepago: number }>> {
+  async getRankingSaldoPrepagoBajo(
+    currentUser: any,
+  ): Promise<
+    Array<{ id_usuario: number; nombre: string; saldoPrepago: number }>
+  > {
     const query = this.compraPrepagoRepository
       .createQueryBuilder('c')
       .innerJoin('c.usuario', 'u')
@@ -574,7 +738,11 @@ export class UsersService {
       .orderBy('saldo', 'ASC');
 
     if (currentUser.rol === 2) {
-      query.andWhere('u.rol = :rol', { rol: 3 }).andWhere('u.id_mayorista = :idMayorista', { idMayorista: currentUser.id_mayorista });
+      query
+        .andWhere('u.rol = :rol', { rol: 3 })
+        .andWhere('u.id_mayorista = :idMayorista', {
+          idMayorista: currentUser.id_mayorista,
+        });
     } else if (currentUser.rol === 1 || currentUser.rol === 4) {
       const SERSA_ID_MAYORISTA = 1;
       query.andWhere(
@@ -590,7 +758,7 @@ export class UsersService {
     }
 
     const rows = await query.getRawMany();
-    return rows.map(r => ({
+    return rows.map((r) => ({
       id_usuario: Number(r.id_usuario),
       nombre: r.nombre,
       saldoPrepago: Number(r.saldo),
@@ -600,7 +768,7 @@ export class UsersService {
   private getRolText(rol: number): string {
     const roles = {
       1: 'Administrador',
-      2: 'Mayorista', 
+      2: 'Mayorista',
       3: 'Distribuidor',
       4: 'Facturación',
       5: 'Técnico',

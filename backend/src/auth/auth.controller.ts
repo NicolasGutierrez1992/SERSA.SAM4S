@@ -11,7 +11,12 @@ import {
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Response } from 'express';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
 import { LoginDto, ChangePasswordDto, LoginResponse } from './dto/auth.dto';
@@ -29,12 +34,19 @@ export class AuthController {
   @ApiOperation({ summary: 'Iniciar sesión' })
   @ApiResponse({ status: 200, description: 'Login exitoso' })
   @ApiResponse({ status: 401, description: 'Credenciales inválidas' })
-  @ApiResponse({ status: 429, description: 'Demasiados intentos — esperar 1 minuto' })
+  @ApiResponse({
+    status: 429,
+    description: 'Demasiados intentos — esperar 1 minuto',
+  })
   async login(
     @Body() loginDto: LoginDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<{ user: LoginResponse['user']; access_token: string }> {
+  ): Promise<{
+    user: LoginResponse['user'];
+    access_token: string;
+    csrfToken: string;
+  }> {
     const ip = (req as any).ip || (req as any).connection?.remoteAddress;
     const result = await this.authService.login(loginDto, ip);
 
@@ -49,7 +61,14 @@ export class AuthController {
       path: '/',
     });
 
-    return { user: result.user, access_token: (result as any).access_token };
+    // csrfToken viaja SOLO en el body (no en cookie): el frontend lo guarda en su
+    // propio origen y lo reenvía como header X-CSRF-Token en requests mutantes —
+    // ver CsrfGuard, que lo valida contra el claim homónimo dentro del JWT.
+    return {
+      user: result.user,
+      access_token: (result as any).access_token,
+      csrfToken: result.csrfToken,
+    };
   }
 
   @Post('logout')
@@ -78,6 +97,7 @@ export class AuthController {
   }
 
   @Post('change-password')
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
@@ -87,7 +107,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'No autenticado' })
   async changePassword(
     @CurrentUser('id') userId: number,
-    @Body() changePasswordDto: ChangePasswordDto
+    @Body() changePasswordDto: ChangePasswordDto,
   ): Promise<void> {
     await this.authService.changePassword(userId, changePasswordDto);
   }

@@ -1,9 +1,23 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { UsersService } from '../users/users.service';
-import { LoginDto, ChangePasswordDto, JwtPayload, LoginResponse } from './dto/auth.dto';
-import { AuditoriaService, AuditoriaAccion, AuditoriaEntidad } from '../auditoria/auditoria.service';
+import {
+  LoginDto,
+  ChangePasswordDto,
+  JwtPayload,
+  LoginResponse,
+} from './dto/auth.dto';
+import {
+  AuditoriaService,
+  AuditoriaAccion,
+  AuditoriaEntidad,
+} from '../auditoria/auditoria.service';
 
 @Injectable()
 export class AuthService {
@@ -16,13 +30,15 @@ export class AuthService {
   async validateUser(cuit: string, password: string): Promise<any> {
     // Incluye todos los campos del usuario, incluido id_mayorista
     const user = await this.usersService.findByCuit(cuit);
-    
+
     if (!user) {
       return null;
     }
 
     if (user.status === 3) {
-      throw new UnauthorizedException('Tu cuenta está inactiva. Para más información contactá con tu proveedor.');
+      throw new UnauthorizedException(
+        'Tu cuenta está inactiva. Para más información contactá con tu proveedor.',
+      );
     }
     // status=2 (Suspendido): puede ingresar pero no puede descargar
 
@@ -68,8 +84,12 @@ export class AuthService {
         ip,
       );
       throw new UnauthorizedException('Credenciales inválidas');
-    }    // Actualizar último login
-    await this.usersService.updateLastLogin(user.id_usuario);    // Crear payload JWT
+    } // Actualizar último login
+    await this.usersService.updateLastLogin(user.id_usuario); // Crear payload JWT
+    // Nonce anti-CSRF: viaja firmado dentro del JWT (verificable sin estado en el
+    // servidor) y también se devuelve en el body para que el frontend lo reenvíe
+    // como header en cada request mutante — ver CsrfGuard.
+    const csrfToken = crypto.randomBytes(24).toString('hex');
     const payload: JwtPayload = {
       id: user.id_usuario,
       cuit: user.cuit,
@@ -78,6 +98,7 @@ export class AuthService {
       mustChangePassword: user.must_change_password,
       id_mayorista: user.id_mayorista,
       status: user.status,
+      csrfToken,
     };
 
     const access_token = this.jwtService.sign(payload);
@@ -94,6 +115,7 @@ export class AuthService {
 
     return {
       access_token,
+      csrfToken,
       user: {
         id: user.id_usuario,
         cuit: user.cuit,
@@ -104,7 +126,7 @@ export class AuthService {
         must_change_password: user.must_change_password,
         last_login: user.ultimo_login,
         id_mayorista: user.id_mayorista,
-        limite_descargas: user.limite_descargas
+        limite_descargas: user.limite_descargas,
       },
     };
   }
@@ -120,8 +142,11 @@ export class AuthService {
       ip,
     );
   }
-  
-  async changePassword(userId: number, changePasswordDto: ChangePasswordDto): Promise<void> {
+
+  async changePassword(
+    userId: number,
+    changePasswordDto: ChangePasswordDto,
+  ): Promise<void> {
     const user = await this.usersService.findOne(userId);
     const fullUser = await this.usersService.findByCuit(user.cuit);
 
@@ -140,10 +165,15 @@ export class AuthService {
       fullUser.password,
     );
     if (isSamePassword) {
-      throw new BadRequestException('La nueva contraseña debe ser diferente a la actual');
+      throw new BadRequestException(
+        'La nueva contraseña debe ser diferente a la actual',
+      );
     }
 
-    await this.usersService.updatePassword(userId, changePasswordDto.newPassword, false);
+    await this.usersService.updatePassword(
+      userId,
+      changePasswordDto.newPassword,
+      false,
+    );
   }
-
 }

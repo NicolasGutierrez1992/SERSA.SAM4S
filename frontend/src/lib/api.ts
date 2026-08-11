@@ -23,6 +23,7 @@ export interface LoginResponse {
     limite_descargas: number;
     tipo_descarga?: 'CUENTA_CORRIENTE' | 'PREPAGO';
   };
+  csrfToken?: string;
 }
 
 export interface ChangePasswordRequest {
@@ -154,11 +155,21 @@ const api = axios.create({
   },
 });
 
-// Interceptor de request — adjuntar token cuando las cookies cross-site están bloqueadas
+const MUTATING_METHODS = new Set(['post', 'put', 'patch', 'delete']);
+
+// Interceptor de request — adjuntar token cuando las cookies cross-site están bloqueadas,
+// y el header anti-CSRF en requests mutantes (ver CsrfGuard en el backend).
 api.interceptors.request.use((config) => {
   const token = getSessionToken();
   if (token && !config.headers['Authorization']) {
     config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  const method = config.method?.toLowerCase();
+  if (method && MUTATING_METHODS.has(method)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      config.headers['X-CSRF-Token'] = csrfToken;
+    }
   }
   return config;
 });
@@ -185,6 +196,7 @@ api.interceptors.response.use(
 
 const USER_COOKIE = 'user_info';
 const TOKEN_COOKIE = 'session_token';
+const CSRF_COOKIE = 'csrf_token';
 
 // Detect HTTPS at runtime — process.env.NODE_ENV is always 'production' in Next.js builds
 // so it can't be used to distinguish HTTP localhost from HTTPS production.
@@ -211,6 +223,17 @@ export const setSessionToken = (token: string): void => {
 export const getSessionToken = (): string | undefined =>
   Cookies.get(TOKEN_COOKIE);
 
+export const setCsrfToken = (token: string): void => {
+  Cookies.set(CSRF_COOKIE, token, {
+    sameSite: 'lax',
+    secure: isSecureContext(),
+    expires: 1 / 24,
+  });
+};
+
+export const getCsrfToken = (): string | undefined =>
+  Cookies.get(CSRF_COOKIE);
+
 export const getUser = (): LoginResponse['user'] | null => {
   try {
     const raw = Cookies.get(USER_COOKIE);
@@ -223,6 +246,7 @@ export const getUser = (): LoginResponse['user'] | null => {
 const clearUserInfo = (): void => {
   Cookies.remove(USER_COOKIE);
   Cookies.remove(TOKEN_COOKIE);
+  Cookies.remove(CSRF_COOKIE);
 };
 
 export const isAuthenticated = (): boolean => {
@@ -240,6 +264,10 @@ export const authApi = {
     // Guardar token para enviarlo como Authorization: Bearer en requests cross-domain
     if (response.data.access_token) {
       setSessionToken(response.data.access_token);
+    }
+    // Guardar nonce anti-CSRF para reenviarlo como header en requests mutantes
+    if (response.data.csrfToken) {
+      setCsrfToken(response.data.csrfToken);
     }
     return response.data;
   },

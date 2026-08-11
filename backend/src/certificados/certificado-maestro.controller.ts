@@ -17,7 +17,7 @@ import {
   ApiTags,
   ApiOperation,
   ApiResponse,
-  ApiConsumes
+  ApiConsumes,
 } from '@nestjs/swagger';
 import type { Multer } from 'multer';
 import type { Request } from 'express';
@@ -26,7 +26,11 @@ import { AfipFilesService } from '../afip/services/afip-files.service';
 import { JwtAuthGuard } from '../auth/guards/auth.guards';
 import { RequireAdmin } from '../auth/decorators/roles.decorator';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
-import { AuditoriaService, AuditoriaAccion, AuditoriaEntidad } from '../auditoria/auditoria.service';
+import {
+  AuditoriaService,
+  AuditoriaAccion,
+  AuditoriaEntidad,
+} from '../auditoria/auditoria.service';
 import {
   CertificadoMaestroResponseDto,
   CertificadoMaestroInfoDto,
@@ -49,7 +53,9 @@ export class CertificadoMaestroController {
   @Post('upload')
   @UseGuards(JwtAuthGuard)
   @RequireAdmin()
-  @UseInterceptors(FileInterceptor('pfxFile', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('pfxFile', { limits: { fileSize: 10 * 1024 * 1024 } }),
+  )
   @ApiConsumes('multipart/form-data')
   @ApiOperation({
     summary: 'Cargar certificado maestro .pfx',
@@ -72,19 +78,22 @@ export class CertificadoMaestroController {
   @ApiResponse({
     status: 403,
     description: 'Solo administradores pueden cargar certificados',
-  })  @HttpCode(HttpStatus.CREATED)
+  })
+  @HttpCode(HttpStatus.CREATED)
   async uploadCertificado(
     @UploadedFile() pfxFile: Multer.File,
     @Body('password') password: string,
-    @Body('certificado_identificador') certificado_identificador: string | undefined,
+    @Body('certificado_identificador')
+    certificado_identificador: string | undefined,
     @CurrentUser('id') userId: number,
     @Req() req: Request,
   ): Promise<CertificadoMaestroResponseDto> {
-    const resultado = await this.certificadoMaestroService.cargarCertificadoMaestro({
-      pfxFile,
-      password,
-      certificado_identificador,
-    });
+    const resultado =
+      await this.certificadoMaestroService.cargarCertificadoMaestro({
+        pfxFile,
+        password,
+        certificado_identificador,
+      });
 
     const ip = req.ip || (req as any).connection?.remoteAddress;
     await this.auditoriaService.log(
@@ -93,7 +102,10 @@ export class CertificadoMaestroController {
       AuditoriaEntidad.CERTIFICADO_MAESTRO,
       certificado_identificador ?? null,
       null,
-      { archivo: pfxFile?.originalname, identificador: certificado_identificador },
+      {
+        archivo: pfxFile?.originalname,
+        identificador: certificado_identificador,
+      },
       ip,
     );
 
@@ -132,12 +144,15 @@ export class CertificadoMaestroController {
   @Post('upload-root-rti')
   @UseGuards(JwtAuthGuard)
   @RequireAdmin()
-  @UseInterceptors(FileInterceptor('rootRtiFile', { limits: { fileSize: 5 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('rootRtiFile', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
   @ApiConsumes('multipart/form-data')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Cargar archivo Root_RTI.txt',
-    description: 'Carga el archivo Root_RTI.txt encriptado en base de datos. Solo administradores.',
+    description:
+      'Carga el archivo Root_RTI.txt encriptado en base de datos. Solo administradores.',
   })
   @ApiResponse({ status: 201, description: 'Root_RTI cargado correctamente' })
   @ApiResponse({ status: 400, description: 'Archivo inválido o faltante' })
@@ -150,9 +165,22 @@ export class CertificadoMaestroController {
       throw new BadRequestException('Se requiere el archivo rootRtiFile');
     }
     if (!file.originalname.toLowerCase().endsWith('.txt')) {
-      throw new BadRequestException('El archivo Root_RTI debe tener extensión .txt');
+      throw new BadRequestException(
+        'El archivo Root_RTI debe tener extensión .txt',
+      );
     }
-    await this.afipFilesService.cargarArchivoRootRTI(file.buffer, file.originalname);
+    // La extensión sola no garantiza que el contenido sea texto: un byte nulo en los
+    // primeros bytes es la heurística estándar para detectar contenido binario
+    // disfrazado de .txt (ej. un ejecutable renombrado).
+    if (file.buffer.subarray(0, 8000).includes(0)) {
+      throw new BadRequestException(
+        'El archivo Root_RTI no parece ser un archivo de texto válido',
+      );
+    }
+    await this.afipFilesService.cargarArchivoRootRTI(
+      file.buffer,
+      file.originalname,
+    );
 
     const ip = req.ip || (req as any).connection?.remoteAddress;
     await this.auditoriaService.log(
@@ -165,6 +193,9 @@ export class CertificadoMaestroController {
       ip,
     );
 
-    return { success: true, message: 'Root_RTI cargado y encriptado correctamente en base de datos' };
+    return {
+      success: true,
+      message: 'Root_RTI cargado y encriptado correctamente en base de datos',
+    };
   }
 }
