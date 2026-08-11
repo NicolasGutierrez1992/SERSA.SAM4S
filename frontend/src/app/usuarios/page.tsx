@@ -155,10 +155,6 @@ export default function UsuariosPage() {
     if (isMayorista) {
       form.setFieldsValue({ rol: 3, id_mayorista: idMayorista });
     }
-    // Si es técnico, setear id_mayorista = 1 automáticamente
-    if (currentUser?.rol === 5) {
-      form.setFieldsValue({ id_mayorista: 1 });
-    }
     setModalVisible(true);
   };// Mapea los campos del usuario a los nombres esperados por el formulario
   const mapUserToForm = (user: any) => ({
@@ -270,8 +266,10 @@ export default function UsuariosPage() {
           values.rol = 3;
           values.id_mayorista = idMayorista;
         }
-        // Si es técnico, asegurar id_mayorista = 1
-        if (currentUser?.rol === 5) {
+        // Si el nuevo usuario es Técnico, siempre pertenece a SERSA (id_mayorista=1).
+        // Ojo: esto depende del rol que se le asigna al usuario NUEVO (values.rol),
+        // no del rol del usuario logueado que lo está creando.
+        if (values.rol === 5) {
           values.id_mayorista = 1;
         }
         await api.post('/users', values);
