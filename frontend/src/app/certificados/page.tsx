@@ -473,19 +473,39 @@ export default function CertificadosPage() {
 
       // Cerrar el modal de confirmación pero conservar los datos del formulario
       // (marca/modelo/serie) por si el usuario decide reintentar.
+      const datosEnviados = pendingDownloadData;
       setShowDownloadConfirmModal(false);
       setPendingDownloadData(null);
       setAcceptDownloadConfirm(false);
       setAcceptRedownloadConfirm(false);
 
-      // Un timeout del cliente NO significa necesariamente que la generación falló:
-      // el backend puede haber seguido procesando el llamado a AFIP y terminado OK.
-      const esTimeout = error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '');
+      // Cualquier error acá (timeout de cliente, 500 real, timeout de proxy/gateway
+      // cortando la conexión, etc.) puede corresponder a una generación que en
+      // realidad terminó bien del lado del servidor — no confiamos en el tipo de
+      // error para decidir, verificamos contra el backend antes de avisar "falló".
+      let posibleExito = false;
+      try {
+        const verificacion = await certificadosApi.validarDescarga({
+          marca: datosEnviados?.marca,
+          modelo: datosEnviados?.modelo,
+          numeroSerie: datosEnviados?.numeroSerie,
+        });
+        if (verificacion.yaDescargado && verificacion.fechaUltimaDescarga) {
+          const minutosDesdeUltima =
+            (Date.now() - new Date(verificacion.fechaUltimaDescarga).getTime()) / 60000;
+          posibleExito = minutosDesdeUltima < 2;
+        }
+      } catch (verifyError) {
+        // No se pudo verificar: por seguridad, tratamos como "posible éxito" en
+        // vez de asumir que falló, para no arriesgar una generación duplicada.
+        console.error('No se pudo verificar el resultado de la generación:', verifyError);
+        posibleExito = true;
+      }
 
-      if (esTimeout) {
-        const mensaje = 'La generación está tardando más de lo esperado y no pudimos confirmar el resultado. '
-          + 'Es posible que el certificado se haya generado igual del lado del servidor. '
-          + 'Antes de reintentar, revisá el historial para evitar generar uno duplicado.';
+      if (posibleExito) {
+        const mensaje = 'No pudimos confirmar el resultado de la generación, pero es posible que el certificado '
+          + 'se haya generado igual del lado del servidor. Antes de reintentar, revisá el historial para evitar '
+          + 'generar uno duplicado.';
         setDescargaError(mensaje);
         setGeneracionResultModal({ tipo: 'timeout', mensaje });
       } else {

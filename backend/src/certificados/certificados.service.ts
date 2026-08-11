@@ -78,6 +78,12 @@ export class CertificadosService {
         'El número de serie no puede tener más de 10 dígitos',
       );
     }
+    // Se declara afuera del try para poder consultarla desde el catch: si ya
+    // se llegó a crear, la generación en sí fue exitosa aunque algo posterior
+    // (ej. notificaciones, o un timeout de proxy) haya hecho fallar la respuesta HTTP.
+    let descarga: Awaited<
+      ReturnType<typeof this.descargasService.registrarDescarga>
+    > | undefined;
     try {
       this.logger.log(
         `Generando certificado para usuario ${userId}: ${marca} ${modelo} - ${numeroSerieNormalizado}`,
@@ -136,7 +142,7 @@ export class CertificadosService {
       }
 
       // Registrar descarga usando DescargasService
-      const descarga = await this.descargasService.registrarDescarga({
+      descarga = await this.descargasService.registrarDescarga({
         usuarioId: userId,
         controladorId: idCertificado,
         certificadoNombre: certificado.archivo_referencia,
@@ -145,40 +151,49 @@ export class CertificadosService {
       });
       this.logger.log(`Descarga registrada exitosamente: ${descarga.id}`);
 
-      // ⭐ Validar si la suma de descargas pendientes supera el notification_limit del mayorista
-      const idMayorista =
-        await this.descargasService.obtenerIdMayoristaPorUsuario(userId);
-      if (idMayorista != 1) {
-        const pendingDownloads =
-          await this.descargasService.contarDescargasPendientesMayorista(
-            idMayorista,
-          );
-        // ⭐ NUEVO: Obtener notification_limit desde la BD (usuario mayorista con rol=2)
-        const notificationLimit =
-          await this.descargasService.obtenerNotificationLimitMayorista(
-            idMayorista,
-          );
-
-        this.logger.warn(
-          `Cantidad de descargas pendientes del mayorista ${idMayorista}: ${pendingDownloads}`,
-        );
-        this.logger.warn(
-          `Límite de notificación configurado: ${notificationLimit}`,
-        );
-
-        if (pendingDownloads >= notificationLimit) {
-          this.logger.warn(
-            `El mayorista ${idMayorista} ha superado el límite configurado en notificaciones (${notificationLimit})`,
-          );
-          // Fire-and-forget: el email no debe bloquear la respuesta HTTP
-          this.descargasService
-            .notificarExcesoDescargasMayorista(idMayorista, pendingDownloads)
-            .catch((err) =>
-              this.logger.error(
-                `Error enviando notificación de exceso de descargas: ${err.message}`,
-              ),
+      // ⭐ Validar si la suma de descargas pendientes supera el notification_limit del mayorista.
+      // Best-effort: la generación (arriba) ya se completó y persistió — un fallo acá
+      // (ej. la consulta de notification_limit, o el envío de mail) no debe convertir
+      // una generación exitosa en un 500 para el cliente.
+      try {
+        const idMayorista =
+          await this.descargasService.obtenerIdMayoristaPorUsuario(userId);
+        if (idMayorista != 1) {
+          const pendingDownloads =
+            await this.descargasService.contarDescargasPendientesMayorista(
+              idMayorista,
             );
+          // ⭐ NUEVO: Obtener notification_limit desde la BD (usuario mayorista con rol=2)
+          const notificationLimit =
+            await this.descargasService.obtenerNotificationLimitMayorista(
+              idMayorista,
+            );
+
+          this.logger.warn(
+            `Cantidad de descargas pendientes del mayorista ${idMayorista}: ${pendingDownloads}`,
+          );
+          this.logger.warn(
+            `Límite de notificación configurado: ${notificationLimit}`,
+          );
+
+          if (pendingDownloads >= notificationLimit) {
+            this.logger.warn(
+              `El mayorista ${idMayorista} ha superado el límite configurado en notificaciones (${notificationLimit})`,
+            );
+            // Fire-and-forget: el email no debe bloquear la respuesta HTTP
+            this.descargasService
+              .notificarExcesoDescargasMayorista(idMayorista, pendingDownloads)
+              .catch((err) =>
+                this.logger.error(
+                  `Error enviando notificación de exceso de descargas: ${err.message}`,
+                ),
+              );
+          }
         }
+      } catch (notifError) {
+        this.logger.error(
+          `Error en validación de notification_limit (no afecta la generación ya completada): ${notifError.message}`,
+        );
       }
 
       return {
@@ -193,12 +208,22 @@ export class CertificadosService {
         error,
       );
 
-      // Registrar error en DescargasService
-      await this.descargasService.registrarErrorDescarga({
-        usuarioId: userId,
-        error: error.message,
-        ipOrigen: ip,
-      });
+      if (descarga) {
+        // La descarga ya se había registrado con éxito antes de que ocurriera este
+        // error (ej. falla en el bloque de notificaciones, o la respuesta HTTP se
+        // cortó por un timeout de proxy) — no es un error de generación real, así
+        // que no corresponde dejar un registro 'ERROR' en auditoría para esto.
+        this.logger.warn(
+          `Certificado y descarga ya registrados (descarga ${descarga.id}) pese al error posterior — no se registra como error de generación.`,
+        );
+      } else {
+        // Registrar error en DescargasService
+        await this.descargasService.registrarErrorDescarga({
+          usuarioId: userId,
+          error: error.message,
+          ipOrigen: ip,
+        });
+      }
 
       // Si ya es un error de negocio conocido (ej. límite alcanzado, datos inválidos),
       // ese mensaje sí es seguro para el usuario; cualquier otra falla (AFIP, red,
