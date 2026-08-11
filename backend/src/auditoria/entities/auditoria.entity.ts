@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { ApiProperty } from '@nestjs/swagger';
 import { User } from '../../users/entities/user.entity';
 
@@ -12,11 +18,15 @@ export class Auditoria {
   @Column({ type: 'integer', nullable: true })
   actor_id: number;
 
-  @ApiProperty({ description: 'Acción realizada (CREATE, UPDATE, DELETE, etc.)' })
+  @ApiProperty({
+    description: 'Acción realizada (CREATE, UPDATE, DELETE, etc.)',
+  })
   @Column({ type: 'text' })
   accion: string;
 
-  @ApiProperty({ description: 'Tipo de entidad afectada (User, Certificado, etc.)' })
+  @ApiProperty({
+    description: 'Tipo de entidad afectada (User, Certificado, etc.)',
+  })
   @Column({ type: 'text' })
   objetivo_tipo: string;
 
@@ -36,7 +46,11 @@ export class Auditoria {
   ip: string;
 
   @ApiProperty({ description: 'Fecha y hora de la acción' })
-  @Column({ type: 'timestamp', nullable: true, default: () => 'CURRENT_TIMESTAMP' })
+  @Column({
+    type: 'timestamp',
+    nullable: true,
+    default: () => 'CURRENT_TIMESTAMP',
+  })
   timestamp: Date;
 
   // Relación con User

@@ -12,7 +12,7 @@ export class LoggerService {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: false
+      hour12: false,
     });
     return formatter.format(new Date());
   }
@@ -24,13 +24,19 @@ export class LoggerService {
 
   error(context: string, message: string, error?: any) {
     const timestamp = this.getTimestampArgentina();
-    console.error(`[${timestamp}] [ERROR] [${context}] ${message}`, error ?? '');
+    console.error(
+      `[${timestamp}] [ERROR] [${context}] ${message}`,
+      error ?? '',
+    );
   }
 
   debug(context: string, message: string, data?: any) {
     if (process.env.NODE_ENV !== 'production') {
       const timestamp = this.getTimestampArgentina();
-      console.debug(`[${timestamp}] [DEBUG] [${context}] ${message}`, data ?? '');
+      console.debug(
+        `[${timestamp}] [DEBUG] [${context}] ${message}`,
+        data ?? '',
+      );
     }
   }
 }

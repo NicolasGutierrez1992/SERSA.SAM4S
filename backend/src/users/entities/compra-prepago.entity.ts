@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { User } from './user.entity';
 
@@ -17,8 +23,9 @@ export class CompraPrepago {
   usuario: User;
 
   @ApiPropertyOptional({
-    description: 'Número de factura de la compra (null = saldo migrado sin factura)',
-    example: '2025-001'
+    description:
+      'Número de factura de la compra (null = saldo migrado sin factura)',
+    example: '2025-001',
   })
   @Column({ type: 'varchar', length: 255, nullable: true })
   numero_factura: string | null;
@@ -27,7 +34,9 @@ export class CompraPrepago {
   @Column({ type: 'integer' })
   cantidad: number;
 
-  @ApiProperty({ description: 'Cantidad de descargas ya consumidas de este lote' })
+  @ApiProperty({
+    description: 'Cantidad de descargas ya consumidas de este lote',
+  })
   @Column({ type: 'integer', default: 0 })
   cantidad_usada: number;
 

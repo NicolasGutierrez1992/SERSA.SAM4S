@@ -1,21 +1,28 @@
-import { Entity, PrimaryColumn, Column, Index, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryColumn,
+  Column,
+  Index,
+  CreateDateColumn,
+  UpdateDateColumn,
+} from 'typeorm';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 @Entity('afip_files')
 @Index(['file_type', 'activo'])
 @Index(['created_at'])
 export class AfipFile {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'ID único del archivo AFIP',
-    example: 'ROOT_RTI'
+    example: 'ROOT_RTI',
   })
   @PrimaryColumn({ type: 'varchar', length: 50 })
   id: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Tipo de archivo AFIP',
     example: 'ROOT_RTI',
-    enum: ['ROOT_RTI', 'CERT_BACKUP']
+    enum: ['ROOT_RTI', 'CERT_BACKUP'],
   })
   @Column({ type: 'varchar', length: 20 })
   file_type: string;
@@ -26,40 +33,40 @@ export class AfipFile {
   @Column({ type: 'text' })
   file_data: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Nombre original del archivo',
-    example: 'Root_RTI.txt'
+    example: 'Root_RTI.txt',
   })
   @Column({ type: 'varchar', length: 255 })
   file_name: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Tamaño del archivo en bytes',
-    example: 2048
+    example: 2048,
   })
   @Column({ type: 'int', nullable: true })
   file_size?: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Indica si el archivo está activo',
-    example: true
+    example: true,
   })
   @Column({ type: 'boolean', default: true })
   activo: boolean;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Fecha de creación',
   })
   @CreateDateColumn({ type: 'timestamp' })
   created_at: Date;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Fecha de última actualización',
   })
   @UpdateDateColumn({ type: 'timestamp' })
   updated_at: Date;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Fecha de carga del archivo',
   })
   @Column({ type: 'timestamp', nullable: true })

@@ -17,7 +17,11 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { AppSettingsService } from '../services/app-settings.service';
-import { AuditoriaService, AuditoriaAccion, AuditoriaEntidad } from '../../auditoria/auditoria.service';
+import {
+  AuditoriaService,
+  AuditoriaAccion,
+  AuditoriaEntidad,
+} from '../../auditoria/auditoria.service';
 import { JwtAuthGuard } from '../../auth/guards/auth.guards';
 import { RequireAdmin } from '../../auth/decorators/roles.decorator';
 import { CurrentUser } from '../../auth/decorators/current-user.decorator';
@@ -66,11 +70,12 @@ export class AppSettingsController {
           id: 'NOTIFICATION_LIMIT',
           value: '100',
           description: 'Límite de descargas pendientes',
-          data_type: 'number'
-        }
+          data_type: 'number',
+        },
       ],
     },
-  })  async obtenerTodas(): Promise<AllSettingsResponseDto[]> {
+  })
+  async obtenerTodas(): Promise<AllSettingsResponseDto[]> {
     return await this.appSettingsService.obtenerTodosLosSettingsCompleto();
   }
   /**
@@ -126,7 +131,9 @@ export class AppSettingsController {
     @CurrentUser('id') userId: number,
     @Req() req: Request,
   ): Promise<{ mensaje: string }> {
-    const anterior = await this.appSettingsService.obtenerInfoSetting(key).catch(() => null);
+    const anterior = await this.appSettingsService
+      .obtenerInfoSetting(key)
+      .catch(() => null);
     await this.appSettingsService.actualizarSetting(key, dto.value);
 
     const ip = req.ip || (req as any).connection?.remoteAddress;
@@ -153,7 +160,8 @@ export class AppSettingsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Obtener estadísticas del caché',
-    description: 'Retorna información del estado actual del caché de configuraciones.',
+    description:
+      'Retorna información del estado actual del caché de configuraciones.',
   })
   @ApiResponse({
     status: 200,

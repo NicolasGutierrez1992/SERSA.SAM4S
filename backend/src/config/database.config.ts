@@ -2,7 +2,9 @@ import { registerAs } from '@nestjs/config';
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 
-export const getDatabaseConfig = (configService: ConfigService): TypeOrmModuleOptions => ({
+export const getDatabaseConfig = (
+  configService: ConfigService,
+): TypeOrmModuleOptions => ({
   type: 'postgres',
   host: configService.get('DB_HOST', 'localhost'),
   port: configService.get('DB_PORT', 5432),
@@ -12,7 +14,10 @@ export const getDatabaseConfig = (configService: ConfigService): TypeOrmModuleOp
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   synchronize: true, // Habilitado para crear tablas automáticamente en todas las envs
   logging: configService.get('NODE_ENV') === 'development',
-  ssl: configService.get('NODE_ENV') === 'production' ? { rejectUnauthorized: false } : false,
+  ssl:
+    configService.get('NODE_ENV') === 'production'
+      ? { rejectUnauthorized: false }
+      : false,
 });
 
 export default registerAs('database', () => ({
@@ -25,7 +30,10 @@ export default registerAs('database', () => ({
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   synchronize: true, // Habilitado para crear tablas automáticamente
   logging: process.env.NODE_ENV === 'development',
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl:
+    process.env.NODE_ENV === 'production'
+      ? { rejectUnauthorized: false }
+      : false,
 }));
 
 // TODO: Descomentar cuando se instale TypeORM

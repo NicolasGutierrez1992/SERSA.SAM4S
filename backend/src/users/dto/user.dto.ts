@@ -1,5 +1,18 @@
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
-import { IsString, IsEmail, IsNotEmpty, IsOptional, IsEnum, IsNumber, Length, Matches, IsPositive, Min, Max, IsBoolean } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsEnum,
+  IsNumber,
+  Length,
+  Matches,
+  IsPositive,
+  Min,
+  Max,
+  IsBoolean,
+} from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 
 export enum UserRole {
@@ -56,12 +69,15 @@ export class CreateUserDto {
   })
   @IsString()
   @IsNotEmpty({ message: 'La contraseña temporal es obligatoria' })
-  @Length(6, 100, { message: 'La contraseña debe tener entre 6 y 100 caracteres' })
+  @Length(6, 100, {
+    message: 'La contraseña debe tener entre 6 y 100 caracteres',
+  })
   password: string;
   @ApiProperty({
     example: 2,
     enum: UserRole,
-    description: 'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación, 5=Técnico)',
+    description:
+      'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación, 5=Técnico)',
   })
   @IsEnum(UserRole, { message: 'El rol debe ser válido' })
   @Type(() => Number)
@@ -104,13 +120,16 @@ export class CreateUserDto {
   @IsOptional()
   @IsNumber({}, { message: 'El ID del usuario debe ser un número' })
   @Type(() => Number)
-  created_by?: number;  @ApiPropertyOptional({
-    example: "1112345678",
+  created_by?: number;
+  @ApiPropertyOptional({
+    example: '1112345678',
     description: 'Numero de celular para enviar confirmacion via Whatsapp',
   })
   @IsOptional()
   @IsString({ message: 'Debe ser un número de celular válido' })
-  @Length(10, 15, { message: 'El número de celular debe tener entre 10 y 15 caracteres' })
+  @Length(10, 15, {
+    message: 'El número de celular debe tener entre 10 y 15 caracteres',
+  })
   celular?: string;
 
   @ApiPropertyOptional({
@@ -124,7 +143,8 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({
     example: 150,
-    description: 'Límite de notificación de descargas pendientes (solo para mayoristas, rol=2). Default: 100',
+    description:
+      'Límite de notificación de descargas pendientes (solo para mayoristas, rol=2). Default: 100',
   })
   @IsOptional()
   @IsNumber({}, { message: 'El límite de notificación debe ser un número' })
@@ -168,12 +188,15 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   })
   @IsOptional()
   @IsString()
-  @Length(6, 100, { message: 'La contraseña debe tener entre 6 y 100 caracteres' })
+  @Length(6, 100, {
+    message: 'La contraseña debe tener entre 6 y 100 caracteres',
+  })
   password?: string;
   @ApiPropertyOptional({
     example: 1,
     enum: UserRole,
-    description: 'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación, 5=Técnico)',
+    description:
+      'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación, 5=Técnico)',
   })
   @IsOptional()
   @IsEnum(UserRole, { message: 'El rol debe ser válido' })
@@ -216,15 +239,18 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @IsOptional()
   @IsBoolean({ message: 'Debe ser un valor booleano' })
   must_change_password?: boolean;
-   
+
   @IsOptional()
   @IsString({ message: 'Debe ser un número de celular válido' })
-  @Length(10, 15, { message: 'El número de celular debe tener entre 10 y 15 caracteres' })
+  @Length(10, 15, {
+    message: 'El número de celular debe tener entre 10 y 15 caracteres',
+  })
   celular?: string;
 
   @ApiPropertyOptional({
     example: 150,
-    description: 'Límite de notificación de descargas pendientes (solo para mayoristas, rol=2). Default: 100',
+    description:
+      'Límite de notificación de descargas pendientes (solo para mayoristas, rol=2). Default: 100',
   })
   @IsOptional()
   @IsNumber({}, { message: 'El límite de notificación debe ser un número' })
@@ -287,19 +313,28 @@ export class QueryUsersDto {
 }
 
 export class CreateCompraPrepagoDto {
-  @ApiProperty({ example: 4, description: 'Cantidad de descargas compradas en este lote' })
+  @ApiProperty({
+    example: 4,
+    description: 'Cantidad de descargas compradas en este lote',
+  })
   @IsNumber()
   @IsPositive({ message: 'La cantidad debe ser mayor a 0' })
   cantidad: number;
 
-  @ApiPropertyOptional({ example: '2025-001', description: 'Número de factura de la compra' })
+  @ApiPropertyOptional({
+    example: '2025-001',
+    description: 'Número de factura de la compra',
+  })
   @IsOptional()
   @IsString()
   numero_factura?: string;
 }
 
 export class UpdateCompraPrepagoDto {
-  @ApiPropertyOptional({ example: '2025-001', description: 'Número de factura de la compra' })
+  @ApiPropertyOptional({
+    example: '2025-001',
+    description: 'Número de factura de la compra',
+  })
   @IsOptional()
   @IsString()
   numero_factura?: string;

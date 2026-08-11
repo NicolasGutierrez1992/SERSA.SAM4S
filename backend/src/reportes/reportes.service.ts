@@ -2,12 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
-import { 
-  QueryReporteCertificadosDto, 
-  MetricasDto, 
-  ReporteCertificados, 
+import {
+  QueryReporteCertificadosDto,
+  MetricasDto,
+  ReporteCertificados,
   MetricasDashboard,
-  FormatoReporte 
+  FormatoReporte,
 } from './dto/reportes.dto';
 
 @Injectable()
@@ -15,7 +15,10 @@ export class ReportesService {
   constructor(
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
-  ) {}async getReporteCertificados(queryDto: QueryReporteCertificadosDto): Promise<ReporteCertificados> {
+  ) {}
+  async getReporteCertificados(
+    queryDto: QueryReporteCertificadosDto,
+  ): Promise<ReporteCertificados> {
     // TODO: Implementar cuando se active TypeORM
     return {
       resumen: {
@@ -28,17 +31,20 @@ export class ReportesService {
       por_mayorista: [],
       por_distribuidor: [],
     };
-  }  async getMetricasDashboard(metricasDto: MetricasDto): Promise<MetricasDashboard> {
+  }
+  async getMetricasDashboard(
+    metricasDto: MetricasDto,
+  ): Promise<MetricasDashboard> {
     const { dias } = metricasDto;
-    
+
     const [
       descargasHoy,
-      descargasSemana, 
+      descargasSemana,
       descargasMes,
       usuariosActivos,
       topMayoristas,
       topDistribuidores,
-      descargasPendientes
+      descargasPendientes,
     ] = await Promise.all([
       this.getDescargasEnPeriodo(1),
       this.getDescargasEnPeriodo(7),
@@ -64,15 +70,17 @@ export class ReportesService {
   private async getDescargasEnPeriodo(dias: number): Promise<number> {
     // TODO: Implementar cuando se active TypeORM
     return 0;
-  }  private async getUsuariosActivos() {
+  }
+  private async getUsuariosActivos() {
     const [total, mayoristas, distribuidores] = await Promise.all([
-      this.userRepository.count({ where: { status: 1 } }),      
+      this.userRepository.count({ where: { status: 1 } }),
       this.userRepository.count({ where: { status: 1, rol: 2 } }), // MAYORISTA
       this.userRepository.count({ where: { status: 1, rol: 3 } }), // DISTRIBUIDOR
     ]);
 
     return { total, mayoristas, distribuidores };
-  }private async getResumenDescargas(baseQuery: any) {
+  }
+  private async getResumenDescargas(baseQuery: any) {
     return {
       total_descargas: 100,
       total_usuarios_activos: 45,
@@ -89,7 +97,7 @@ export class ReportesService {
         total_descargas: 50,
         descargas_pendientes: 10,
         distribuidores_activos: 5,
-      }
+      },
     ];
   }
   private async getDescargasPorDistribuidor(baseQuery: any) {
@@ -102,7 +110,7 @@ export class ReportesService {
         descargas_pendientes: 5,
         limite_descargas: 10,
         porcentaje_limite_usado: 50,
-      }
+      },
     ];
   }
   private async getTopMayoristas() {
@@ -113,8 +121,18 @@ export class ReportesService {
   }
   private async getTopDistribuidores() {
     return [
-      { id: 1, nombre: 'Distribuidor A', mayorista_nombre: 'Mayorista A', total_descargas: 50 },
-      { id: 2, nombre: 'Distribuidor B', mayorista_nombre: 'Mayorista B', total_descargas: 40 },
+      {
+        id: 1,
+        nombre: 'Distribuidor A',
+        mayorista_nombre: 'Mayorista A',
+        total_descargas: 50,
+      },
+      {
+        id: 2,
+        nombre: 'Distribuidor B',
+        mayorista_nombre: 'Mayorista B',
+        total_descargas: 40,
+      },
     ];
   }
 
@@ -124,10 +142,10 @@ export class ReportesService {
 
   async exportToCsv(data: any[], headers: string[]): Promise<string> {
     const csvHeaders = headers.join(',') + '\n';
-    const csvRows = data.map(row => 
-      headers.map(header => `"${row[header] || ''}"`).join(',')
-    ).join('\n');
-    
+    const csvRows = data
+      .map((row) => headers.map((header) => `"${row[header] || ''}"`).join(','))
+      .join('\n');
+
     return csvHeaders + csvRows;
   }
 

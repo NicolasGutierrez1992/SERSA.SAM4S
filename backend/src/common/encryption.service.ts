@@ -11,14 +11,18 @@ export class EncryptionService {
   constructor(private configService: ConfigService) {
     // Obtener la clave de encriptación desde variables de entorno
     const keyString = this.configService.get<string>('ENCRYPTION_KEY');
-    
+
     if (!keyString) {
       this.logger.warn(
         'ENCRYPTION_KEY no configurada en variables de entorno. ' +
-        'Generando clave temporal. Para producción, configure ENCRYPTION_KEY.'
+          'Generando clave temporal. Para producción, configure ENCRYPTION_KEY.',
       );
       // En desarrollo, generar una clave temporal (NO usar en producción)
-      this.encryptionKey = crypto.scryptSync('default-key-change-in-production', 'salt', 32);
+      this.encryptionKey = crypto.scryptSync(
+        'default-key-change-in-production',
+        'salt',
+        32,
+      );
     } else {
       // La clave debe tener exactamente 32 bytes (256 bits) para AES-256
       if (keyString.length === 64) {
@@ -35,11 +39,15 @@ export class EncryptionService {
    * Encriptar datos
    * @param data Datos a encriptar (string o Buffer)
    * @returns Datos encriptados en formato base64
-   */  encrypt(data: string | Buffer): string {
+   */ encrypt(data: string | Buffer): string {
     try {
       const iv = crypto.randomBytes(16);
-      const cipher = crypto.createCipheriv(this.algorithm, this.encryptionKey, iv);
-      
+      const cipher = crypto.createCipheriv(
+        this.algorithm,
+        this.encryptionKey,
+        iv,
+      );
+
       let encrypted: Buffer;
       if (typeof data === 'string') {
         encrypted = cipher.update(data, 'utf8');
@@ -47,7 +55,7 @@ export class EncryptionService {
         encrypted = cipher.update(data);
       }
       encrypted = Buffer.concat([encrypted, cipher.final()]);
-      
+
       // Retornar IV + datos encriptados en base64
       const result = Buffer.concat([iv, encrypted]).toString('base64');
       return result;
@@ -65,16 +73,20 @@ export class EncryptionService {
   decrypt(encryptedData: string): string {
     try {
       const buffer = Buffer.from(encryptedData, 'base64');
-      
+
       // Los primeros 16 bytes son el IV
       const iv = buffer.slice(0, 16);
       const encrypted = buffer.slice(16);
-      
-      const decipher = crypto.createDecipheriv(this.algorithm, this.encryptionKey, iv);
-      
+
+      const decipher = crypto.createDecipheriv(
+        this.algorithm,
+        this.encryptionKey,
+        iv,
+      );
+
       let decrypted = decipher.update(encrypted);
       decrypted = Buffer.concat([decrypted, decipher.final()]);
-      
+
       return decrypted.toString('utf8');
     } catch (error) {
       this.logger.error('Error desencriptando datos', error);
@@ -90,16 +102,20 @@ export class EncryptionService {
   decryptToBuffer(encryptedData: string): Buffer {
     try {
       const buffer = Buffer.from(encryptedData, 'base64');
-      
+
       // Los primeros 16 bytes son el IV
       const iv = buffer.slice(0, 16);
       const encrypted = buffer.slice(16);
-      
-      const decipher = crypto.createDecipheriv(this.algorithm, this.encryptionKey, iv);
-      
+
+      const decipher = crypto.createDecipheriv(
+        this.algorithm,
+        this.encryptionKey,
+        iv,
+      );
+
       let decrypted = decipher.update(encrypted);
       decrypted = Buffer.concat([decrypted, decipher.final()]);
-      
+
       return decrypted;
     } catch (error) {
       this.logger.error('Error desencriptando datos a Buffer', error);

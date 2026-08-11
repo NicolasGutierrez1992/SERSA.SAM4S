@@ -3,7 +3,7 @@
 export enum EstadoDescarga {
   PENDIENTE_FACTURAR = 'Pendiente de Facturar',
   FACTURADO = 'Facturado',
-  COBRADO = 'Cobrado'
+  COBRADO = 'Cobrado',
 }
 
 // Interface base para Descarga que funciona tanto en servicios como controladores

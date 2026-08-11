@@ -21,19 +21,20 @@ export class AppService {
       timestamp: new Date().toISOString(),
       timestamp_argentina: this.timezoneService.formatDateTimeFull(new Date()),
       version: '1.0.0',
-      message: 'SERSA Backend running in development mode',      services: {
+      message: 'SERSA Backend running in development mode',
+      services: {
         database: 'connected', // PostgreSQL active with TypeORM
         afip: 'production_ready', // Real AFIP services active
         auth: 'active',
-        api: 'active'
+        api: 'active',
       },
       endpoints: {
         api_docs: '/api/docs',
         health: '/health',
         auth: '/api/auth',
         users: '/api/users',
-        certificados: '/api/certificados'
-      }
+        certificados: '/api/certificados',
+      },
     };
   }
 }

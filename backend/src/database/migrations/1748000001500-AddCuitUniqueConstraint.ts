@@ -1,6 +1,8 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddCuitUniqueConstraint1748000001500 implements MigrationInterface {
+export class AddCuitUniqueConstraint1748000001500
+  implements MigrationInterface
+{
   public async up(queryRunner: QueryRunner): Promise<void> {
     // ON CONFLICT (cuit) en SeedBaseData requiere un índice único sobre cuit
     await queryRunner.query(`

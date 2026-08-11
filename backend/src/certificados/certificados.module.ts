@@ -26,8 +26,24 @@ import { AuditoriaModule } from '../auditoria/auditoria.module';
     UsersModule,
     AuditoriaModule,
   ],
-  controllers: [CertificadosController, CertificadoMaestroController, CertificadoAdminController],
-  providers: [CertificadosService, CertificadoMaestroService, EncryptionService, CertificadoMigrationService, TimezoneService],
-  exports: [CertificadosService, CertificadoMaestroService, EncryptionService, CertificadoMigrationService, TimezoneService],
+  controllers: [
+    CertificadosController,
+    CertificadoMaestroController,
+    CertificadoAdminController,
+  ],
+  providers: [
+    CertificadosService,
+    CertificadoMaestroService,
+    EncryptionService,
+    CertificadoMigrationService,
+    TimezoneService,
+  ],
+  exports: [
+    CertificadosService,
+    CertificadoMaestroService,
+    EncryptionService,
+    CertificadoMigrationService,
+    TimezoneService,
+  ],
 })
 export class CertificadosModule {}

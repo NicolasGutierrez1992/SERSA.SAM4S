@@ -6,7 +6,7 @@ export enum EstadoDescarga {
   FACTURADO = 'Facturado',
   COBRADO = 'Cobrado',
   GARANTIA = 'Garantia',
-  BONIFICADO = 'Bonificado'
+  BONIFICADO = 'Bonificado',
 }
 
 // Interface base para Descarga que funciona tanto en servicios como controladores

@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AppSetting } from '../entities/app-setting.entity';
@@ -53,7 +58,9 @@ export class AppSettingsService {
         this.settingsCache[setting.id] = setting.value;
       });
       this.lastCacheUpdate = new Date();
-      this.logger.debug(`Cache actualizado con ${settings.length} configuraciones`);
+      this.logger.debug(
+        `Cache actualizado con ${settings.length} configuraciones`,
+      );
     } catch (error) {
       this.logger.error('Error recargando cache', error);
     }
@@ -76,7 +83,9 @@ export class AppSettingsService {
       }
 
       // Si no está en caché, obtener de BD
-      const setting = await this.appSettingRepository.findOne({ where: { id: key } });
+      const setting = await this.appSettingRepository.findOne({
+        where: { id: key },
+      });
       if (!setting) {
         throw new NotFoundException(`Configuración ${key} no encontrada`);
       }
@@ -132,7 +141,9 @@ export class AppSettingsService {
    */
   async obtenerInfoSetting(key: string): Promise<AppSettingValue> {
     try {
-      const setting = await this.appSettingRepository.findOne({ where: { id: key } });
+      const setting = await this.appSettingRepository.findOne({
+        where: { id: key },
+      });
       if (!setting) {
         throw new NotFoundException(`Configuración ${key} no encontrada`);
       }
@@ -145,7 +156,10 @@ export class AppSettingsService {
         updated_at: setting.updated_at,
       };
     } catch (error) {
-      this.logger.error(`Error obteniendo información de setting ${key}`, error);
+      this.logger.error(
+        `Error obteniendo información de setting ${key}`,
+        error,
+      );
       throw error;
     }
   }
@@ -159,7 +173,9 @@ export class AppSettingsService {
         throw new BadRequestException('Key y valor son requeridos');
       }
 
-      const setting = await this.appSettingRepository.findOne({ where: { id: key } });
+      const setting = await this.appSettingRepository.findOne({
+        where: { id: key },
+      });
       if (!setting) {
         throw new NotFoundException(`Configuración ${key} no encontrada`);
       }
@@ -191,7 +207,9 @@ export class AppSettingsService {
         throw new BadRequestException('Key es requerida');
       }
 
-      const existente = await this.appSettingRepository.findOne({ where: { id: key } });
+      const existente = await this.appSettingRepository.findOne({
+        where: { id: key },
+      });
       if (existente) {
         throw new BadRequestException(`Configuración ${key} ya existe`);
       }
@@ -255,7 +273,7 @@ export class AppSettingsService {
 
   /**
    * Obtener estadísticas del caché
-   */  /**
+   */ /**
    * Obtener todos los settings como array con información completa
    */
   async obtenerTodosLosSettingsCompleto(): Promise<AppSettingValue[]> {
@@ -267,7 +285,7 @@ export class AppSettingsService {
 
       // Obtener datos completos desde BD
       const settings = await this.appSettingRepository.find();
-      return settings.map(setting => ({
+      return settings.map((setting) => ({
         id: setting.id,
         value: setting.value,
         description: setting.description,

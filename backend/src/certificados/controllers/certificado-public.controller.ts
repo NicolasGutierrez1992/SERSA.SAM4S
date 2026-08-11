@@ -69,7 +69,8 @@ export class CertificadoPublicController {
   })
   async obtenerEstado(): Promise<CertificateStatusPublicDto> {
     try {
-      const existe = await this.certificadoMaestroService.existeCertificadoMaestro();
+      const existe =
+        await this.certificadoMaestroService.existeCertificadoMaestro();
 
       if (!existe) {
         return {
@@ -78,7 +79,8 @@ export class CertificadoPublicController {
         };
       }
 
-      const estado = await this.certificadoMaestroService.obtenerEstadoExpiración();
+      const estado =
+        await this.certificadoMaestroService.obtenerEstadoExpiración();
 
       let mensaje = '';
       switch (estado.estado) {

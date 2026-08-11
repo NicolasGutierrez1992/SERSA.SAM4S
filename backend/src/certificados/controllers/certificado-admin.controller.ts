@@ -52,7 +52,9 @@ interface AdminDashboardDto {
 export class CertificadoAdminController {
   private readonly logger = new Logger(CertificadoAdminController.name);
 
-  constructor(private readonly certificadoMaestroService: CertificadoMaestroService) {}
+  constructor(
+    private readonly certificadoMaestroService: CertificadoMaestroService,
+  ) {}
 
   /**
    * Obtener estado del certificado maestro
@@ -80,7 +82,8 @@ export class CertificadoAdminController {
   })
   async obtenerStatus(): Promise<CertificateStatusDto> {
     try {
-      const info = await this.certificadoMaestroService.obtenerInfoCertificadoMaestro();
+      const info =
+        await this.certificadoMaestroService.obtenerInfoCertificadoMaestro();
 
       if (!info.existe) {
         return {
@@ -88,7 +91,8 @@ export class CertificadoAdminController {
         };
       }
 
-      const estado = await this.certificadoMaestroService.obtenerEstadoExpiración();
+      const estado =
+        await this.certificadoMaestroService.obtenerEstadoExpiración();
 
       return {
         existe: true,
@@ -144,7 +148,8 @@ export class CertificadoAdminController {
   async obtenerDashboard(): Promise<AdminDashboardDto> {
     try {
       const statusCert = await this.obtenerStatus();
-      const existe = await this.certificadoMaestroService.existeCertificadoMaestro();
+      const existe =
+        await this.certificadoMaestroService.existeCertificadoMaestro();
 
       const alertas: string[] = [];
 

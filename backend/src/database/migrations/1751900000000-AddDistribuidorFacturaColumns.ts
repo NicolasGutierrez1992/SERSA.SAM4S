@@ -1,6 +1,8 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class AddDistribuidorFacturaColumns1751900000000 implements MigrationInterface {
+export class AddDistribuidorFacturaColumns1751900000000
+  implements MigrationInterface
+{
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       ALTER TABLE descargas ADD COLUMN IF NOT EXISTS numero_factura_distribuidor VARCHAR(255);

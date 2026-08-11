@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, IsDateString, IsEnum } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsDateString,
+  IsEnum,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export enum AuditoriaAccion {
@@ -17,7 +23,7 @@ export enum AuditoriaAccion {
 export enum AuditoriaEntidad {
   USER = 'User',
   CERTIFICADO = 'Certificado',
-  DESCARGA = 'Descarga', 
+  DESCARGA = 'Descarga',
   NOTIFICACION = 'Notificacion',
 }
 

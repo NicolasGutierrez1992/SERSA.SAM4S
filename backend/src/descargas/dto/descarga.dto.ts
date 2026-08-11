@@ -1,5 +1,16 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsEnum, IsUUID, IsNumber, IsDateString, Min, Max, Matches, isString } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsUUID,
+  IsNumber,
+  IsDateString,
+  Min,
+  Max,
+  Matches,
+  isString,
+} from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { EstadoDescarga } from '../../shared/types';
 
@@ -7,54 +18,57 @@ import { EstadoDescarga } from '../../shared/types';
 export { EstadoDescarga };
 
 export class CreateDescargaDto {
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'ID del controlador fiscal (opcional)',
-    example: 'CTRL001234'
+    example: 'CTRL001234',
   })
   @IsOptional()
   @IsString()
   controladorId?: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Marca del controlador (siempre debe ser "SH")',
     example: 'SH',
-    enum: ['SH']
+    enum: ['SH'],
   })
   @IsString()
   @IsEnum(['SH'], { message: 'La marca debe ser "SH"' })
   marca: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Modelo del controlador (IA o RA)',
     example: 'IA',
-    enum: ['IA', 'RA']
+    enum: ['IA', 'RA'],
   })
   @IsString()
   @IsEnum(['IA', 'RA'], { message: 'El modelo debe ser "IA" o "RA"' })
   modelo: string;
 
-  @ApiProperty({ 
-    description: 'Número de serie del controlador (hasta 10 dígitos numéricos, se completará con ceros a la izquierda)',
+  @ApiProperty({
+    description:
+      'Número de serie del controlador (hasta 10 dígitos numéricos, se completará con ceros a la izquierda)',
     example: '12345678',
-    pattern: '^\\d{1,10}$'
+    pattern: '^\\d{1,10}$',
   })
   @IsString()
-  @Matches(/^\d{1,10}$/, { message: 'El número de serie debe contener entre 1 y 10 dígitos numéricos' })
+  @Matches(/^\d{1,10}$/, {
+    message: 'El número de serie debe contener entre 1 y 10 dígitos numéricos',
+  })
   numeroSerie: string;
 }
 
 export class UpdateEstadoDescargaDto {
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Nuevo estado mayorista',
-    enum: EstadoDescarga
+    enum: EstadoDescarga,
   })
   @IsOptional()
   @IsEnum(EstadoDescarga)
   estadoMayorista?: EstadoDescarga;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Nuevo estado distribuidor (solo admin)',
-    enum: EstadoDescarga
+    enum: EstadoDescarga,
   })
   @IsOptional()
   @IsEnum(EstadoDescarga)
@@ -62,7 +76,7 @@ export class UpdateEstadoDescargaDto {
 
   @ApiPropertyOptional({
     description: 'Número de factura (solo para estado Facturado)',
-    example: '2025-001'
+    example: '2025-001',
   })
   @IsOptional()
   @IsString()
@@ -70,23 +84,25 @@ export class UpdateEstadoDescargaDto {
 
   @ApiPropertyOptional({
     description: 'Referencia de pago (solo para estado Cobrado)',
-    example: 'REF-123456'
+    example: 'REF-123456',
   })
   @IsOptional()
   @IsString()
   referencia_pago?: string;
 
   @ApiPropertyOptional({
-    description: 'Número de factura del distribuidor (solo para estadoDistribuidor = Facturado)',
-    example: '2025-001'
+    description:
+      'Número de factura del distribuidor (solo para estadoDistribuidor = Facturado)',
+    example: '2025-001',
   })
   @IsOptional()
   @IsString()
   numero_factura_distribuidor?: string;
 
   @ApiPropertyOptional({
-    description: 'Referencia de pago del distribuidor (solo para estadoDistribuidor = Cobrado)',
-    example: 'REF-123456'
+    description:
+      'Referencia de pago del distribuidor (solo para estadoDistribuidor = Cobrado)',
+    example: 'REF-123456',
   })
   @IsOptional()
   @IsString()
@@ -94,43 +110,49 @@ export class UpdateEstadoDescargaDto {
 }
 
 export class QueryDescargasDto {
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Página',
-    example: 1
+    example: 1,
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   page?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Límite de resultados',
-    example: 50
+    example: 50,
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   limit?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Fecha desde (YYYY-MM-DD)',
-    example: '2024-01-01'
+    example: '2024-01-01',
   })
   @IsOptional()
-  @IsDateString({}, { message: 'La fecha debe tener formato válido (YYYY-MM-DD)' })
+  @IsDateString(
+    {},
+    { message: 'La fecha debe tener formato válido (YYYY-MM-DD)' },
+  )
   fechaDesde?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Fecha hasta (YYYY-MM-DD)',
-    example: '2024-12-31'
+    example: '2024-12-31',
   })
   @IsOptional()
-  @IsDateString({}, { message: 'La fecha debe tener formato válido (YYYY-MM-DD)' })
+  @IsDateString(
+    {},
+    { message: 'La fecha debe tener formato válido (YYYY-MM-DD)' },
+  )
   fechaHasta?: string;
-  
-  @ApiPropertyOptional({ 
+
+  @ApiPropertyOptional({
     description: 'Mes de descarga',
-    example: 1
+    example: 1,
   })
   @IsOptional()
   @Type(() => Number)
@@ -139,9 +161,9 @@ export class QueryDescargasDto {
   @Max(12)
   mes?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Año de descarga',
-    example: 2025
+    example: 2025,
   })
   @IsOptional()
   @Type(() => Number)
@@ -150,42 +172,42 @@ export class QueryDescargasDto {
   @Max(2100)
   anio?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'ID del controlador',
-    example: 'CTRL001234'
+    example: 'CTRL001234',
   })
   @IsOptional()
   @IsString()
   controladorId?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'CUIT del usuario',
-    example: '20366299913'
+    example: '20366299913',
   })
   @IsOptional()
   @IsString()
   cuit?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'ID del mayorista',
-    example: 1
+    example: 1,
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   idMayorista?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Estado de facturación mayorista',
-    example: 'Pendiente de Facturar'
+    example: 'Pendiente de Facturar',
   })
   @IsOptional()
   @IsString()
   estadoMayorista?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Estado de facturación distribuidor',
-    example: 'Pendiente de Facturar'
+    example: 'Pendiente de Facturar',
   })
   @IsOptional()
   @IsString()
@@ -193,7 +215,7 @@ export class QueryDescargasDto {
 
   @ApiPropertyOptional({
     example: 1,
-    description: 'Rol del usuario para filtrado inteligente de estados'
+    description: 'Rol del usuario para filtrado inteligente de estados',
   })
   @IsOptional()
   @Type(() => Number)
@@ -202,7 +224,7 @@ export class QueryDescargasDto {
 
   @ApiPropertyOptional({
     example: 'SH',
-    description: 'Marca del controlador'
+    description: 'Marca del controlador',
   })
   @IsOptional()
   @IsString()
@@ -210,27 +232,27 @@ export class QueryDescargasDto {
 }
 
 export class DownloadResponseDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'ID único de la descarga',
-    example: 'uuid-123-456-789'
+    example: 'uuid-123-456-789',
   })
   downloadId: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Nombre del certificado generado',
-    example: 'Certificado_CTRL001234_20241028.pem'
+    example: 'Certificado_CTRL001234_20241028.pem',
   })
   filename: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Tamaño del archivo en bytes',
-    example: 2048
+    example: 2048,
   })
   size: number;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Checksum MD5 del archivo',
-    example: 'a1b2c3d4e5f6...'
+    example: 'a1b2c3d4e5f6...',
   })
   checksum: string;
 }

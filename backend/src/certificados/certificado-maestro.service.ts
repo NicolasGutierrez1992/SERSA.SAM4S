@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import type { Multer } from 'multer';
@@ -24,7 +29,8 @@ interface MetadataCertificado {
 }
 
 @Injectable()
-export class CertificadoMaestroService {  private readonly logger = new Logger(CertificadoMaestroService.name);
+export class CertificadoMaestroService {
+  private readonly logger = new Logger(CertificadoMaestroService.name);
   private readonly CERTIFICADO_ID = 'AFIP_PRINCIPAL';
 
   constructor(
@@ -59,7 +65,9 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
       this.validarExpirationCertificado(certificado.metadata);
 
       // Desencriptar contraseña y PFX
-      const password = this.encryptionService.decrypt(certificado.password_encriptada);
+      const password = this.encryptionService.decrypt(
+        certificado.password_encriptada,
+      );
       const pfx = this.encryptionService.decryptToBuffer(certificado.pfx_data);
 
       return {
@@ -83,7 +91,10 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
       });
       return !!certificado;
     } catch (error) {
-      this.logger.error('Error verificando existencia de certificado maestro', error);
+      this.logger.error(
+        'Error verificando existencia de certificado maestro',
+        error,
+      );
       return false;
     }
   }
@@ -98,14 +109,18 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
       const { pfxFile, password, certificado_identificador } = dto;
 
       if (!pfxFile || !password) {
-        throw new BadRequestException('Archivo PFX y contraseña son requeridos');
+        throw new BadRequestException(
+          'Archivo PFX y contraseña son requeridos',
+        );
       }
 
       this.logger.log('Iniciando carga de certificado maestro');
 
       // Validar que sea un archivo .pfx
       if (!pfxFile.originalname.toLowerCase().endsWith('.pfx')) {
-        throw new BadRequestException('El archivo debe ser un certificado .pfx válido');
+        throw new BadRequestException(
+          'El archivo debe ser un certificado .pfx válido',
+        );
       }
 
       // Parsear y validar el archivo PFX
@@ -118,7 +133,8 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
       // Buscar si ya existe un certificado maestro
       let certificado = await this.certificadoMaestroRepository.findOne({
         where: { id: this.CERTIFICADO_ID },
-      });      if (certificado) {
+      });
+      if (certificado) {
         // Actualizar certificado existente
         this.logger.log('Actualizando certificado maestro existente');
         certificado.pfx_data = pfxEncriptado;
@@ -246,7 +262,10 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
         updated_at: certificado.updated_at,
       };
     } catch (error) {
-      this.logger.error('Error obteniendo información del certificado maestro', error);
+      this.logger.error(
+        'Error obteniendo información del certificado maestro',
+        error,
+      );
       throw error;
     }
   }
@@ -264,7 +283,8 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
     try {
       if (!fs.existsSync(filePath)) {
         throw new BadRequestException(`Archivo no encontrado: ${filePath}`);
-      }      const pfxBuffer = fs.readFileSync(filePath);
+      }
+      const pfxBuffer = fs.readFileSync(filePath);
 
       return await this.cargarCertificadoMaestro({
         pfxFile: {
@@ -293,7 +313,8 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
     const fechaVencimiento = new Date(metadata.validTo);
     const fechaActual = new Date();
     const diasParaVencer = Math.floor(
-      (fechaVencimiento.getTime() - fechaActual.getTime()) / (1000 * 60 * 60 * 24),
+      (fechaVencimiento.getTime() - fechaActual.getTime()) /
+        (1000 * 60 * 60 * 24),
     );
 
     if (diasParaVencer < 0) {
@@ -335,7 +356,8 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
       const fechaVencimiento = new Date(certificado.metadata.validTo);
       const fechaActual = new Date();
       const diasParaVencer = Math.floor(
-        (fechaVencimiento.getTime() - fechaActual.getTime()) / (1000 * 60 * 60 * 24),
+        (fechaVencimiento.getTime() - fechaActual.getTime()) /
+          (1000 * 60 * 60 * 24),
       );
 
       const alertas: string[] = [];
@@ -348,7 +370,9 @@ export class CertificadoMaestroService {  private readonly logger = new Logger(C
         );
       } else if (diasParaVencer < 30) {
         estado = 'PROXIMO_A_VENCER';
-        alertas.push(`⚠️ ADVERTENCIA: Certificado vencerá en ${diasParaVencer} días`);
+        alertas.push(
+          `⚠️ ADVERTENCIA: Certificado vencerá en ${diasParaVencer} días`,
+        );
       } else {
         alertas.push(
           `✅ Certificado vigente. Vencimiento en ${diasParaVencer} días`,

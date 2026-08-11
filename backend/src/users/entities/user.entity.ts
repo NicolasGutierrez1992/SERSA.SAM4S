@@ -3,18 +3,23 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Descarga } from '../../descargas/entities/descarga.entity';
 
 @Entity('users')
-export class User {  
+export class User {
   @ApiProperty({ description: 'ID único del usuario' })
   @PrimaryGeneratedColumn()
   id_usuario: number;
 
-  @ApiProperty({ description: 'Estado del usuario (1=Activo, 2=Suspendido, 3=Inactivo)' })
+  @ApiProperty({
+    description: 'Estado del usuario (1=Activo, 2=Suspendido, 3=Inactivo)',
+  })
   @Column({ type: 'integer', nullable: true })
   status: number;
-  @ApiProperty({ description: 'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación)' })
+  @ApiProperty({
+    description:
+      'Rol del usuario (1=Admin, 2=Mayorista, 3=Distribuidor, 4=Facturación)',
+  })
   @Column({ type: 'integer', nullable: true, name: 'id_rol' })
   rol: number;
-  
+
   @ApiProperty({ description: 'Nombre completo del usuario' })
   @Column({ type: 'text', nullable: true })
   nombre: string;
@@ -23,7 +28,9 @@ export class User {
   @Column({ type: 'text', nullable: true })
   mail: string;
 
-  @ApiPropertyOptional({ description: 'Contraseña hasheada (no se expone en API)' })
+  @ApiPropertyOptional({
+    description: 'Contraseña hasheada (no se expone en API)',
+  })
   @Column({ type: 'text', nullable: true })
   password: string;
 
@@ -57,24 +64,25 @@ export class User {
   @Column({
     type: 'enum',
     enum: ['CUENTA_CORRIENTE', 'PREPAGO'],
-    default: 'CUENTA_CORRIENTE'
+    default: 'CUENTA_CORRIENTE',
   })
   @ApiProperty({
     description: 'Tipo de descarga del usuario',
     enum: ['CUENTA_CORRIENTE', 'PREPAGO'],
     default: 'CUENTA_CORRIENTE',
-    example: 'CUENTA_CORRIENTE'
+    example: 'CUENTA_CORRIENTE',
   })
   tipo_descarga: 'CUENTA_CORRIENTE' | 'PREPAGO';
 
-  @ApiPropertyOptional({ 
-    description: 'Límite de descargas pendientes para notificación (solo para mayoristas, rol=2). Default: 100',
+  @ApiPropertyOptional({
+    description:
+      'Límite de descargas pendientes para notificación (solo para mayoristas, rol=2). Default: 100',
     example: 100,
-    nullable: true
+    nullable: true,
   })
   @Column({ type: 'integer', nullable: true, default: 100 })
   notification_limit: number;
-  
-  @OneToMany(() => Descarga, descarga => descarga.usuario)
+
+  @OneToMany(() => Descarga, (descarga) => descarga.usuario)
   descargas: Descarga[];
 }

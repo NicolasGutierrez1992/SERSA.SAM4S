@@ -16,8 +16,8 @@ export class AppController {
 
   @Get('health')
   @ApiOperation({ summary: 'Detailed health status' })
-  @ApiResponse({ 
-    status: 200, 
+  @ApiResponse({
+    status: 200,
     description: 'Detailed health information',
     schema: {
       properties: {
@@ -28,11 +28,11 @@ export class AppController {
           type: 'object',
           properties: {
             database: { type: 'string', example: 'connected' },
-            afip: { type: 'string', example: 'mock_mode' }
-          }
-        }
-      }
-    }
+            afip: { type: 'string', example: 'mock_mode' },
+          },
+        },
+      },
+    },
   })
   getHealth(): object {
     return this.appService.getHealthStatus();

@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsDateString, IsEnum, IsNumber } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsDateString,
+  IsEnum,
+  IsNumber,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export enum TipoReporte {
@@ -48,14 +54,21 @@ export class QueryReporteCertificadosDto {
   @IsString()
   estado_distribuidor?: string;
 
-  @ApiPropertyOptional({ description: 'Formato del reporte', enum: FormatoReporte, default: 'JSON' })
+  @ApiPropertyOptional({
+    description: 'Formato del reporte',
+    enum: FormatoReporte,
+    default: 'JSON',
+  })
   @IsOptional()
   @IsEnum(FormatoReporte)
   formato?: FormatoReporte = FormatoReporte.JSON;
 }
 
 export class MetricasDto {
-  @ApiPropertyOptional({ description: 'Número de días hacia atrás para métricas', default: 30 })
+  @ApiPropertyOptional({
+    description: 'Número de días hacia atrás para métricas',
+    default: 30,
+  })
   @IsOptional()
   @IsNumber()
   @Type(() => Number)

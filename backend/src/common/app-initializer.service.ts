@@ -19,15 +19,20 @@ export class AppInitializerService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     // Registrar hora de inicialización en zona horaria de Argentina
     const horaArgentina = this.timezoneService.formatDateTimeFull(new Date());
-    this.logger.log(`Inicializando servicios de aplicación... [${horaArgentina}]`);
+    this.logger.log(
+      `Inicializando servicios de aplicación... [${horaArgentina}]`,
+    );
 
     // Ejecutar migración de certificado si es necesaria
     try {
-      const usarBdParaCertificado = this.configService.get('USAR_BD_PARA_CERTIFICADO', true);
-      
+      const usarBdParaCertificado = this.configService.get(
+        'USAR_BD_PARA_CERTIFICADO',
+        true,
+      );
+
       if (usarBdParaCertificado === 'true' || usarBdParaCertificado === true) {
         const certPath = this.resolvePath(
-          this.configService.get('AFIP_CERT_PATH')
+          this.configService.get('AFIP_CERT_PATH'),
         );
         const keyPassword = this.configService.get('AFIP_KEY_PASSWORD');
         const cuit = this.configService.get('AFIP_CUIT');
@@ -52,7 +57,7 @@ export class AppInitializerService implements OnModuleInit {
    */
   private resolvePath(filePath: string): string {
     if (!filePath) return '';
-    
+
     const path = require('path');
     const fs = require('fs');
 
@@ -65,9 +70,7 @@ export class AppInitializerService implements OnModuleInit {
 
     const possiblePaths = [
       path.resolve(baseDir, filePath),
-      filePath.includes('backend/')
-        ? path.resolve(baseDir, cleanPath)
-        : null,
+      filePath.includes('backend/') ? path.resolve(baseDir, cleanPath) : null,
       path.resolve('/app', cleanPath),
       path.resolve('/app/backend', cleanPath),
     ].filter((p): p is string => Boolean(p));
@@ -78,6 +81,10 @@ export class AppInitializerService implements OnModuleInit {
       }
     }
 
-    return possiblePaths.find(p => p.includes('/app/')) || possiblePaths[0] || filePath;
+    return (
+      possiblePaths.find((p) => p.includes('/app/')) ||
+      possiblePaths[0] ||
+      filePath
+    );
   }
 }

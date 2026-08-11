@@ -33,16 +33,16 @@ export class TimezoneService {
       hour: '2-digit',
       minute: '2-digit',
       second: '2-digit',
-      hour12: false
+      hour12: false,
     });
 
     const parts = formatter.formatToParts(date);
-    const year = parseInt(parts.find(p => p.type === 'year')!.value);
-    const month = parseInt(parts.find(p => p.type === 'month')!.value) - 1;
-    const day = parseInt(parts.find(p => p.type === 'day')!.value);
-    const hour = parseInt(parts.find(p => p.type === 'hour')!.value);
-    const minute = parseInt(parts.find(p => p.type === 'minute')!.value);
-    const second = parseInt(parts.find(p => p.type === 'second')!.value);
+    const year = parseInt(parts.find((p) => p.type === 'year')!.value);
+    const month = parseInt(parts.find((p) => p.type === 'month')!.value) - 1;
+    const day = parseInt(parts.find((p) => p.type === 'day')!.value);
+    const hour = parseInt(parts.find((p) => p.type === 'hour')!.value);
+    const minute = parseInt(parts.find((p) => p.type === 'minute')!.value);
+    const second = parseInt(parts.find((p) => p.type === 'second')!.value);
 
     return new Date(year, month, day, hour, minute, second);
   }
@@ -55,13 +55,13 @@ export class TimezoneService {
       timeZone: 'America/Argentina/Buenos_Aires',
       year: 'numeric',
       month: '2-digit',
-      day: '2-digit'
+      day: '2-digit',
     });
 
     const parts = formatter.formatToParts(date);
-    const year = parts.find(p => p.type === 'year')!.value;
-    const month = parts.find(p => p.type === 'month')!.value;
-    const day = parts.find(p => p.type === 'day')!.value;
+    const year = parts.find((p) => p.type === 'year')!.value;
+    const month = parts.find((p) => p.type === 'month')!.value;
+    const day = parts.find((p) => p.type === 'day')!.value;
 
     return `${year}-${month}-${day}`;
   }
@@ -78,7 +78,7 @@ export class TimezoneService {
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-      second: '2-digit'
+      second: '2-digit',
     });
 
     return formatter.format(date);
@@ -88,23 +88,43 @@ export class TimezoneService {
    * Obtener inicio del día en Argentina (00:00:00)
    */
   getStartOfDayArgentina(date?: Date): Date {
-    const dateArg = date ? this.convertToArgentina(date) : this.getNowArgentina();
-    return new Date(dateArg.getFullYear(), dateArg.getMonth(), dateArg.getDate(), 0, 0, 0);
+    const dateArg = date
+      ? this.convertToArgentina(date)
+      : this.getNowArgentina();
+    return new Date(
+      dateArg.getFullYear(),
+      dateArg.getMonth(),
+      dateArg.getDate(),
+      0,
+      0,
+      0,
+    );
   }
 
   /**
    * Obtener fin del día en Argentina (23:59:59)
    */
   getEndOfDayArgentina(date?: Date): Date {
-    const dateArg = date ? this.convertToArgentina(date) : this.getNowArgentina();
-    return new Date(dateArg.getFullYear(), dateArg.getMonth(), dateArg.getDate(), 23, 59, 59);
+    const dateArg = date
+      ? this.convertToArgentina(date)
+      : this.getNowArgentina();
+    return new Date(
+      dateArg.getFullYear(),
+      dateArg.getMonth(),
+      dateArg.getDate(),
+      23,
+      59,
+      59,
+    );
   }
 
   /**
    * Obtener inicio de la semana en Argentina (lunes)
    */
   getStartOfWeekArgentina(date?: Date): Date {
-    const dateArg = date ? this.convertToArgentina(date) : this.getNowArgentina();
+    const dateArg = date
+      ? this.convertToArgentina(date)
+      : this.getNowArgentina();
     const day = dateArg.getDay();
     const diff = dateArg.getDate() - day + (day === 0 ? -6 : 1); // Ajustar cuando el día es domingo
     return new Date(dateArg.getFullYear(), dateArg.getMonth(), diff, 0, 0, 0);
@@ -114,7 +134,9 @@ export class TimezoneService {
    * Obtener inicio del mes en Argentina
    */
   getStartOfMonthArgentina(date?: Date): Date {
-    const dateArg = date ? this.convertToArgentina(date) : this.getNowArgentina();
+    const dateArg = date
+      ? this.convertToArgentina(date)
+      : this.getNowArgentina();
     return new Date(dateArg.getFullYear(), dateArg.getMonth(), 1, 0, 0, 0);
   }
 
@@ -124,9 +146,11 @@ export class TimezoneService {
   isSameDayArgentina(date1: Date, date2: Date): boolean {
     const d1 = this.convertToArgentina(date1);
     const d2 = this.convertToArgentina(date2);
-    return d1.getFullYear() === d2.getFullYear() &&
-           d1.getMonth() === d2.getMonth() &&
-           d1.getDate() === d2.getDate();
+    return (
+      d1.getFullYear() === d2.getFullYear() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getDate() === d2.getDate()
+    );
   }
 
   /**
@@ -150,8 +174,14 @@ export class TimezoneService {
    * Obtener número de semana (ISO) en Argentina
    */
   getWeekNumberArgentina(date?: Date): number {
-    const dateArg = date ? this.convertToArgentina(date) : this.getNowArgentina();
-    const d = new Date(dateArg.getFullYear(), dateArg.getMonth(), dateArg.getDate());
+    const dateArg = date
+      ? this.convertToArgentina(date)
+      : this.getNowArgentina();
+    const d = new Date(
+      dateArg.getFullYear(),
+      dateArg.getMonth(),
+      dateArg.getDate(),
+    );
     const dayNum = d.getDay() || 7;
     d.setDate(d.getDate() - dayNum + 1);
     const firstThursday = new Date(d.getFullYear(), 0, 4);

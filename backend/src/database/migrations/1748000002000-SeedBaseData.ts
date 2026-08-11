@@ -23,14 +23,18 @@ export class SeedBaseData1748000002000 implements MigrationInterface {
     const hashedPassword = await bcrypt.hash(defaultPassword, 12);
 
     // Admin principal
-    await queryRunner.query(`
+    await queryRunner.query(
+      `
       INSERT INTO users (nombre, cuit, mail, celular, password, id_rol, id_mayorista, status, must_change_password, created_by, limite_descargas, tipo_descarga)
       VALUES ('Admin SERSA', '00000000000', 'nicolasgutierrez1049@gmail.com', '1169939949', $1, 1, 1, 1, true, 1, 0, 'PREPAGO')
       ON CONFLICT (cuit) DO NOTHING;
-    `, [hashedPassword]);
+    `,
+      [hashedPassword],
+    );
 
     // Usuarios mayoristas
-    await queryRunner.query(`
+    await queryRunner.query(
+      `
       INSERT INTO users (nombre, cuit, mail, password, id_rol, id_mayorista, status, must_change_password, created_by, limite_descargas, tipo_descarga, notification_limit)
       VALUES
         ('OLICART',    '30000000002', 'mayorista.olicart@sersa.local',    $1, 2, 2, 1, true, 1, 5, 'CUENTA_CORRIENTE', 100),
@@ -38,10 +42,14 @@ export class SeedBaseData1748000002000 implements MigrationInterface {
         ('COLOMA',     '30000000004', 'mayorista.coloma@sersa.local',     $1, 2, 4, 1, true, 1, 5, 'CUENTA_CORRIENTE', 100),
         ('SANTICH',    '30000000005', 'mayorista.santich@sersa.local',    $1, 2, 5, 1, true, 1, 5, 'CUENTA_CORRIENTE', 100)
       ON CONFLICT (cuit) DO NOTHING;
-    `, [hashedPassword]);
+    `,
+      [hashedPassword],
+    );
 
     // Avanzar secuencia al máximo actual
-    await queryRunner.query(`SELECT setval('users_id_usuario_seq', (SELECT MAX(id_usuario) FROM users));`);
+    await queryRunner.query(
+      `SELECT setval('users_id_usuario_seq', (SELECT MAX(id_usuario) FROM users));`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

@@ -131,7 +131,9 @@ export class CreateBaseSchema0000000000001 implements MigrationInterface {
     await queryRunner.query(`DROP TABLE IF EXISTS certificados_v2;`);
     await queryRunner.query(`DROP TABLE IF EXISTS users;`);
     await queryRunner.query(`DROP TABLE IF EXISTS mayoristas;`);
-    await queryRunner.query(`DROP TYPE IF EXISTS descargas_tipo_descarga_enum;`);
+    await queryRunner.query(
+      `DROP TYPE IF EXISTS descargas_tipo_descarga_enum;`,
+    );
     await queryRunner.query(`DROP TYPE IF EXISTS users_tipo_descarga_enum;`);
   }
 }

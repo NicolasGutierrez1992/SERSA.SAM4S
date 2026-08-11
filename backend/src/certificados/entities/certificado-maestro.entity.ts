@@ -3,9 +3,9 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 @Entity('certificados_maestro')
 export class CertificadoMaestro {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'ID único del certificado maestro',
-    example: 'AFIP_PRINCIPAL'
+    example: 'AFIP_PRINCIPAL',
   })
   @PrimaryColumn({ type: 'varchar', length: 50 })
   id: string;
@@ -16,20 +16,20 @@ export class CertificadoMaestro {
   @Column({ type: 'text' })
   pfx_data: string;
 
-  @ApiProperty({ 
-    description: 'Contraseña encriptada del certificado PFX'
+  @ApiProperty({
+    description: 'Contraseña encriptada del certificado PFX',
   })
   @Column({ type: 'text' })
   password_encriptada: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Información del certificado en formato JSONB',
     example: {
       subject: 'CN=SERSA',
       issuer: 'CN=AFIP',
       validFrom: '2024-01-01',
-      validTo: '2025-01-01'
-    }
+      validTo: '2025-01-01',
+    },
   })
   @Column({ type: 'jsonb', nullable: true })
   metadata?: {
@@ -41,33 +41,33 @@ export class CertificadoMaestro {
     [key: string]: any;
   };
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Identificador del certificado (generalmente el CUIT)',
-    nullable: true
+    nullable: true,
   })
   @Column({ type: 'varchar', length: 50, nullable: true })
   certificado_identificador?: string;
 
-  @ApiProperty({ 
-    description: 'Indica si el certificado está activo'
+  @ApiProperty({
+    description: 'Indica si el certificado está activo',
   })
   @Column({ type: 'boolean', default: true })
   activo: boolean;
 
-  @ApiProperty({ 
-    description: 'Fecha de creación'
+  @ApiProperty({
+    description: 'Fecha de creación',
   })
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   created_at: Date;
 
-  @ApiProperty({ 
-    description: 'Fecha de última actualización'
+  @ApiProperty({
+    description: 'Fecha de última actualización',
   })
   @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   updated_at: Date;
 
-  @ApiPropertyOptional({ 
-    description: 'Fecha de carga del certificado'
+  @ApiPropertyOptional({
+    description: 'Fecha de carga del certificado',
   })
   @Column({ type: 'timestamp', nullable: true })
   uploaded_at?: Date;

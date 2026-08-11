@@ -52,7 +52,7 @@ export class CreateAppSettingsTable1734432300000 implements MigrationInterface {
         ],
       }),
       true,
-    );    // Insertar configuraciones por defecto
+    ); // Insertar configuraciones por defecto
     await queryRunner.query(`
       INSERT INTO app_settings (id, value, description, data_type)
       VALUES 

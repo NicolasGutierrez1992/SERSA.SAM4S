@@ -1,11 +1,18 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsString, IsOptional, IsNumber, IsDateString, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsDateString,
+  Min,
+  Max,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QueryDescargasDto {
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Página',
-    example: 1
+    example: 1,
   })
   @IsOptional()
   @Type(() => Number)
@@ -13,9 +20,9 @@ export class QueryDescargasDto {
   @Min(1)
   page?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Límite de resultados',
-    example: 50
+    example: 50,
   })
   @IsOptional()
   @Type(() => Number)
@@ -23,25 +30,31 @@ export class QueryDescargasDto {
   @Min(1)
   limit?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Fecha desde (YYYY-MM-DD)',
-    example: '2024-01-01'
+    example: '2024-01-01',
   })
   @IsOptional()
-  @IsDateString({}, { message: 'La fecha debe tener formato válido (YYYY-MM-DD)' })
+  @IsDateString(
+    {},
+    { message: 'La fecha debe tener formato válido (YYYY-MM-DD)' },
+  )
   fechaDesde?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Fecha hasta (YYYY-MM-DD)',
-    example: '2024-12-31'
+    example: '2024-12-31',
   })
   @IsOptional()
-  @IsDateString({}, { message: 'La fecha debe tener formato válido (YYYY-MM-DD)' })
+  @IsDateString(
+    {},
+    { message: 'La fecha debe tener formato válido (YYYY-MM-DD)' },
+  )
   fechaHasta?: string;
-  
-  @ApiPropertyOptional({ 
+
+  @ApiPropertyOptional({
     description: 'Mes de descarga (1-12)',
-    example: 1
+    example: 1,
   })
   @IsOptional()
   @Type(() => Number)
@@ -50,9 +63,9 @@ export class QueryDescargasDto {
   @Max(12)
   mes?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'Año de descarga',
-    example: 2025
+    example: 2025,
   })
   @IsOptional()
   @Type(() => Number)
@@ -61,9 +74,9 @@ export class QueryDescargasDto {
   @Max(2100)
   anio?: number;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'ID del controlador',
-    example: 'CTRL001234'
+    example: 'CTRL001234',
   })
   @IsOptional()
   @IsString()
@@ -71,7 +84,7 @@ export class QueryDescargasDto {
 
   @ApiPropertyOptional({
     description: 'CUIT del usuario',
-    example: '20366299913'
+    example: '20366299913',
   })
   @IsOptional()
   @IsString()
@@ -79,24 +92,24 @@ export class QueryDescargasDto {
 
   @ApiPropertyOptional({
     description: 'Nombre del usuario (búsqueda parcial)',
-    example: 'Juan'
+    example: 'Juan',
   })
   @IsOptional()
   @IsString()
   nombre?: string;
 
-  @ApiPropertyOptional({ 
+  @ApiPropertyOptional({
     description: 'ID del mayorista',
-    example: 1
+    example: 1,
   })
   @IsOptional()
   @Type(() => Number)
   @IsNumber()
   idMayorista?: number;
-  
-  @ApiPropertyOptional({ 
+
+  @ApiPropertyOptional({
     description: 'Estado de facturación mayorista',
-    example: 'Pendiente de Facturar'
+    example: 'Pendiente de Facturar',
   })
   @IsOptional()
   @IsString()
@@ -104,7 +117,7 @@ export class QueryDescargasDto {
 
   @ApiPropertyOptional({
     example: 'SH',
-    description: 'Marca del controlador'
+    description: 'Marca del controlador',
   })
   @IsOptional()
   @IsString()
@@ -112,7 +125,7 @@ export class QueryDescargasDto {
 
   @ApiPropertyOptional({
     example: 'Pendiente de Facturar',
-    description: 'Estado distribuidor'
+    description: 'Estado distribuidor',
   })
   @IsOptional()
   @IsString()
@@ -120,7 +133,7 @@ export class QueryDescargasDto {
 
   @ApiPropertyOptional({
     example: 1,
-    description: 'Rol del usuario para filtrado inteligente de estados'
+    description: 'Rol del usuario para filtrado inteligente de estados',
   })
   @IsOptional()
   @Type(() => Number)

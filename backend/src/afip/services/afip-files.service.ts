@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AfipFile } from '../entities/afip-file.entity';
@@ -38,10 +43,14 @@ export class AfipFilesService {
 
       if (!archivo) {
         this.logger.error('Archivo Root_RTI no encontrado o inactivo');
-        throw new NotFoundException('Archivo Root_RTI no configurado en la base de datos');
+        throw new NotFoundException(
+          'Archivo Root_RTI no configurado en la base de datos',
+        );
       }
 
-      this.logger.debug(`Root_RTI obtenido exitosamente (${archivo.file_size} bytes)`);
+      this.logger.debug(
+        `Root_RTI obtenido exitosamente (${archivo.file_size} bytes)`,
+      );
       return this.encryptionService.decryptToBuffer(archivo.file_data);
     } catch (error) {
       this.logger.error('Error obteniendo Root_RTI', error);
@@ -168,7 +177,10 @@ export class AfipFilesService {
         uploaded_at: archivo.uploaded_at,
       };
     } catch (error) {
-      this.logger.error(`Error obteniendo información del archivo ${fileType}`, error);
+      this.logger.error(
+        `Error obteniendo información del archivo ${fileType}`,
+        error,
+      );
       throw error;
     }
   }

@@ -3,7 +3,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 @Entity('certificados_v2')
 export class Certificado {
-  @ApiProperty({ description: 'ID único del certificado', example: 'SESHIA-0000001234' })
+  @ApiProperty({
+    description: 'ID único del certificado',
+    example: 'SESHIA-0000001234',
+  })
   @PrimaryColumn({ type: 'varchar', length: 50 })
   id_certificado: string;
 
