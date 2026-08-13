@@ -51,6 +51,7 @@ export default function CertificadosPage() {
   const [saldosUsuarios, setSaldosUsuarios] = useState<SaldoUsuario[]>([]);
   const [rankingLoading, setRankingLoading] = useState(false);
   const [saldosCuitFiltro, setSaldosCuitFiltro] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
   const [saldosOrdenPor, setSaldosOrdenPor] = useState<'prepago' | 'cuentaCorriente'>('prepago');
   const [saldosOrdenDir, setSaldosOrdenDir] = useState<'asc' | 'desc'>('desc');
 
@@ -315,66 +316,79 @@ export default function CertificadosPage() {
       setRankingLoading(false);
     }
   };
+  // Arma el objeto de filtros para getHistorialDescargas según el rol del usuario
+  // logueado (reutilizado por loadHistorial y por la exportación a Excel, que necesita
+  // traer TODAS las filas que matchean el filtro, no solo la página visible).
+  // Devuelve null si el CUIT ingresado no es válido (mismo criterio que loadHistorial).
+  const construirFiltrosHistorial = (page: number, limit: number): any | null => {
+    let filtrosFinal: any = { ...filtros, page, limit };
+
+    // Si es Distribuidor (3) limitar por CUIT y mayorista correspondiente
+    if (user?.rol === 3) {
+      filtrosFinal.cuit = user.cuit;
+      filtrosFinal.idMayorista = String(user.id_mayorista);
+    }
+    // Mayorista (2) ver solo descargas de su propio mayorista
+    if (user?.rol === 2) {
+      filtrosFinal.idMayorista = String(user.id_mayorista);
+    }
+    // IMPORTANTE: Facturación (4) y Técnico (5) deben ver TODAS las descargas -> no forzar idMayorista aquí
+
+    // Validar CUIT antes de hacer la petición
+    if (filtrosFinal.cuit && !/^\d{8,}$/.test(filtrosFinal.cuit)) {
+      return null;
+    }
+
+    // Limpiar filtros vacíos y undefined
+    filtrosFinal = Object.fromEntries(
+      Object.entries(filtrosFinal).filter(([_, v]) => v !== '' && v !== undefined && v !== null)
+    );
+
+    // ⭐ IMPORTANTE: Pasar userRole al backend para filtrado inteligente
+    filtrosFinal.userRole = user?.rol;
+
+    // Convertir mes y anio a número
+    if (filtrosFinal.mes) {
+      const mesNum = Number(filtrosFinal.mes);
+      if (isNaN(mesNum) || mesNum < 1 || mesNum > 12) {
+        delete filtrosFinal.mes;
+      } else {
+        filtrosFinal.mes = mesNum;
+      }
+    }
+
+    if (filtrosFinal.anio) {
+      const anioNum = Number(filtrosFinal.anio);
+      if (isNaN(anioNum) || anioNum < 2025 || anioNum > 2100) {
+        delete filtrosFinal.anio;
+      } else {
+        filtrosFinal.anio = anioNum;
+      }
+    }
+
+    return filtrosFinal;
+  };
+
+  // Filtra por id_mayorista en frontend solo cuando el usuario sea Mayorista (rol 2).
+  // Facturación (4) y Técnico (5) deben ver TODAS las descargas (la fuente de la verdad debe ser el backend).
+  const filtrarDescargasPorMayorista = (descargas: DescargaHistorial[]): DescargaHistorial[] => {
+    if (user?.rol !== 2) return descargas;
+    return descargas.filter(d => d.usuario?.id_mayorista === user.id_mayorista);
+  };
+
   // Función para cargar historial según rol
   const loadHistorial = async (page = 1) => {
     setHistorialLoading(true);
     try {
-      // Construir filtrosFinal con tipos correctos
-      let filtrosFinal: any = { ...filtros, page, limit: 50 };
-
-      // Si es Distribuidor (3) limitar por CUIT y mayorista correspondiente
-      if (user?.rol === 3) {
-        filtrosFinal.cuit = user.cuit;
-        filtrosFinal.idMayorista = String(user.id_mayorista);
-      }
-      // Mayorista (2) ver solo descargas de su propio mayorista
-      if (user?.rol === 2) {
-        filtrosFinal.idMayorista = String(user.id_mayorista);
-      }
-      // IMPORTANTE: Facturación (4) y Técnico (5) deben ver TODAS las descargas -> no forzar idMayorista aquí
-
-      // Validar CUIT antes de hacer la petición
-      if (filtrosFinal.cuit && !/^\d{8,}$/.test(filtrosFinal.cuit)) {
+      const filtrosFinal = construirFiltrosHistorial(page, 50);
+      if (!filtrosFinal) {
         setHistorial([]);
         return;
       }
 
-      // Limpiar filtros vacíos y undefined
-      filtrosFinal = Object.fromEntries(
-        Object.entries(filtrosFinal).filter(([_, v]) => v !== '' && v !== undefined && v !== null)
-      );
-
-      // ⭐ IMPORTANTE: Pasar userRole al backend para filtrado inteligente
-      filtrosFinal.userRole = user?.rol;
-
-      // Convertir mes y anio a número
-      if (filtrosFinal.mes) {
-        const mesNum = Number(filtrosFinal.mes);
-        if (isNaN(mesNum) || mesNum < 1 || mesNum > 12) {
-          delete filtrosFinal.mes;
-        } else {
-          filtrosFinal.mes = mesNum;
-        }
-      }
-
-      if (filtrosFinal.anio) {
-        const anioNum = Number(filtrosFinal.anio);
-        if (isNaN(anioNum) || anioNum < 2025 || anioNum > 2100) {
-          delete filtrosFinal.anio;
-        } else {
-          filtrosFinal.anio = anioNum;
-        }
-      }
-
       // Siempre usar getHistorialDescargas con los filtros
       const response = await certificadosApi.getHistorialDescargas(filtrosFinal);
-      let descargas = response.descargas || [];
-      // Solo filtrar por id_mayorista en frontend cuando el usuario sea Mayorista (rol 2).
-      // Facturación (4) y Técnico (5) deben ver TODAS las descargas (la fuente de la verdad debe ser el backend).
-      if (user?.rol === 2) {
-        descargas = descargas.filter(d => d.usuario?.id_mayorista === user.id_mayorista);
-        console.log('[CertificadosPage] Filtrando descargas por id_mayorista en frontend (mayorista):', user.id_mayorista, 'result:', descargas.length);
-      }
+      const descargas = filtrarDescargasPorMayorista(response.descargas || []);
       setHistorial(descargas);
       setTotalRegistros(response.total ?? 0);
       setTotalPages(response.totalPages ?? 1);
@@ -1261,60 +1275,79 @@ export default function CertificadosPage() {
                 <h3 className="text-lg font-medium text-gray-900 mb-6">
                   Historial de Descargas
                 </h3>                <button
-                  onClick={async () => {                    // Generar datos para Excel
-                    const data = historial.map((descarga) => {
-                      const baseData: Record<string, any> = {
-                        Controlador: descarga.controladorId || descarga.certificadoNombre || '',
-                        Usuario: descarga.usuario ? descarga.usuario.nombre : (descarga.usuarioId || ''),
-                        CUIT: descarga.usuario?.cuit || '',
-                        'Estado Mayorista': descarga.estadoMayorista || '',
-                        'Fecha de Facturación': descarga.fechaFacturacion ? new Date(descarga.fechaFacturacion).toLocaleDateString() : 'Sin facturar',
-                        'Estado Distribuidor': descarga.estadoDistribuidor || '',
-                        'Ultima Creacion': descarga.updatedAt ? new Date(descarga.updatedAt).toLocaleDateString() : 'Sin fecha',
-                      };
-
-                      // ⭐ Agregar columnas de facturación SOLO si el usuario NO es distribuidor (rol ≠ 3)
-                      if (user?.rol !== 3) {
-                        // Un lado (mayorista/distribuidor) queda en estado PREPAGO (inmutable) cuando
-                        // esa descarga se pagó con saldo prepago: nunca pasa por el flujo normal de
-                        // facturación, así que su referencia_pago queda vacía por diseño. En ese caso
-                        // la referencia real es el N° de factura de la compra prepago consumida.
-                        const refPrepago = descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)';
-                        baseData['Número de Factura'] = descarga.numero_factura || '-';
-                        baseData['Referencia de Pago'] = descarga.estadoMayorista === 'PREPAGO'
-                          ? refPrepago
-                          : (descarga.referencia_pago || '-');
-                        baseData['Nro Factura Distribuidor'] = descarga.numero_factura_distribuidor || '-';
-                        baseData['Referencia Pago Distribuidor'] = descarga.estadoDistribuidor === 'PREPAGO'
-                          ? refPrepago
-                          : (descarga.referencia_pago_distribuidor || '-');
+                  disabled={exportLoading}
+                  onClick={async () => {
+                    setExportLoading(true);
+                    try {
+                      // Traer TODAS las filas que matchean el filtro activo (no solo la página
+                      // visible) en una sola request, usando el total real ya conocido como límite.
+                      const filtrosExport = construirFiltrosHistorial(1, totalRegistros || 10000);
+                      if (!filtrosExport) {
+                        message.error('CUIT inválido, no se puede exportar.');
+                        return;
                       }
+                      const response = await certificadosApi.getHistorialDescargas(filtrosExport);
+                      const descargasCompletas = filtrarDescargasPorMayorista(response.descargas || []);
 
-                      return baseData;
-                    });
-                    const workbook = new ExcelJS.Workbook();
-                    const sheet = workbook.addWorksheet('Historial');
-                    if (data.length > 0) {
-                      sheet.columns = Object.keys(data[0]).map(key => ({
-                        header: key,
-                        key,
-                        width: 20,
-                      }));
-                      data.forEach(row => sheet.addRow(row));
+                      const data = descargasCompletas.map((descarga) => {
+                        const baseData: Record<string, any> = {
+                          Controlador: descarga.controladorId || descarga.certificadoNombre || '',
+                          Usuario: descarga.usuario ? descarga.usuario.nombre : (descarga.usuarioId || ''),
+                          CUIT: descarga.usuario?.cuit || '',
+                          'Estado Mayorista': descarga.estadoMayorista || '',
+                          'Fecha de Facturación': descarga.fechaFacturacion ? new Date(descarga.fechaFacturacion).toLocaleDateString() : 'Sin facturar',
+                          'Estado Distribuidor': descarga.estadoDistribuidor || '',
+                          'Ultima Creacion': descarga.updatedAt ? new Date(descarga.updatedAt).toLocaleDateString() : 'Sin fecha',
+                        };
+
+                        // ⭐ Agregar columnas de facturación SOLO si el usuario NO es distribuidor (rol ≠ 3)
+                        if (user?.rol !== 3) {
+                          // Un lado (mayorista/distribuidor) queda en estado PREPAGO (inmutable) cuando
+                          // esa descarga se pagó con saldo prepago: nunca pasa por el flujo normal de
+                          // facturación, así que su referencia_pago queda vacía por diseño. En ese caso
+                          // la referencia real es el N° de factura de la compra prepago consumida.
+                          const refPrepago = descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)';
+                          baseData['Número de Factura'] = descarga.numero_factura || '-';
+                          baseData['Referencia de Pago'] = descarga.estadoMayorista === 'PREPAGO'
+                            ? refPrepago
+                            : (descarga.referencia_pago || '-');
+                          baseData['Nro Factura Distribuidor'] = descarga.numero_factura_distribuidor || '-';
+                          baseData['Referencia Pago Distribuidor'] = descarga.estadoDistribuidor === 'PREPAGO'
+                            ? refPrepago
+                            : (descarga.referencia_pago_distribuidor || '-');
+                        }
+
+                        return baseData;
+                      });
+                      const workbook = new ExcelJS.Workbook();
+                      const sheet = workbook.addWorksheet('Historial');
+                      if (data.length > 0) {
+                        sheet.columns = Object.keys(data[0]).map(key => ({
+                          header: key,
+                          key,
+                          width: 20,
+                        }));
+                        data.forEach(row => sheet.addRow(row));
+                      }
+                      const buffer = await workbook.xlsx.writeBuffer();
+                      const blob = new Blob([buffer], {
+                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'historial_certificados.xlsx';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error('Error exportando a Excel:', error);
+                      message.error('Error al exportar a Excel');
+                    } finally {
+                      setExportLoading(false);
                     }
-                    const buffer = await workbook.xlsx.writeBuffer();
-                    const blob = new Blob([buffer], {
-                      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                    });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = 'historial_certificados.xlsx';
-                    a.click();
-                    URL.revokeObjectURL(url);
                   }}
-                  className="mb-4 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded shadow"
-                >                  Exportar a Excel
+                  className="mb-4 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded shadow disabled:opacity-50 disabled:cursor-not-allowed"
+                >                  {exportLoading ? 'Exportando...' : 'Exportar a Excel'}
                 </button>
                 {/* Botón de cambio masivo de estado - Admin/Facturación (Estado Mayorista) y Mayorista (Estado Distribuidor) */}                {(user?.rol === 1 || user?.rol === 4 || user?.rol === 2) && (
                   <button
