@@ -15,6 +15,9 @@ export default function UsuariosPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [modalVisible, setModalVisible] = useState(false);
+  // Banner de error dentro del modal de alta/edición — el toast (message.error)
+  // puede pasar desapercibido o desaparecer antes de que el usuario lo note.
+  const [modalError, setModalError] = useState('');
   const [editingUser, setEditingUser] = useState<any | null>(null);
   const [form] = Form.useForm();
   const [user, setUser] = useState<any>(null);
@@ -149,6 +152,7 @@ export default function UsuariosPage() {
   // funcion para agregar un nuevo usuario
   const openAddUser = () => {
     setEditingUser(null);
+    setModalError('');
     form.resetFields();
     form.setFieldsValue({ password: 'certificados' });
     // Si es mayorista, setear id_mayorista automáticamente
@@ -180,6 +184,7 @@ export default function UsuariosPage() {
       }
 
       setEditingUser(userData);
+      setModalError('');
       form.setFieldsValue(mapUserToForm(userData));
       setModalVisible(true);
     } catch (err: any) {
@@ -211,6 +216,7 @@ export default function UsuariosPage() {
   };
   //guarda los cambios del modal o crea un nuevo usuario
   const handleModalOk = async () => {
+    setModalError('');
     try {
       console.log('Valores del formulario antes de la validación:', form.getFieldsValue());
       const values = await form.validateFields();
@@ -221,6 +227,7 @@ export default function UsuariosPage() {
 
       if (error) {
         message.error(error);
+        setModalError(error);
         return;
       }
 
@@ -314,16 +321,19 @@ export default function UsuariosPage() {
       if (err?.errorFields) return;
 
       const serverMsg = err?.response?.data?.message;
-      if (serverMsg) {
-        // NestJS puede devolver message como array (errores de validación DTO)
-        message.error(Array.isArray(serverMsg) ? serverMsg.join(' | ') : serverMsg);
-      } else {
-        message.error('Error al guardar usuario');
-      }
+      // NestJS puede devolver message como array (errores de validación DTO)
+      const mensaje = serverMsg
+        ? (Array.isArray(serverMsg) ? serverMsg.join(' | ') : serverMsg)
+        : 'Error al guardar usuario';
+      // El toast puede pasar desapercibido — el banner dentro del modal es la
+      // señal principal, se queda visible hasta que el usuario corrija y reintente.
+      message.error(mensaje);
+      setModalError(mensaje);
     }
   };
 
   const handleModalCancel = () => {
+    setModalError('');
     setModalVisible(false);
     form.resetFields();
   };
@@ -569,7 +579,13 @@ export default function UsuariosPage() {
                   okButtonProps={{ style: { background: '#6366f1', borderColor: '#6366f1', color: '#fff' }, className: 'hover:bg-indigo-700 hover:border-indigo-700' }}
                   cancelButtonProps={{ style: { background: '#6366f1', borderColor: '#6366f1', color: '#fff' }, className: 'hover:bg-indigo-700 hover:border-indigo-700' }}
                   destroyOnClose
-                >                  {/* ⭐ Mostrar info si es mayorista editando */}
+                >
+                  {modalError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+                      {modalError}
+                    </div>
+                  )}
+                  {/* ⭐ Mostrar info si es mayorista editando */}
                   {isMayorista && editingUser && (
                     <div style={{
                       backgroundColor: '#f0f9ff',
