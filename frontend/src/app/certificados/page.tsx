@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto, type RankingSaldoPrepagoBajo } from '@/lib/api';
+import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto, type SaldoUsuario } from '@/lib/api';
 import Image from 'next/image';
 import ExcelJS from 'exceljs';
 import { message } from 'antd';
@@ -48,8 +48,34 @@ export default function CertificadosPage() {
 
   // Estados para métricas
   const [metricas, setMetricas] = useState<MetricasPersonales | null>(null);
-  const [rankingSaldoBajo, setRankingSaldoBajo] = useState<RankingSaldoPrepagoBajo[]>([]);
+  const [saldosUsuarios, setSaldosUsuarios] = useState<SaldoUsuario[]>([]);
   const [rankingLoading, setRankingLoading] = useState(false);
+  const [saldosCuitFiltro, setSaldosCuitFiltro] = useState('');
+  const [saldosOrdenPor, setSaldosOrdenPor] = useState<'prepago' | 'cuentaCorriente'>('prepago');
+  const [saldosOrdenDir, setSaldosOrdenDir] = useState<'asc' | 'desc'>('desc');
+
+  const toggleSaldosOrden = (columna: 'prepago' | 'cuentaCorriente') => {
+    if (saldosOrdenPor === columna) {
+      setSaldosOrdenDir(dir => (dir === 'desc' ? 'asc' : 'desc'));
+    } else {
+      setSaldosOrdenPor(columna);
+      setSaldosOrdenDir('desc');
+    }
+  };
+
+  const saldosUsuariosVisibles = saldosUsuarios
+    .filter(r => r.cuit?.includes(saldosCuitFiltro))
+    .slice()
+    .sort((a, b) => {
+      const campo = saldosOrdenPor === 'prepago' ? 'saldoPrepago' : 'saldoCuentaCorriente';
+      const valA = a[campo];
+      const valB = b[campo];
+      // Sin límite (null) siempre al final, sin importar la dirección
+      if (valA === null && valB === null) return 0;
+      if (valA === null) return 1;
+      if (valB === null) return -1;
+      return saldosOrdenDir === 'desc' ? valB - valA : valA - valB;
+    });
 
   // Estados para modal de facturación
   const [showFacturacionModal, setShowFacturacionModal] = useState(false);
@@ -274,17 +300,17 @@ export default function CertificadosPage() {
     }
   };
 
-  // Ranking de bajo saldo prepago: se consulta bajo demanda (solo al abrir la pestaña),
-  // no se precarga con las métricas. Solo aplica a Admin/Facturación/Mayorista
+  // Saldos de mayoristas/distribuidores SERSA: se consulta bajo demanda (solo al abrir
+  // la pestaña), no se precarga con las métricas. Solo aplica a Admin/Facturación/Mayorista/Técnico
   // (el backend rechaza otros roles).
-  const loadRankingSaldoBajo = async () => {
+  const loadSaldosUsuarios = async () => {
     setRankingLoading(true);
     try {
-      const ranking = await certificadosApi.getRankingSaldoPrepagoBajo();
-      setRankingSaldoBajo(ranking);
+      const saldos = await certificadosApi.getSaldosUsuarios();
+      setSaldosUsuarios(saldos);
     } catch (error) {
-      console.error('Error cargando ranking de saldo prepago:', error);
-      setRankingSaldoBajo([]);
+      console.error('Error cargando saldos de usuarios:', error);
+      setSaldosUsuarios([]);
     } finally {
       setRankingLoading(false);
     }
@@ -1100,11 +1126,11 @@ export default function CertificadosPage() {
               >
                 Historial
               </button>
-              {(user?.rol === 1 || user?.rol === 2 || user?.rol === 4) && (
+              {(user?.rol === 1 || user?.rol === 2 || user?.rol === 4 || user?.rol === 5) && (
                 <button
                   onClick={() => {
                     setActiveTab('saldoPrepago');
-                    loadRankingSaldoBajo();
+                    loadSaldosUsuarios();
                   }}
                   className={`${
                     activeTab === 'saldoPrepago'
@@ -1112,7 +1138,7 @@ export default function CertificadosPage() {
                       : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   } whitespace-nowrap py-4 px-6 border-b-2 font-medium text-sm`}
                 >
-                  ⚠️ Saldos Prepago
+                  Saldos
                 </button>
               )}
             </nav>
@@ -1857,8 +1883,17 @@ export default function CertificadosPage() {
             {activeTab === 'saldoPrepago' && (
               <div>
                 <h3 className="text-lg font-medium text-gray-900 mb-4">
-                  ⚠️ Bajo Saldo Prepago {user?.rol === 2 ? '(tus distribuidores)' : '(mayoristas y distribuidores SERSA)'}
+                  Saldos {user?.rol === 2 ? '(tus distribuidores)' : '(mayoristas y distribuidores SERSA)'}
                 </h3>
+                <div className="mb-4 max-w-xs">
+                  <input
+                    type="text"
+                    value={saldosCuitFiltro}
+                    onChange={e => setSaldosCuitFiltro(e.target.value.replace(/\D/g, ''))}
+                    placeholder="Buscar por CUIT"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  />
+                </div>
                 {rankingLoading ? (
                   <div className="flex justify-center py-6">
                     <svg className="animate-spin h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1866,40 +1901,49 @@ export default function CertificadosPage() {
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                   </div>
-                ) : rankingSaldoBajo.length > 0 ? (
-                  <div className="max-w-md space-y-6">
-                    {/* Sin saldo: se quedaron en 0, listados aparte con leyenda propia */}
-                    {rankingSaldoBajo.filter(r => r.saldoPrepago <= 0).length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold text-red-600 uppercase tracking-wide mb-2">Sin saldo</p>
-                        <ul className="divide-y divide-gray-200">
-                          {rankingSaldoBajo.filter(r => r.saldoPrepago <= 0).map(r => (
-                            <li key={r.id_usuario} className="py-2 flex justify-between text-sm">
-                              <span className="text-gray-700">{r.nombre}</span>
-                              <span className="font-semibold text-red-600">0 disponibles</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Bajo saldo: tienen disponibilidad, pero poca (top 5 ascendente) */}
-                    {rankingSaldoBajo.filter(r => r.saldoPrepago > 0).length > 0 && (
-                      <div>
-                        <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide mb-2">Bajo saldo</p>
-                        <ul className="divide-y divide-gray-200">
-                          {rankingSaldoBajo.filter(r => r.saldoPrepago > 0).slice(0, 5).map(r => (
-                            <li key={r.id_usuario} className="py-2 flex justify-between text-sm">
-                              <span className="text-gray-700">{r.nombre}</span>
-                              <span className="font-semibold text-orange-600">{r.saldoPrepago} disponibles</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
+                ) : saldosUsuariosVisibles.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Nombre</th>
+                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>
+                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Rol</th>
+                          <th
+                            onClick={() => toggleSaldosOrden('prepago')}
+                            className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-gray-700"
+                          >
+                            Saldo Prepago {saldosOrdenPor === 'prepago' && (saldosOrdenDir === 'desc' ? '▼' : '▲')}
+                          </th>
+                          <th
+                            onClick={() => toggleSaldosOrden('cuentaCorriente')}
+                            className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-gray-700"
+                          >
+                            Saldo Cuenta Corriente {saldosOrdenPor === 'cuentaCorriente' && (saldosOrdenDir === 'desc' ? '▼' : '▲')}
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {saldosUsuariosVisibles.map(r => (
+                          <tr key={r.id_usuario}>
+                            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{r.nombre}</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{r.cuit}</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{getRoleName(r.rol)}</td>
+                            <td className={`px-3 py-3 whitespace-nowrap text-sm font-semibold ${r.saldoPrepago <= 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                              {r.saldoPrepago} disponibles
+                            </td>
+                            <td className={`px-3 py-3 whitespace-nowrap text-sm font-semibold ${r.saldoCuentaCorriente === null ? 'text-gray-400' : r.saldoCuentaCorriente <= 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                              {r.saldoCuentaCorriente === null
+                                ? 'Sin límite'
+                                : `${r.saldoCuentaCorriente} de ${r.limiteCuentaCorriente} disponibles`}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500">No hay usuarios con compras prepago cargadas.</p>
+                  <p className="text-sm text-gray-500">No hay usuarios para mostrar.</p>
                 )}
               </div>
             )}

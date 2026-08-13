@@ -12,6 +12,8 @@ import {
 import { User } from './entities/user.entity';
 import { Mayorista } from './entities/mayorista.entity';
 import { CompraPrepago } from './entities/compra-prepago.entity';
+import { Descarga } from '../descargas/entities/descarga.entity';
+import { EstadoDescarga } from '../shared/types';
 import {
   CreateUserDto,
   UpdateUserDto,
@@ -38,6 +40,8 @@ export class UsersService {
     private readonly mayoristaRepository: Repository<Mayorista>,
     @InjectRepository(CompraPrepago)
     private readonly compraPrepagoRepository: Repository<CompraPrepago>,
+    @InjectRepository(Descarga)
+    private readonly descargaRepository: Repository<Descarga>,
     private readonly auditoriaService: AuditoriaService,
   ) {}
   // ✅ Running in PRODUCTION mode with real AFIP integration
@@ -715,41 +719,61 @@ export class UsersService {
   }
 
   /**
-   * Ranking de usuarios con menor saldo prepago disponible (para alertar antes de que se queden sin crédito).
-   * Solo incluye usuarios que tengan al menos una compra prepago cargada alguna vez.
-   * Alcance: Mayorista (rol 2) ve sus propios distribuidores; Admin/Facturación (1/4) ven los mayoristas
-   * más los distribuidores del mayorista SERSA (id_mayorista = 1).
-   * Sin límite fijo de filas: el frontend separa "sin saldo" (0) de "bajo saldo" (>0) y
-   * acota la cantidad mostrada en cada grupo.
+   * Saldos (prepago y cuenta corriente) de mayoristas y distribuidores SERSA.
+   * Alcance: Mayorista (rol 2) ve sus propios distribuidores; Admin/Facturación/Técnico (1/4/5)
+   * ven los mayoristas más los distribuidores del mayorista SERSA (id_mayorista = 1).
+   * Incluye a todos los usuarios del alcance, tengan o no compras prepago cargadas.
+   * La cuenta corriente solo aplica a Distribuidores (rol 3) — Mayorista (rol 2) no tiene
+   * límite de cuenta corriente en el modelo actual (ver DescargasService.canUserDownload).
    */
-  async getRankingSaldoPrepagoBajo(
-    currentUser: any,
-  ): Promise<
-    Array<{ id_usuario: number; nombre: string; saldoPrepago: number }>
+  async getSaldosUsuarios(currentUser: any): Promise<
+    Array<{
+      id_usuario: number;
+      nombre: string;
+      cuit: string;
+      rol: number;
+      saldoPrepago: number;
+      saldoCuentaCorriente: number | null;
+      limiteCuentaCorriente: number | null;
+    }>
   > {
-    const query = this.compraPrepagoRepository
-      .createQueryBuilder('c')
-      .innerJoin('c.usuario', 'u')
+    const query = this.userRepository
+      .createQueryBuilder('u')
+      .leftJoin(CompraPrepago, 'c', 'c.id_usuario = u.id_usuario')
       .select('u.id_usuario', 'id_usuario')
       .addSelect('u.nombre', 'nombre')
-      .addSelect('SUM(c.cantidad - c.cantidad_usada)', 'saldo')
+      .addSelect('u.cuit', 'cuit')
+      .addSelect('u.rol', 'rol')
+      .addSelect('u.id_mayorista', 'id_mayorista')
+      .addSelect('u.limite_descargas', 'limite_descargas')
+      .addSelect('COALESCE(SUM(c.cantidad - c.cantidad_usada), 0)', 'saldo')
       .groupBy('u.id_usuario')
       .addGroupBy('u.nombre')
-      .orderBy('saldo', 'ASC');
+      .addGroupBy('u.cuit')
+      .addGroupBy('u.rol')
+      .addGroupBy('u.id_mayorista')
+      .addGroupBy('u.limite_descargas')
+      .orderBy('u.nombre', 'ASC');
 
+    let idMayoristaDistribuidores: number;
     if (currentUser.rol === 2) {
+      idMayoristaDistribuidores = currentUser.id_mayorista;
       query
         .andWhere('u.rol = :rol', { rol: 3 })
         .andWhere('u.id_mayorista = :idMayorista', {
-          idMayorista: currentUser.id_mayorista,
+          idMayorista: idMayoristaDistribuidores,
         });
-    } else if (currentUser.rol === 1 || currentUser.rol === 4) {
-      const SERSA_ID_MAYORISTA = 1;
+    } else if (
+      currentUser.rol === 1 ||
+      currentUser.rol === 4 ||
+      currentUser.rol === 5
+    ) {
+      idMayoristaDistribuidores = 1; // SERSA
       query.andWhere(
         new Brackets((qb) => {
           qb.where('u.rol = :rolMayorista', { rolMayorista: 2 }).orWhere(
             '(u.rol = :rolDistribuidor AND u.id_mayorista = :sersaId)',
-            { rolDistribuidor: 3, sersaId: SERSA_ID_MAYORISTA },
+            { rolDistribuidor: 3, sersaId: idMayoristaDistribuidores },
           );
         }),
       );
@@ -758,11 +782,64 @@ export class UsersService {
     }
 
     const rows = await query.getRawMany();
-    return rows.map((r) => ({
-      id_usuario: Number(r.id_usuario),
-      nombre: r.nombre,
-      saldoPrepago: Number(r.saldo),
-    }));
+
+    // Cuenta corriente: solo distribuidores (rol 3). Todas las filas rol=3 de esta
+    // respuesta comparten el mismo id_mayorista, así que el criterio de estados
+    // bloqueantes es uno solo para todo el lote (ver DescargasService.canUserDownload).
+    const idsDistribuidores = rows
+      .filter((r) => Number(r.rol) === 3)
+      .map((r) => Number(r.id_usuario));
+
+    let pendientesPorUsuario = new Map<number, number>();
+    if (idsDistribuidores.length > 0) {
+      const estadosQueBloquean =
+        idMayoristaDistribuidores === 1
+          ? [EstadoDescarga.PENDIENTE_FACTURAR, EstadoDescarga.FACTURADO]
+          : [EstadoDescarga.PENDIENTE_FACTURAR];
+
+      const pendientesRows = await this.descargaRepository
+        .createQueryBuilder('d')
+        .select('d.id_usuario', 'id_usuario')
+        .addSelect('COUNT(*)', 'pendientes')
+        .where('d.id_usuario IN (:...ids)', { ids: idsDistribuidores })
+        .andWhere('d.estadoDistribuidor IN (:...estados)', {
+          estados: estadosQueBloquean,
+        })
+        .groupBy('d.id_usuario')
+        .getRawMany();
+
+      pendientesPorUsuario = new Map(
+        pendientesRows.map((p) => [Number(p.id_usuario), Number(p.pendientes)]),
+      );
+    }
+
+    return rows.map((r) => {
+      const rol = Number(r.rol);
+      const idUsuario = Number(r.id_usuario);
+      const limiteCuentaCorriente =
+        rol === 3 ? Number(r.limite_descargas) : null;
+      const saldoCuentaCorriente =
+        rol === 3
+          ? Number(r.limite_descargas) - (pendientesPorUsuario.get(idUsuario) || 0)
+          : null;
+
+      return {
+        id_usuario: idUsuario,
+        nombre: r.nombre,
+        cuit: r.cuit,
+        rol,
+        saldoPrepago: Number(r.saldo),
+        saldoCuentaCorriente,
+        limiteCuentaCorriente,
+      };
+    }).sort((a, b) => {
+      // 1) Más saldo prepago primero. 2) En empate (incluye a todos con 0),
+      // más saldo cuenta corriente primero; null (Mayorista, sin cuenta corriente) al final.
+      if (b.saldoPrepago !== a.saldoPrepago) return b.saldoPrepago - a.saldoPrepago;
+      const ccA = a.saldoCuentaCorriente ?? -Infinity;
+      const ccB = b.saldoCuentaCorriente ?? -Infinity;
+      return ccB - ccA;
+    });
   }
 
   private getRolText(rol: number): string {

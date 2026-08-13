@@ -161,18 +161,20 @@ export class UsersController {
   ): Promise<User[]> {
     return await this.usersService.getDistribuidoresByMayorista(mayoristaId);
   }
-  @Get('ranking-saldo-prepago')
+  @Get('saldos')
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @SetMetadata('roles', [1, 2, 4]) // 1: Admin, 2: Mayorista, 4: Facturación
+  @SetMetadata('roles', [1, 2, 4, 5]) // 1: Admin, 2: Mayorista, 4: Facturación, 5: Técnico
   @ApiOperation({
-    summary: 'Ranking de usuarios con menor saldo prepago disponible',
+    summary:
+      'Saldos (prepago y cuenta corriente) de mayoristas y distribuidores SERSA',
   })
   @ApiResponse({
     status: 200,
-    description: 'Lista de hasta 5 usuarios con menor saldo prepago',
+    description:
+      'Lista de mayoristas y distribuidores SERSA (o de los propios distribuidores, si es Mayorista) con sus saldos',
   })
-  async getRankingSaldoPrepago(@Req() req: any) {
-    return await this.usersService.getRankingSaldoPrepagoBajo(req.user);
+  async getSaldosUsuarios(@Req() req: any) {
+    return await this.usersService.getSaldosUsuarios(req.user);
   }
 
   @Get('export/csv')

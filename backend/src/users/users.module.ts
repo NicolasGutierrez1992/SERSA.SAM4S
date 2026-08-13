@@ -5,11 +5,12 @@ import { UsersController } from './users.controller';
 import { User } from './entities/user.entity';
 import { Mayorista } from './entities/mayorista.entity';
 import { CompraPrepago } from './entities/compra-prepago.entity';
+import { Descarga } from '../descargas/entities/descarga.entity';
 import { AuditoriaModule } from '../auditoria/auditoria.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Mayorista, CompraPrepago]),
+    TypeOrmModule.forFeature([User, Mayorista, CompraPrepago, Descarga]),
     AuditoriaModule,
   ],
   controllers: [UsersController],

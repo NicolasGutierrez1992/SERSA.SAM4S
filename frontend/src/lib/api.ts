@@ -137,10 +137,14 @@ export interface MetricasPersonales {
   limiteCuentaCorriente?: number;
 }
 
-export interface RankingSaldoPrepagoBajo {
+export interface SaldoUsuario {
   id_usuario: number;
   nombre: string;
+  cuit: string;
+  rol: number;
   saldoPrepago: number;
+  saldoCuentaCorriente: number | null;
+  limiteCuentaCorriente: number | null;
 }
 
 export interface ValidacionDescargaDto {
@@ -386,8 +390,8 @@ export const certificadosApi = {
     return response.data;
   },
 
-  getRankingSaldoPrepagoBajo: async (): Promise<RankingSaldoPrepagoBajo[]> => {
-    const response = await api.get<RankingSaldoPrepagoBajo[]>('/users/ranking-saldo-prepago');
+  getSaldosUsuarios: async (): Promise<SaldoUsuario[]> => {
+    const response = await api.get<SaldoUsuario[]>('/users/saldos');
     return response.data;
   },
 
