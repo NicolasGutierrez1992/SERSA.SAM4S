@@ -92,6 +92,9 @@ backend/certs/*.pfx
 # Scripts de certificados con claves
 backend/scripts/afip/*.key
 backend/scripts/afip/*.pfx
+
+# Keys de service accounts de Google Cloud (backup a Drive, etc.)
+KeyGoogleCloud/
 archive/
 # Backups de base de datos
 *.sql.gz

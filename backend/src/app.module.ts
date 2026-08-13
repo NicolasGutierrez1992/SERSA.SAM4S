@@ -18,6 +18,7 @@ import { UsersModule } from './users/users.module';
 import { CertificadosModule } from './certificados/certificados.module';
 import { AuditoriaModule } from './auditoria/auditoria.module';
 import { AfipModule } from './afip/afip.module';
+import { BackupModule } from './backup/backup.module';
 import { AppInitializerService } from './common/app-initializer.service';
 
 @Module({
@@ -83,6 +84,7 @@ import { AppInitializerService } from './common/app-initializer.service';
     CertificadosModule,
     AuditoriaModule,
     AfipModule,
+    BackupModule,
   ],
   controllers: [AppController],
   providers: [

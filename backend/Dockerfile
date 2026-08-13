@@ -20,8 +20,11 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# postgresql-client provee pg_dump, usado por el backup automático diario
-RUN apk add --no-cache postgresql-client
+# postgresql18-client provee pg_dump, usado por el backup automático diario.
+# OJO: el paquete genérico "postgresql-client" de Alpine puede resolver a
+# postgresql-bdr-client (versión 9.4, obsoleta) — hay que pedir la versión
+# explícita que coincide con la imagen de Postgres usada (ver docker-compose.yml).
+RUN apk add --no-cache postgresql18-client
 
 RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
 
