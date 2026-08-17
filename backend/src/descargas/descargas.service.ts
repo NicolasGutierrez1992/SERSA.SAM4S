@@ -387,6 +387,7 @@ export class DescargasService {
             user.rol === 3 && !!user.id_mayorista && user.id_mayorista !== 1;
 
           let idCompraConsumida: number | null = null;
+          let idCompraMayoristaConsumida: number | null = null;
           let usoPrepago: boolean;
           let estadoMayoristaInicial: EstadoDescarga;
           let estadoDistribuidorInicial: EstadoDescarga;
@@ -450,6 +451,7 @@ export class DescargasService {
                 compraMayorista.cantidad_usada += 1;
                 await compraRepo.save(compraMayorista);
                 mayoristaUsoPrepago = true;
+                idCompraMayoristaConsumida = compraMayorista.id;
               }
             }
 
@@ -542,6 +544,7 @@ export class DescargasService {
             estadoDistribuidor: estadoDistribuidorInicial,
             tamaño: data.tamaño,
             id_compra_prepago: idCompraConsumida,
+            id_compra_prepago_mayorista: idCompraMayoristaConsumida,
             updated_at: ahora.toISOString(),
             created_at: ahora.toISOString(),
           });
@@ -603,6 +606,8 @@ export class DescargasService {
       referencia_pago_distribuidor: descarga.referencia_pago_distribuidor,
       numeroFacturaCompraPrepago:
         descarga.compraPrepago?.numero_factura ?? null,
+      numeroFacturaCompraPrepagoMayorista:
+        descarga.compraPrepagoMayorista?.numero_factura ?? null,
       usuario: descarga.usuario
         ? {
             nombre: descarga.usuario.nombre,
@@ -1014,24 +1019,34 @@ export class DescargasService {
           if (esDistribuidorDeMayorista) {
             // Pool del Mayorista, consumido de forma independiente del lote de
             // id_compra_prepago (que es el saldo propio del Distribuidor, si lo hay).
-            // compras_prepago es un contador agregado: no hace falta la fila exacta
-            // que se consumió originalmente, alcanza con devolver 1 a cualquier lote
-            // del Mayorista que tenga cantidad_usada > 0.
-            const idUsuarioMayorista = await this.resolverIdUsuarioMayorista(
-              idMayorista,
-              manager,
-            );
-            const compraMayorista = idUsuarioMayorista
-              ? await compraRepo
-                  .createQueryBuilder('c')
-                  .setLock('pessimistic_write')
-                  .where('c.id_usuario = :idUsuarioMayorista', {
-                    idUsuarioMayorista,
-                  })
-                  .andWhere('c.cantidad_usada > 0')
-                  .orderBy('c.id', 'DESC')
-                  .getOne()
-              : null;
+            // Preferir la referencia exacta (id_compra_prepago_mayorista); si la
+            // descarga es anterior a que existiera esta columna, hacer fallback
+            // genérico (compras_prepago es un contador agregado, no importa cuál
+            // fila exacta se decrementa mientras el total cuadre).
+            let compraMayorista: CompraPrepago | null = null;
+            if (descarga.id_compra_prepago_mayorista) {
+              compraMayorista = await compraRepo
+                .createQueryBuilder('c')
+                .setLock('pessimistic_write')
+                .where('c.id = :id', { id: descarga.id_compra_prepago_mayorista })
+                .getOne();
+            } else {
+              const idUsuarioMayorista = await this.resolverIdUsuarioMayorista(
+                idMayorista,
+                manager,
+              );
+              compraMayorista = idUsuarioMayorista
+                ? await compraRepo
+                    .createQueryBuilder('c')
+                    .setLock('pessimistic_write')
+                    .where('c.id_usuario = :idUsuarioMayorista', {
+                      idUsuarioMayorista,
+                    })
+                    .andWhere('c.cantidad_usada > 0')
+                    .orderBy('c.id', 'DESC')
+                    .getOne()
+                : null;
+            }
 
             if (compraMayorista) {
               compraMayorista.cantidad_usada = Math.max(
@@ -1115,6 +1130,7 @@ export class DescargasService {
       .createQueryBuilder('descarga')
       .leftJoinAndSelect('descarga.usuario', 'usuario')
       .leftJoinAndSelect('descarga.compraPrepago', 'compraPrepago')
+      .leftJoinAndSelect('descarga.compraPrepagoMayorista', 'compraPrepagoMayorista')
       .where('1=1');
 
     if (usuarioId) {

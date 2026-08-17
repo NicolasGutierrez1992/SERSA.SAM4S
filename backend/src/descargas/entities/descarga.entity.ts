@@ -128,7 +128,7 @@ export class Descarga {
 
   @ApiPropertyOptional({
     description:
-      'ID de la compra prepago que consumió el crédito de esta descarga (solo PREPAGO)',
+      'ID de la compra prepago propia del actor (Distribuidor/Mayorista/etc.) que consumió el crédito de esta descarga (solo PREPAGO)',
   })
   @Column({ type: 'integer', nullable: true })
   id_compra_prepago: number | null;
@@ -136,4 +136,15 @@ export class Descarga {
   @ManyToOne(() => CompraPrepago, { nullable: true })
   @JoinColumn({ name: 'id_compra_prepago' })
   compraPrepago: CompraPrepago;
+
+  @ApiPropertyOptional({
+    description:
+      'ID de la compra prepago del Mayorista que cubrió el lado estadoMayorista de esta descarga, cuando el actor es un Distribuidor de un Mayorista no-SERSA sin prepago propio (independiente de id_compra_prepago)',
+  })
+  @Column({ type: 'integer', nullable: true })
+  id_compra_prepago_mayorista: number | null;
+
+  @ManyToOne(() => CompraPrepago, { nullable: true })
+  @JoinColumn({ name: 'id_compra_prepago_mayorista' })
+  compraPrepagoMayorista: CompraPrepago;
 }

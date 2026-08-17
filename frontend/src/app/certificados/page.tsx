@@ -1676,10 +1676,16 @@ export default function CertificadosPage() {
                                           
                                           {/* Invoice and payment reference fields */}
                                           <div className="space-y-1 pt-2">
-                                            {descarga.tipoDescarga === 'PREPAGO' && (descarga.usuario?.id_mayorista === 1 || descarga.usuario?.idrol === 2) && (
+                                            {descarga.tipoDescarga === 'PREPAGO' && (
                                               <div className="text-xs">
                                                 <span className="font-semibold text-gray-700">Factura Prepago:</span>
                                                 <span className="ml-2 text-gray-600">{descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)'}</span>
+                                              </div>
+                                            )}
+                                            {descarga.estadoMayorista === 'PREPAGO' && descarga.tipoDescarga !== 'PREPAGO' && (
+                                              <div className="text-xs">
+                                                <span className="font-semibold text-gray-700">Factura Prepago (Mayorista):</span>
+                                                <span className="ml-2 text-gray-600">{descarga.numeroFacturaCompraPrepagoMayorista || 'Saldo migrado (sin factura)'}</span>
                                               </div>
                                             )}
                                             {descarga.numero_factura && (
@@ -1694,7 +1700,7 @@ export default function CertificadosPage() {
                                                 <span className="ml-2 text-gray-600">{descarga.referencia_pago}</span>
                                               </div>
                                             )}
-                                            {!descarga.numero_factura && !descarga.referencia_pago && !(descarga.tipoDescarga === 'PREPAGO' && (descarga.usuario?.id_mayorista === 1 || descarga.usuario?.idrol === 2)) && (
+                                            {!descarga.numero_factura && !descarga.referencia_pago && descarga.tipoDescarga !== 'PREPAGO' && descarga.estadoMayorista !== 'PREPAGO' && (
                                               <div className="text-xs text-gray-500">
                                                 Sin datos de facturación
                                               </div>
@@ -1718,9 +1724,14 @@ export default function CertificadosPage() {
                                         <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getEstadoColor(descarga.estadoMayorista)}`}>
                                           {descarga.estadoMayorista}
                                         </span>
-                                        {descarga.tipoDescarga === 'PREPAGO' && (descarga.usuario?.id_mayorista === 1 || descarga.usuario?.idrol === 2) && (
+                                        {descarga.tipoDescarga === 'PREPAGO' && (
                                           <span className="text-xs text-gray-600">
                                             <span className="font-semibold">Factura Prepago:</span> {descarga.numeroFacturaCompraPrepago || 'Saldo migrado (sin factura)'}
+                                          </span>
+                                        )}
+                                        {descarga.estadoMayorista === 'PREPAGO' && descarga.tipoDescarga !== 'PREPAGO' && (
+                                          <span className="text-xs text-gray-600">
+                                            <span className="font-semibold">Factura Prepago (Mayorista):</span> {descarga.numeroFacturaCompraPrepagoMayorista || 'Saldo migrado (sin factura)'}
                                           </span>
                                         )}
                                         {descarga.numero_factura && (
