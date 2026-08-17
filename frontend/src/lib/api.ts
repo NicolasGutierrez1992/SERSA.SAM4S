@@ -116,6 +116,7 @@ export interface DescargaHistorial {
     mail: string;
     idrol: number;
     id_mayorista?: number;
+    nombreMayorista?: string | null;
   };
 }
 
@@ -145,6 +146,7 @@ export interface SaldoUsuario {
   saldoPrepago: number;
   saldoCuentaCorriente: number | null;
   limiteCuentaCorriente: number | null;
+  nombreMayorista: string | null;
 }
 
 export interface ValidacionDescargaDto {
@@ -456,6 +458,8 @@ export interface AuditoriaLog {
   objetivo_id: string | null;
   /** Número de controlador (id_certificado) cuando el objetivo es una descarga/certificado */
   objetivo_referencia: string | null;
+  /** Descripción legible, calculada por el backend a partir de accion+objetivo_tipo+antes/despues */
+  descripcion: string;
   antes: unknown;
   despues: unknown;
   ip: string | null;

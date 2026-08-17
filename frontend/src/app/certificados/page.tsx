@@ -813,8 +813,8 @@ export default function CertificadosPage() {
         {metricas && (
           <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
             
-            {/* ========== ADMIN (Rol 1) y FACTURADOR (Rol 4) ========== */}
-            {(user?.rol === 1 || user?.rol === 4) && (
+            {/* ========== ADMIN (Rol 1), FACTURADOR (Rol 4) y TÉCNICO (Rol 5) ========== */}
+            {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
               <>
                 {/* 1. Descargas Totales (histórico) */}
                 <div className="bg-white overflow-hidden shadow rounded-lg">
@@ -1528,6 +1528,9 @@ export default function CertificadosPage() {
                             <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
                             {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>
+                            )}
+                            {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
+                              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Mayorista</th>
                             )}                            {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                               <>
                                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>
@@ -1577,6 +1580,11 @@ export default function CertificadosPage() {
                                 {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                                   <td className="px-3 py-4 whitespace-nowrap">
                                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full `}>{descarga.usuario?.cuit}</span>
+                                  </td>
+                                )}
+                                {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
+                                  <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-700">
+                                    {descarga.usuario?.nombreMayorista ?? '-'}
                                   </td>
                                 )}                                {(user?.rol === 1 || user?.rol === 4 || user?.rol === 5) && (
                                   <td className="px-3 py-4 whitespace-nowrap">
@@ -1942,6 +1950,7 @@ export default function CertificadosPage() {
                           <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Nombre</th>
                           <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">CUIT</th>
                           <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Rol</th>
+                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Mayorista</th>
                           <th
                             onClick={() => toggleSaldosOrden('prepago')}
                             className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide cursor-pointer select-none hover:text-gray-700"
@@ -1962,6 +1971,7 @@ export default function CertificadosPage() {
                             <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">{r.nombre}</td>
                             <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{r.cuit}</td>
                             <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{getRoleName(r.rol)}</td>
+                            <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{r.nombreMayorista ?? '-'}</td>
                             <td className={`px-3 py-3 whitespace-nowrap text-sm font-semibold ${r.saldoPrepago <= 0 ? 'text-red-600' : 'text-gray-900'}`}>
                               {r.saldoPrepago} disponibles
                             </td>

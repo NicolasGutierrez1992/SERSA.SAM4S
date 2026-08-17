@@ -37,8 +37,17 @@ export default function UsuariosPage() {
   const [creditosLoading, setCreditosLoading] = useState(false);
   // El límite de cuenta corriente no aplica a Admin (1), Mayorista (2) ni Técnico (5)
   const mostrarLimiteCuentaCorriente = creditosUser && ![1, 2, 5].includes(creditosUser.rol);
-  // Mayorista (2), Distribuidor (3) y Facturación (4) pueden recibir compras prepago
-  const mostrarComprasPrepago = creditosUser && [2, 3, 4].includes(creditosUser.rol);
+  // Mayorista (2), Distribuidor (3) y Facturación (4) pueden recibir compras prepago —
+  // excepto que Facturación/Técnico (rol logueado) no administran prepago propio de
+  // un Distribuidor que no es de SERSA (id_mayorista !== 1): esa relación es del Mayorista.
+  const mostrarComprasPrepago =
+    creditosUser &&
+    [2, 3, 4].includes(creditosUser.rol) &&
+    !(
+      [4, 5].includes(user?.rol) &&
+      creditosUser.rol === 3 &&
+      creditosUser.id_mayorista !== 1
+    );
 
   const fetchComprasPrepago = async (userId: number) => {
     setComprasLoading(true);
@@ -57,7 +66,14 @@ export default function UsuariosPage() {
     setCreditosLimiteValue(String(record.limite_descargas ?? 0));
     setComprasPrepago([]);
     setNuevaCompra({ cantidad: '', numero_factura: '' });
-    if ([2, 3, 4].includes(record.rol)) {
+    const puedeVerComprasPrepago =
+      [2, 3, 4].includes(record.rol) &&
+      !(
+        [4, 5].includes(user?.rol) &&
+        record.rol === 3 &&
+        record.id_mayorista !== 1
+      );
+    if (puedeVerComprasPrepago) {
       fetchComprasPrepago(record.id_usuario);
     }
   };

@@ -576,8 +576,15 @@ export class DescargasService {
     }
   }
   /**
-   * Convertir entidad Descarga a IDescarga
-   */ private convertToIDescarga(descarga: Descarga): IDescarga {
+   * Convertir entidad Descarga a IDescarga. `mayoristaMap` es opcional: solo lo
+   * pasa `getDescargas` (listados) para agregar `usuario.nombreMayorista` sin
+   * hacer una query por fila; las conversiones de una sola descarga (registrar/
+   * actualizar estado) quedan sin ese dato.
+   */
+  private convertToIDescarga(
+    descarga: Descarga,
+    mayoristaMap?: Map<number, string>,
+  ): IDescarga {
     return {
       id: descarga.id_descarga,
       usuarioId: descarga.id_usuario,
@@ -603,9 +610,50 @@ export class DescargasService {
             mail: descarga.usuario.mail,
             idrol: descarga.usuario.rol,
             id_mayorista: descarga.usuario.id_mayorista,
+            nombreMayorista: mayoristaMap
+              ? this.resolverNombreMayoristaDeMapa(
+                  descarga.usuario.id_mayorista,
+                  mayoristaMap,
+                )
+              : undefined,
           }
         : undefined,
     };
+  }
+
+  /**
+   * Resuelve id_mayorista -> nombre a partir de un mapa ya construido, con el
+   * caso especial id_mayorista=1 (SERSA, no tiene por qué existir como User rol=2).
+   */
+  private resolverNombreMayoristaDeMapa(
+    idMayorista: number | null | undefined,
+    mayoristaMap: Map<number, string>,
+  ): string | null {
+    if (!idMayorista) return null;
+    if (idMayorista === 1) return 'SERSA';
+    return mayoristaMap.get(idMayorista) ?? null;
+  }
+
+  /**
+   * Resuelve en batch (una sola query IN) el nombre de cada Mayorista (User
+   * rol=2) para una lista de id_mayorista. Mismo patrón que
+   * UsersService.findAll — se duplica acá porque vive en un servicio distinto.
+   */
+  private async resolverNombresMayoristaBatch(
+    idsMayorista: Array<number | null | undefined>,
+    manager: EntityManager,
+  ): Promise<Map<number, string>> {
+    const map = new Map<number, string>();
+    const ids = [...new Set(idsMayorista)].filter(
+      (id): id is number => !!id && id !== 1,
+    );
+    if (ids.length === 0) return map;
+    const mayoristas = await manager.getRepository(User).find({
+      where: { id_usuario: In(ids), rol: 2 },
+      select: ['id_usuario', 'nombre'],
+    });
+    mayoristas.forEach((m) => map.set(m.id_usuario, m.nombre));
+    return map;
   }
 
   /**
@@ -1177,8 +1225,13 @@ export class DescargasService {
       this.logger.log(`[getDescargas] Primera descarga:`, descargas[0]);
     }
 
+    const mayoristaMap = await this.resolverNombresMayoristaBatch(
+      descargas.map((d) => d.usuario?.id_mayorista),
+      this.descargaRepository.manager,
+    );
+
     return {
-      descargas: descargas.map((d) => this.convertToIDescarga(d)),
+      descargas: descargas.map((d) => this.convertToIDescarga(d, mayoristaMap)),
       total,
     };
   }

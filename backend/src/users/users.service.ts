@@ -169,6 +169,30 @@ export class UsersService {
     console.log('[UsersService][create] Salida:', savedUser);
     return savedUser;
   }
+  /**
+   * Resuelve id_mayorista -> nombre en batch (una sola query IN por los ids
+   * únicos recibidos), buscando el User rol=2 dueño de cada id_mayorista.
+   * id_mayorista=1 (SERSA) no necesariamente tiene un User rol=2 asociado, así
+   * que se resuelve como 'SERSA' sin consultar la base.
+   */
+  private async resolverNombresMayorista(
+    idsMayorista: Array<number | null | undefined>,
+  ): Promise<Map<number, string>> {
+    const map = new Map<number, string>();
+    map.set(1, 'SERSA');
+    const ids = [
+      ...new Set(idsMayorista.filter((id): id is number => !!id && id !== 1)),
+    ];
+    if (ids.length > 0) {
+      const mayoristas = await this.userRepository.find({
+        where: { id_usuario: In(ids), rol: UserRole.MAYORISTA },
+        select: ['id_usuario', 'nombre'],
+      });
+      mayoristas.forEach((m) => map.set(m.id_usuario, m.nombre));
+    }
+    return map;
+  }
+
   async findAll(queryDto: QueryUsersDto = {}, currentUser?: any) {
     const { page = 1, limit = 100, rol, status, id_mayorista } = queryDto;
 
@@ -204,17 +228,9 @@ export class UsersService {
     });
 
     // Resolve mayorista names with a single targeted query (only the page's unique ids)
-    const mayoristaIds = [
-      ...new Set(data.map((u) => u.id_mayorista).filter(Boolean)),
-    ] as number[];
-    const mayoristaMap = new Map<number, string>();
-    if (mayoristaIds.length > 0) {
-      const mayoristas = await this.userRepository.find({
-        where: { id_usuario: In(mayoristaIds), rol: UserRole.MAYORISTA },
-        select: ['id_usuario', 'nombre'],
-      });
-      mayoristas.forEach((m) => mayoristaMap.set(m.id_usuario, m.nombre));
-    }
+    const mayoristaMap = await this.resolverNombresMayorista(
+      data.map((u) => u.id_mayorista),
+    );
 
     // Saldo prepago (en vivo, no cacheado) de los usuarios de esta página
     const userIds = data.map((u) => u.id_usuario);
@@ -628,6 +644,16 @@ export class UsersService {
       throw new BadRequestException(
         'No tienes permisos para administrar compras prepago',
       );
+    } else if (
+      [4, 5].includes(currentUser.rol) &&
+      user.rol === 3 &&
+      user.id_mayorista !== 1
+    ) {
+      // Facturación y Técnico no administran prepago propio de Distribuidores
+      // que no son de SERSA — esa relación es del Mayorista con su Distribuidor.
+      throw new BadRequestException(
+        'No tenés permisos para asignar saldo prepago a un distribuidor que no es de SERSA',
+      );
     }
     return user;
   }
@@ -735,6 +761,7 @@ export class UsersService {
       saldoPrepago: number;
       saldoCuentaCorriente: number | null;
       limiteCuentaCorriente: number | null;
+      nombreMayorista: string | null;
     }>
   > {
     const query = this.userRepository
@@ -813,6 +840,13 @@ export class UsersService {
       );
     }
 
+    // Nombre del Mayorista al que pertenece cada Distribuidor (rol=3) de esta lista.
+    const mayoristaMap = await this.resolverNombresMayorista(
+      rows
+        .filter((r) => Number(r.rol) === 3)
+        .map((r) => Number(r.id_mayorista)),
+    );
+
     return rows.map((r) => {
       const rol = Number(r.rol);
       const idUsuario = Number(r.id_usuario);
@@ -831,6 +865,8 @@ export class UsersService {
         saldoPrepago: Number(r.saldo),
         saldoCuentaCorriente,
         limiteCuentaCorriente,
+        nombreMayorista:
+          rol === 3 ? (mayoristaMap.get(Number(r.id_mayorista)) ?? null) : null,
       };
     }).sort((a, b) => {
       // 1) Más saldo prepago primero. 2) En empate (incluye a todos con 0),

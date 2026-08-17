@@ -539,10 +539,10 @@ export class CertificadosController {
       this.timezoneService.formatDateToString(inicioMesArgentina);
 
     // ⭐ NUEVO: Métricas específicas por rol
-    if (user.rol === 1 || user.rol === 4) {
-      // ========== ROL 1 (ADMIN) y ROL 4 (FACTURADOR) ==========
+    if (user.rol === 1 || user.rol === 4 || user.rol === 5) {
+      // ========== ROL 1 (ADMIN), ROL 4 (FACTURADOR) y ROL 5 (TÉCNICO) ==========
       console.log(
-        `[getMetricasPersonales] Admin/Facturador (rol: ${user.rol}, userId: ${userId})`,
+        `[getMetricasPersonales] Admin/Facturador/Técnico (rol: ${user.rol}, userId: ${userId})`,
       );
 
       // 1. Descargas Totales (histórico, sin filtro de fecha, sin usuarioId)

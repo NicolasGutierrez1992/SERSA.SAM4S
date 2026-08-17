@@ -33,5 +33,6 @@ export interface IDescarga {
     mail: string;
     idrol: number;
     id_mayorista?: number;
+    nombreMayorista?: string | null;
   };
 }
