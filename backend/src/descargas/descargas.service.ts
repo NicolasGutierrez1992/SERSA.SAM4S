@@ -93,6 +93,25 @@ export class DescargasService {
       });
     return user?.id_mayorista || 0;
   }
+
+  /**
+   * Resuelve el id_usuario del User rol=2 (Mayorista) dueño de un id_mayorista dado.
+   * Se usa para ubicar el pool de compras_prepago del Mayorista al procesar descargas
+   * o restauraciones de crédito de sus Distribuidores (id_mayorista !== 1).
+   */
+  async resolverIdUsuarioMayorista(
+    idMayorista: number,
+    manager?: EntityManager,
+  ): Promise<number | null> {
+    const repo = (manager ?? this.descargaRepository.manager).getRepository(
+      User,
+    );
+    const mayorista = await repo.findOne({
+      where: { rol: 2, id_mayorista: idMayorista },
+      select: ['id_usuario'],
+    });
+    return mayorista?.id_usuario ?? null;
+  }
   /**
    * Obtener el notification_limit del mayorista
    * Busca al usuario con rol=2 e id_mayorista = mayoristaId
@@ -364,87 +383,155 @@ export class DescargasService {
           const descargaRepo = manager.getRepository(Descarga);
           const compraRepo = manager.getRepository(CompraPrepago);
 
+          const esDistribuidorDeMayorista =
+            user.rol === 3 && !!user.id_mayorista && user.id_mayorista !== 1;
+
           let idCompraConsumida: number | null = null;
-          const compra = await compraRepo
-            .createQueryBuilder('c')
-            .setLock('pessimistic_write')
-            .where('c.id_usuario = :userId', { userId: data.usuarioId })
-            .andWhere('c.cantidad > c.cantidad_usada')
-            .orderBy('c.fecha_compra', 'ASC')
-            .addOrderBy('c.id', 'ASC')
-            .getOne();
-
-          if (compra) {
-            compra.cantidad_usada += 1;
-            await compraRepo.save(compra);
-            idCompraConsumida = compra.id;
-          }
-
-          const usoPrepago = idCompraConsumida !== null;
-          usoPrepagoFinal = usoPrepago;
-
-          // Determinar estado inicial según la fuente de crédito realmente usada por ESTA descarga
+          let usoPrepago: boolean;
           let estadoMayoristaInicial: EstadoDescarga;
           let estadoDistribuidorInicial: EstadoDescarga;
 
-          if (usoPrepago) {
-            // Dueño del crédito consumido: SERSA, o el propio Mayorista descargando con su
-            // propio saldo (comprado directamente a SERSA) -> ya está pagado, ambos estados
-            // quedan en PREPAGO e inmutables. Si en cambio es un Distribuidor consumiendo
-            // saldo asignado por su Mayorista (no-SERSA), el Mayorista todavía debe rendir
-            // cuentas con SERSA por ese consumo.
-            const actorEsDuenoDelCredito =
-              user.id_mayorista === 1 || user.rol === 2;
+          if (esDistribuidorDeMayorista) {
+            // ⭐ Distribuidor de un Mayorista no-SERSA: dos chequeos INDEPENDIENTES.
+            // Lado Distribuidor (estadoDistribuidor): saldo prepago propio, comprado
+            // por adelantado a su Mayorista.
+            const compraDistribuidor = await compraRepo
+              .createQueryBuilder('c')
+              .setLock('pessimistic_write')
+              .where('c.id_usuario = :userId', { userId: data.usuarioId })
+              .andWhere('c.cantidad > c.cantidad_usada')
+              .orderBy('c.fecha_compra', 'ASC')
+              .addOrderBy('c.id', 'ASC')
+              .getOne();
+            if (compraDistribuidor) {
+              compraDistribuidor.cantidad_usada += 1;
+              await compraRepo.save(compraDistribuidor);
+              idCompraConsumida = compraDistribuidor.id;
+            }
+            const distribuidorUsoPrepago = idCompraConsumida !== null;
 
-            if (actorEsDuenoDelCredito) {
+            if (!distribuidorUsoPrepago) {
+              // Sin saldo propio: revalidar cupo de cuenta corriente propio (defensa
+              // ante condiciones de carrera) antes de tocar el pool del mayorista.
+              const descargasPendientes = await manager
+                .getRepository(Descarga)
+                .count({
+                  where: {
+                    id_usuario: data.usuarioId,
+                    estadoDistribuidor: EstadoDescarga.PENDIENTE_FACTURAR,
+                  },
+                });
+              if (descargasPendientes >= user.limite_descargas) {
+                throw new ForbiddenException(
+                  'Has alcanzado el límite de descargas pendientes. No podés descargar hasta que se libere el límite.',
+                );
+              }
+            }
+
+            // Lado Mayorista (estadoMayorista): saldo prepago del propio Mayorista
+            // con SERSA. Independiente del resultado del lado Distribuidor.
+            let mayoristaUsoPrepago = false;
+            const idUsuarioMayorista = await this.resolverIdUsuarioMayorista(
+              user.id_mayorista,
+              manager,
+            );
+            if (idUsuarioMayorista) {
+              const compraMayorista = await compraRepo
+                .createQueryBuilder('c')
+                .setLock('pessimistic_write')
+                .where('c.id_usuario = :idUsuarioMayorista', {
+                  idUsuarioMayorista,
+                })
+                .andWhere('c.cantidad > c.cantidad_usada')
+                .orderBy('c.fecha_compra', 'ASC')
+                .addOrderBy('c.id', 'ASC')
+                .getOne();
+              if (compraMayorista) {
+                compraMayorista.cantidad_usada += 1;
+                await compraRepo.save(compraMayorista);
+                mayoristaUsoPrepago = true;
+              }
+            }
+
+            estadoDistribuidorInicial = distribuidorUsoPrepago
+              ? EstadoDescarga.PREPAGO
+              : EstadoDescarga.PENDIENTE_FACTURAR;
+            estadoMayoristaInicial = mayoristaUsoPrepago
+              ? EstadoDescarga.PREPAGO
+              : EstadoDescarga.PENDIENTE_FACTURAR;
+            usoPrepago = distribuidorUsoPrepago;
+
+            this.logger.log(
+              `[registrarDescarga] Distribuidor ${data.usuarioId} de mayorista ${user.id_mayorista}: ` +
+                `estadoDistribuidor=${estadoDistribuidorInicial} (saldo propio=${distribuidorUsoPrepago}), ` +
+                `estadoMayorista=${estadoMayoristaInicial} (pool mayorista=${mayoristaUsoPrepago})`,
+            );
+          } else {
+            // Resto de roles (SERSA-directo, Mayorista con su propio saldo, Técnico,
+            // Admin, Facturación): comportamiento existente, sin cambios.
+            const compra = await compraRepo
+              .createQueryBuilder('c')
+              .setLock('pessimistic_write')
+              .where('c.id_usuario = :userId', { userId: data.usuarioId })
+              .andWhere('c.cantidad > c.cantidad_usada')
+              .orderBy('c.fecha_compra', 'ASC')
+              .addOrderBy('c.id', 'ASC')
+              .getOne();
+
+            if (compra) {
+              compra.cantidad_usada += 1;
+              await compraRepo.save(compra);
+              idCompraConsumida = compra.id;
+            }
+
+            usoPrepago = idCompraConsumida !== null;
+
+            if (usoPrepago) {
+              // Dueño del crédito consumido: SERSA, o el propio Mayorista descargando
+              // con su propio saldo (comprado directamente a SERSA) -> ya está pagado,
+              // ambos estados quedan en PREPAGO e inmutables.
               estadoMayoristaInicial = EstadoDescarga.PREPAGO;
               estadoDistribuidorInicial = EstadoDescarga.PREPAGO;
               this.logger.log(
                 `[registrarDescarga] Prepago propio (SERSA o Mayorista): Ambos estados = PREPAGO`,
               );
             } else {
-              // Distribuidor bajo un mayorista no-SERSA: Distribuidor PREPAGO (inmutable), Mayorista PENDIENTE (mutable)
-              estadoMayoristaInicial = EstadoDescarga.PENDIENTE_FACTURAR;
-              estadoDistribuidorInicial = EstadoDescarga.PREPAGO;
-              this.logger.log(
-                `[registrarDescarga] Prepago de distribuidor bajo mayorista ${user.id_mayorista}: ` +
-                  `Mayorista=PENDIENTE (mutable), Distribuidor=PREPAGO (inmutable)`,
-              );
-            }
-          } else {
-            // Sin saldo prepago: cae a cuenta corriente. Defensa ante condiciones de carrera:
-            // reconfirmar que sigue habiendo cupo de cuenta corriente en este momento.
-            const estadoField =
-              user.rol === 3 ? 'estadoDistribuidor' : 'estadoMayorista';
-            const estadosQueBloquean =
-              user.rol === 3 && user.id_mayorista !== 1
-                ? [EstadoDescarga.PENDIENTE_FACTURAR]
-                : [EstadoDescarga.PENDIENTE_FACTURAR, EstadoDescarga.FACTURADO];
-            const descargasPendientes = await manager
-              .getRepository(Descarga)
-              .count({
-                where: estadosQueBloquean.map((estado) => ({
-                  id_usuario: data.usuarioId,
-                  [estadoField]: estado,
-                })),
-              });
-            if (
-              user.rol !== 1 &&
-              user.rol !== 2 &&
-              user.rol !== 5 &&
-              descargasPendientes >= user.limite_descargas
-            ) {
-              throw new ForbiddenException(
-                'Has alcanzado el límite de descargas pendientes. No podés descargar hasta que se libere el límite.',
-              );
-            }
+              // Sin saldo prepago: cae a cuenta corriente. Defensa ante condiciones de
+              // carrera: reconfirmar que sigue habiendo cupo de cuenta corriente.
+              const estadoField =
+                user.rol === 3 ? 'estadoDistribuidor' : 'estadoMayorista';
+              const estadosQueBloquean = [
+                EstadoDescarga.PENDIENTE_FACTURAR,
+                EstadoDescarga.FACTURADO,
+              ];
+              const descargasPendientes = await manager
+                .getRepository(Descarga)
+                .count({
+                  where: estadosQueBloquean.map((estado) => ({
+                    id_usuario: data.usuarioId,
+                    [estadoField]: estado,
+                  })),
+                });
+              if (
+                user.rol !== 1 &&
+                user.rol !== 2 &&
+                user.rol !== 5 &&
+                descargasPendientes >= user.limite_descargas
+              ) {
+                throw new ForbiddenException(
+                  'Has alcanzado el límite de descargas pendientes. No podés descargar hasta que se libere el límite.',
+                );
+              }
 
-            estadoMayoristaInicial = EstadoDescarga.PENDIENTE_FACTURAR;
-            estadoDistribuidorInicial = EstadoDescarga.PENDIENTE_FACTURAR;
-            this.logger.log(
-              `[registrarDescarga] Cuenta corriente: Ambos estados = PENDIENTE`,
-            );
+              estadoMayoristaInicial = EstadoDescarga.PENDIENTE_FACTURAR;
+              estadoDistribuidorInicial = EstadoDescarga.PENDIENTE_FACTURAR;
+              this.logger.log(
+                `[registrarDescarga] Cuenta corriente: Ambos estados = PENDIENTE`,
+              );
+            }
           }
+
+          usoPrepagoFinal = usoPrepago;
 
           const descarga = descargaRepo.create({
             id_usuario: data.usuarioId,
@@ -637,9 +724,18 @@ export class DescargasService {
         select: ['id_mayorista', 'rol'],
       });
     const idMayorista = duenioDescarga?.id_mayorista || 0;
-    // Dueño del crédito consumido: SERSA, o el propio Mayorista con su propio saldo prepago.
-    const actorEsDuenoDelCredito =
-      idMayorista === 1 || duenioDescarga?.rol === 2;
+    // Cada estado es inmutable de forma independiente: queda "definitivo" cuando su
+    // propio lado (Mayorista↔SERSA o Distribuidor↔Mayorista) fue efectivamente cubierto
+    // con saldo prepago real al momento de la descarga.
+    const estadoMayoristaInmutable =
+      descarga.estadoMayorista === EstadoDescarga.PREPAGO;
+    const estadoDistribuidorInmutable =
+      descarga.estadoDistribuidor === EstadoDescarga.PREPAGO;
+    // Distribuidor de un Mayorista no-SERSA: el pool prepago consumido del lado
+    // Mayorista es independiente del lote referenciado por id_compra_prepago (que
+    // representa el saldo propio del Distribuidor, si lo hay) — se restaura aparte.
+    const esDistribuidorDeMayorista =
+      duenioDescarga?.rol === 3 && idMayorista !== 1 && idMayorista !== 0;
 
     // ⭐ NUEVA LÓGICA: Validar permisos según rol
     // Distribuidor (3) y Técnico (5) nunca pueden cambiar estados
@@ -668,28 +764,27 @@ export class DescargasService {
       nuevoEstado.estadoDistribuidor === EstadoDescarga.GARANTIA ||
       nuevoEstado.estadoDistribuidor === EstadoDescarga.BONIFICADO;
 
-    // ⭐ NUEVA LÓGICA: Bloqueo selectivo de PREPAGO
-    // Caso 1: PREPAGO ya pagado por el propio dueño (SERSA o Mayorista propio) - Bloquear AMBOS estados (excepto Garantia/Bonificado)
+    // ⭐ Bloqueo selectivo de PREPAGO, independiente por lado
     if (
-      descarga.tipo_descarga === 'PREPAGO' &&
-      actorEsDuenoDelCredito &&
-      !esEstadoLibreDeuda
+      estadoMayoristaInmutable &&
+      !esEstadoLibreDeuda &&
+      nuevoEstado.estadoMayorista !== undefined &&
+      nuevoEstado.estadoMayorista !== EstadoDescarga.PREPAGO
     ) {
       throw new ForbiddenException(
-        'No se puede modificar estados de descargas PREPAGO. El estado PREPAGO es definitivo e inmutable.',
+        'No se puede cambiar estadoMayorista. El estado PREPAGO en el mayorista es definitivo e inmutable.',
       );
     }
 
-    // Caso 2: PREPAGO de un Distribuidor bajo otro mayorista - Bloquear solo estadoDistribuidor
-    if (descarga.tipo_descarga === 'PREPAGO' && !actorEsDuenoDelCredito) {
-      if (
-        nuevoEstado.estadoDistribuidor !== undefined &&
-        nuevoEstado.estadoDistribuidor !== EstadoDescarga.PREPAGO
-      ) {
-        throw new ForbiddenException(
-          'No se puede cambiar estadoDistribuidor. El estado PREPAGO en el distribuidor es definitivo e inmutable. Solo el estadoMayorista puede modificarse.',
-        );
-      }
+    if (
+      estadoDistribuidorInmutable &&
+      !esEstadoLibreDeuda &&
+      nuevoEstado.estadoDistribuidor !== undefined &&
+      nuevoEstado.estadoDistribuidor !== EstadoDescarga.PREPAGO
+    ) {
+      throw new ForbiddenException(
+        'No se puede cambiar estadoDistribuidor. El estado PREPAGO en el distribuidor es definitivo e inmutable.',
+      );
     }
 
     const estadoAnterior = {
@@ -826,46 +921,88 @@ export class DescargasService {
     // Guardar cambios
     const updatedDescarga = await this.descargaRepository.save(descarga);
 
-    // Restaurar crédito para usuarios PREPAGO cuando se marca Garantia o Bonificado
-    // (solo si no estaba ya en un estado libre de deuda, para no acreditar dos veces)
-    const debeRestaurarCredito =
-      esEstadoLibreDeuda &&
-      !yaEstabaLibreDeuda &&
-      descarga.tipo_descarga === 'PREPAGO';
-    if (debeRestaurarCredito) {
-      await this.descargaRepository.manager.transaction(async (manager) => {
-        if (descarga.id_compra_prepago) {
-          const compraRepo = manager.getRepository(CompraPrepago);
-          const compra = await compraRepo
-            .createQueryBuilder('c')
-            .setLock('pessimistic_write')
-            .where('c.id = :id', { id: descarga.id_compra_prepago })
-            .getOne();
+    // Restaurar crédito prepago cuando se marca Garantia o Bonificado (solo si no
+    // estaba ya en un estado libre de deuda, para no acreditar dos veces). Cada lado
+    // se restaura de forma independiente, según haya quedado PREPAGO o no.
+    const debeRestaurarLadoDistribuidor =
+      esEstadoLibreDeuda && !yaEstabaLibreDeuda && estadoDistribuidorInmutable;
+    const debeRestaurarLadoMayorista =
+      esEstadoLibreDeuda && !yaEstabaLibreDeuda && estadoMayoristaInmutable;
 
-          if (compra) {
-            if (compra.cantidad_usada <= 0) {
+    if (debeRestaurarLadoDistribuidor || debeRestaurarLadoMayorista) {
+      await this.descargaRepository.manager.transaction(async (manager) => {
+        const compraRepo = manager.getRepository(CompraPrepago);
+
+        if (debeRestaurarLadoDistribuidor) {
+          if (descarga.id_compra_prepago) {
+            const compra = await compraRepo
+              .createQueryBuilder('c')
+              .setLock('pessimistic_write')
+              .where('c.id = :id', { id: descarga.id_compra_prepago })
+              .getOne();
+
+            if (compra) {
+              if (compra.cantidad_usada <= 0) {
+                this.logger.warn(
+                  `[updateEstadoDescarga] Compra ${compra.id} ya tenía cantidad_usada en 0 al restaurar crédito (lado distribuidor) de descarga ${descarga.id_descarga}`,
+                );
+              }
+              compra.cantidad_usada = Math.max(0, compra.cantidad_usada - 1);
+              await compraRepo.save(compra);
+            } else {
               this.logger.warn(
-                `[updateEstadoDescarga] Compra ${compra.id} ya tenía cantidad_usada en 0 al restaurar crédito de descarga ${descarga.id_descarga}`,
+                `[updateEstadoDescarga] Compra ${descarga.id_compra_prepago} no encontrada al restaurar crédito (lado distribuidor) de descarga ${descarga.id_descarga}`,
               );
             }
-            compra.cantidad_usada = Math.max(0, compra.cantidad_usada - 1);
-            await compraRepo.save(compra);
           } else {
+            // Descarga histórica anterior a esta feature: no sabemos qué compra acreditar.
             this.logger.warn(
-              `[updateEstadoDescarga] Compra ${descarga.id_compra_prepago} no encontrada al restaurar crédito de descarga ${descarga.id_descarga}`,
+              `[updateEstadoDescarga] Descarga ${descarga.id_descarga} sin id_compra_prepago — no se pudo restaurar crédito (lado distribuidor) automáticamente`,
             );
           }
-        } else {
-          // Descarga histórica anterior a esta feature: no sabemos qué compra acreditar.
-          // No hay ningún campo que restaurar automáticamente (limite_descargas ya no
-          // representa saldo prepago); requiere ajuste manual si corresponde.
-          this.logger.warn(
-            `[updateEstadoDescarga] Descarga ${descarga.id_descarga} sin id_compra_prepago — no se pudo restaurar crédito automáticamente`,
-          );
+        }
+
+        if (debeRestaurarLadoMayorista) {
+          if (esDistribuidorDeMayorista) {
+            // Pool del Mayorista, consumido de forma independiente del lote de
+            // id_compra_prepago (que es el saldo propio del Distribuidor, si lo hay).
+            // compras_prepago es un contador agregado: no hace falta la fila exacta
+            // que se consumió originalmente, alcanza con devolver 1 a cualquier lote
+            // del Mayorista que tenga cantidad_usada > 0.
+            const idUsuarioMayorista = await this.resolverIdUsuarioMayorista(
+              idMayorista,
+              manager,
+            );
+            const compraMayorista = idUsuarioMayorista
+              ? await compraRepo
+                  .createQueryBuilder('c')
+                  .setLock('pessimistic_write')
+                  .where('c.id_usuario = :idUsuarioMayorista', {
+                    idUsuarioMayorista,
+                  })
+                  .andWhere('c.cantidad_usada > 0')
+                  .orderBy('c.id', 'DESC')
+                  .getOne()
+              : null;
+
+            if (compraMayorista) {
+              compraMayorista.cantidad_usada = Math.max(
+                0,
+                compraMayorista.cantidad_usada - 1,
+              );
+              await compraRepo.save(compraMayorista);
+            } else {
+              this.logger.warn(
+                `[updateEstadoDescarga] No se encontró lote del mayorista ${idMayorista} con cantidad_usada>0 al restaurar crédito (lado mayorista) de descarga ${descarga.id_descarga}`,
+              );
+            }
+          }
+          // SERSA-directo / Mayorista con su propio saldo: mismo lote que el lado
+          // Distribuidor, ya restaurado arriba vía id_compra_prepago — no duplicar.
         }
       });
       this.logger.log(
-        `[updateEstadoDescarga] Crédito PREPAGO restaurado para usuario ${descarga.id_usuario} (estado: ${nuevoEstado.estadoMayorista || nuevoEstado.estadoDistribuidor})`,
+        `[updateEstadoDescarga] Crédito PREPAGO restaurado (distribuidor=${debeRestaurarLadoDistribuidor}, mayorista=${debeRestaurarLadoMayorista}) para descarga ${descarga.id_descarga}`,
       );
     }
 
