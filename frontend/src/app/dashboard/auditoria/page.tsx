@@ -222,7 +222,12 @@ export default function AuditoriaPage() {
       ellipsis: true,
       render: (_: unknown, record: AuditoriaLog) => record.objetivo_referencia || record.objetivo_id || '—',
     },
-    { title: 'IP', dataIndex: 'ip', key: 'ip', width: 150 },
+    {
+      title: 'Descripción',
+      dataIndex: 'descripcion',
+      key: 'descripcion',
+      ellipsis: true,
+    },
   ];
 
   // ─── Datos derivados para Métricas ───────────────────────────────────────
@@ -357,7 +362,7 @@ export default function AuditoriaPage() {
                 {log.objetivo_tipo}
                 {(log.objetivo_referencia || log.objetivo_id) && ` · ${log.objetivo_referencia || log.objetivo_id}`}
               </p>
-              {log.ip && <p className="text-xs text-gray-400 mt-1">IP: {log.ip}</p>}
+              {log.descripcion && <p className="text-xs text-gray-400 mt-1">{log.descripcion}</p>}
             </div>
           ))}
         </div>

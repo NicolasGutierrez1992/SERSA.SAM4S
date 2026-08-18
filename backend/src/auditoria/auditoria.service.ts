@@ -57,7 +57,9 @@ export class AuditoriaService {
    */
   private async resolverReferenciasLegibles(
     logs: Auditoria[],
-  ): Promise<Array<Auditoria & { objetivo_referencia: string | null }>> {
+  ): Promise<
+    Array<Auditoria & { objetivo_referencia: string | null; descripcion: string }>
+  > {
     const idsDescarga = Array.from(
       new Set(
         logs
@@ -86,7 +88,71 @@ export class AuditoriaService {
       ...log,
       objetivo_referencia:
         (log.objetivo_id && referenciaPorId.get(log.objetivo_id)) || null,
+      descripcion: this.generarDescripcion(log),
     }));
+  }
+
+  /**
+   * Descripción legible calculada al leer (no se persiste): a partir de accion +
+   * objetivo_tipo + antes/despues ya guardados. No requiere tocar los ~15 puntos
+   * del código que ya escriben logs, y cubre retroactivamente todo el historial
+   * existente. Cualquier combinación no contemplada cae al fallback genérico.
+   */
+  private generarDescripcion(log: Auditoria): string {
+    const { accion, objetivo_tipo, objetivo_id, antes, despues } = log;
+    const a = antes || {};
+    const d = despues || {};
+
+    if (objetivo_tipo === 'USER') {
+      if (accion === 'CREAR') return `Usuario creado: ${d.nombre} (CUIT ${d.cuit})`;
+      if (accion === 'ELIMINAR') return `Usuario eliminado: ${a.nombre}`;
+      if (accion === 'ACTUALIZAR') {
+        if (d.accion === 'reset_password') return 'Restablecimiento de contraseña';
+        return `Usuario actualizado: ${d.nombre || a.nombre}`;
+      }
+      if (accion === 'LOGIN') return 'Inicio de sesión';
+      if (accion === 'LOGIN_FALLIDO') {
+        return `Intento de login fallido (CUIT ${d.cuit}): ${d.motivo}`;
+      }
+      if (accion === 'LOGOUT') return 'Cierre de sesión';
+    }
+
+    if (objetivo_tipo === 'COMPRA_PREPAGO') {
+      if (accion === 'CREAR') {
+        return `Carga de ${d.cantidad} descargas prepago (factura ${d.numero_factura || 'sin factura'})`;
+      }
+      if (accion === 'ACTUALIZAR') {
+        return `Factura de compra prepago actualizada a ${d.numero_factura}`;
+      }
+    }
+
+    if (objetivo_tipo === 'CERTIFICADO_MAESTRO' && accion === 'CREAR') {
+      return objetivo_id === 'ROOT_RTI'
+        ? `Root_RTI cargado: ${d.archivo}`
+        : `Certificado PFX cargado: ${d.archivo}`;
+    }
+
+    if (objetivo_tipo === 'APP_SETTING' && accion === 'ACTUALIZAR') {
+      return `Configuración "${objetivo_id}" actualizada${d.value ? ' a ' + d.value : ''}`;
+    }
+
+    if (objetivo_tipo === 'CERTIFICADO') {
+      if (accion === 'DOWNLOAD') return `Descarga de certificado ${d.certificado} (${d.tipo_descarga})`;
+      if (accion === 'ERROR') return `Error al generar certificado: ${d.error}`;
+    }
+
+    if (objetivo_tipo === 'DESCARGA' && accion === 'UPDATE') {
+      const cambios: string[] = [];
+      if (a.estadoMayorista !== d.estadoMayorista) {
+        cambios.push(`Estado Mayorista: ${a.estadoMayorista} → ${d.estadoMayorista}`);
+      }
+      if (a.estadoDistribuidor !== d.estadoDistribuidor) {
+        cambios.push(`Estado Distribuidor: ${a.estadoDistribuidor} → ${d.estadoDistribuidor}`);
+      }
+      if (cambios.length > 0) return cambios.join(' | ');
+    }
+
+    return `${accion} sobre ${objetivo_tipo}`;
   }
 
   async create(createAuditoriaDto: CreateAuditoriaDto): Promise<Auditoria> {
