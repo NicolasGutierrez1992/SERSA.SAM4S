@@ -765,7 +765,7 @@ export default function CertificadosPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="w-full mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-wrap justify-between items-center py-4 gap-y-2">
             <div className="flex items-center">
               <button
@@ -808,7 +808,7 @@ export default function CertificadosPage() {
             </div>
           </div>
         </div>
-      </header>      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      </header>      <div className="w-full mx-auto py-6 sm:px-6 lg:px-8">
         {/* Métricas - Dinámicas según rol */}
         {metricas && (
           <div className="mb-8 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
