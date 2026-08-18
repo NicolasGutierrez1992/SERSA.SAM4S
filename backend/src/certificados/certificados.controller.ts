@@ -44,6 +44,8 @@ import {
   EstadoGeneracionResponseDto,
 } from './dto/generacion-job.dto';
 import { QueryDescargasDto } from '../descargas/dto/query-descargas.dto';
+import { QueryResumenFacturasDto } from '../descargas/dto/query-resumen-facturas.dto';
+import { ResumenFacturasResponseDto } from '../descargas/dto/resumen-factura.dto';
 import { User } from '../users/entities/user.entity';
 import { UserRole } from '../users/dto/user.dto';
 import { EstadoDescarga, IDescarga } from '../shared/types';
@@ -301,6 +303,9 @@ export class CertificadosController {
       page,
       limit,
       usuarioId: user.rol === 3 ? userId : undefined, // Solo distribuidores filtran por su ID
+      // El drill-down del Resumen por Factura reenvía bucket/numeroFacturaExacto: para
+      // Mayorista, forzar idMayorista propio server-side (no confiar en el query param).
+      idMayorista: user.rol === 2 ? user.id_mayorista : queryDto.idMayorista,
       userRole: user.rol, // ⭐ NUEVO: Pasar el rol del usuario para filtrado inteligente
     };
 
@@ -310,6 +315,35 @@ export class CertificadosController {
       descargas: result.descargas || [],
       total: result.total || 0,
       totalPages: Math.ceil((result.total || 0) / limit),
+    };
+  }
+
+  /**
+   * Resumen de descargas agrupado por factura efectiva del Mayorista.
+   * Solo Admin.
+   */
+  @Get('facturas')
+  @ApiOperation({
+    summary: 'Resumen de descargas agrupado por factura del Mayorista',
+    description:
+      'Agrupa las descargas por número de factura efectiva del Mayorista (numero_factura en CUENTA_CORRIENTE, factura de la compra prepago en PREPAGO). Acceso exclusivo Admin.',
+  })
+  @ApiResponse({ status: 200, type: ResumenFacturasResponseDto })
+  @RequireAdmin()
+  async getResumenFacturas(
+    @Query() queryDto: QueryResumenFacturasDto,
+  ): Promise<ResumenFacturasResponseDto> {
+    const page = queryDto.page || 1;
+    const limit = queryDto.limit || 20;
+
+    const params = { ...queryDto, page, limit };
+
+    const result = await this.descargasService.getResumenFacturas(params);
+
+    return {
+      facturas: result.facturas,
+      total: result.total,
+      totalPages: Math.ceil(result.total / limit),
     };
   }
 

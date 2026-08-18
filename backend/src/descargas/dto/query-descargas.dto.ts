@@ -156,4 +156,22 @@ export class QueryDescargasDto {
   @IsOptional()
   @IsString()
   numeroFactura?: string;
+
+  @ApiPropertyOptional({
+    example: '2025-001',
+    description:
+      'Número de factura efectiva del Mayorista (match exacto): numero_factura para CUENTA_CORRIENTE, compraPrepagoMayorista.numero_factura para PREPAGO. Usado por el drill-down del Resumen por Factura.',
+  })
+  @IsOptional()
+  @IsString()
+  numeroFacturaExacto?: string;
+
+  @ApiPropertyOptional({
+    enum: ['PENDIENTE_FACTURAR', 'SALDO_MIGRADO'],
+    description:
+      'Filtra descargas sin factura efectiva del Mayorista, según el motivo: PENDIENTE_FACTURAR (cuenta corriente aún no facturada) o SALDO_MIGRADO (prepago sin compra asociada). Usado por el drill-down del Resumen por Factura.',
+  })
+  @IsOptional()
+  @IsString()
+  bucket?: 'PENDIENTE_FACTURAR' | 'SALDO_MIGRADO';
 }

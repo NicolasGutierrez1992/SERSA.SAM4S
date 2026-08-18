@@ -121,6 +121,16 @@ export interface DescargaHistorial {
   };
 }
 
+export interface ResumenFactura {
+  numeroFactura: string | null;
+  bucket: 'FACTURADO' | 'PENDIENTE_FACTURAR' | 'SALDO_MIGRADO';
+  idMayorista: number | null;
+  nombreMayorista: string | null;
+  cantidadDescargas: number;
+  primeraDescarga: string;
+  ultimaDescarga: string;
+}
+
 export interface MetricasPersonales {
   rol: number;
   descargasTotales?: number;
@@ -357,6 +367,8 @@ export const certificadosApi = {
     mes?: number;
     anio?: number;
     userRole?: number;
+    numeroFacturaExacto?: string;
+    bucket?: 'PENDIENTE_FACTURAR' | 'SALDO_MIGRADO';
   }): Promise<{ descargas: DescargaHistorial[]; total: number; totalPages?: number }> => {
     const filteredParams: Record<string, unknown> = {};
     if (params) {
@@ -371,6 +383,28 @@ export const certificadosApi = {
     const { descargas, total, totalPages } = response.data;
     const limit = (filteredParams.limit as number) || 50;
     return { descargas, total, totalPages: totalPages ?? Math.ceil(total / limit) };
+  },
+
+  getResumenFacturas: async (params?: {
+    page?: number;
+    limit?: number;
+    idMayorista?: string;
+    fechaDesde?: string;
+    fechaHasta?: string;
+    estadoMayorista?: string;
+    cuit?: string;
+    nombre?: string;
+  }): Promise<{ facturas: ResumenFactura[]; total: number; totalPages: number }> => {
+    const filteredParams: Record<string, unknown> = {};
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          filteredParams[key] = value;
+        }
+      });
+    }
+    const response = await api.get('/certificados/facturas', { params: filteredParams });
+    return response.data;
   },
 
   cambiarEstado: async (

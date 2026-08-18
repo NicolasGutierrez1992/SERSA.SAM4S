@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto, type SaldoUsuario } from '@/lib/api';
+import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto, type SaldoUsuario, type ResumenFactura } from '@/lib/api';
 import Image from 'next/image';
 import ExcelJS from 'exceljs';
 import { message } from 'antd';
@@ -10,7 +10,7 @@ import { message } from 'antd';
 export default function CertificadosPage() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'descarga' | 'historial' | 'saldoPrepago'>('descarga');
+  const [activeTab, setActiveTab] = useState<'descarga' | 'historial' | 'resumenFacturas' | 'saldoPrepago'>('descarga');
   
   // Estados para descarga
   const [descargaData, setDescargaData] = useState<CreateDescargaRequest>({
@@ -45,6 +45,17 @@ export default function CertificadosPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalRegistros, setTotalRegistros] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Estado para Resumen por Factura
+  const [resumenFacturas, setResumenFacturas] = useState<ResumenFactura[]>([]);
+  const [resumenFacturasLoading, setResumenFacturasLoading] = useState(false);
+  const [resumenFacturasPage, setResumenFacturasPage] = useState(1);
+  const [resumenFacturasTotal, setResumenFacturasTotal] = useState(0);
+  const [resumenFacturasTotalPages, setResumenFacturasTotalPages] = useState(1);
+  const [expandedFacturas, setExpandedFacturas] = useState<Set<string>>(new Set());
+  const [detalleFacturaMap, setDetalleFacturaMap] = useState<Record<string, DescargaHistorial[]>>({});
+  const [detalleFacturaLoading, setDetalleFacturaLoading] = useState<string | null>(null);
+  const [exportFacturasLoading, setExportFacturasLoading] = useState(false);
 
   // Estados para métricas
   const [metricas, setMetricas] = useState<MetricasPersonales | null>(null);
@@ -399,7 +410,69 @@ export default function CertificadosPage() {
     } finally {
       setHistorialLoading(false);
     }
-  };   // Validar límite de descargas (ahora función reutilizable)
+  };
+
+  // Carga el resumen de descargas agrupado por factura del Mayorista. El backend ya
+  // fuerza idMayorista server-side para rol Mayorista, no hace falta replicarlo acá.
+  const loadResumenFacturas = async (page = 1) => {
+    setResumenFacturasLoading(true);
+    try {
+      const response = await certificadosApi.getResumenFacturas({ page, limit: 20 });
+      setResumenFacturas(response.facturas || []);
+      setResumenFacturasTotal(response.total ?? 0);
+      setResumenFacturasTotalPages(response.totalPages ?? 1);
+      setResumenFacturasPage(page);
+      setExpandedFacturas(new Set());
+      setDetalleFacturaMap({});
+    } catch (error) {
+      console.error('Error cargando resumen por factura:', error);
+      message.error('Error al cargar el resumen por factura');
+    } finally {
+      setResumenFacturasLoading(false);
+    }
+  };
+
+  const facturaKey = (f: ResumenFactura) => `${f.idMayorista ?? ''}::${f.bucket}::${f.numeroFactura ?? ''}`;
+
+  const toggleFacturaExpanded = async (f: ResumenFactura) => {
+    const key = facturaKey(f);
+    const yaAbierta = expandedFacturas.has(key);
+    setExpandedFacturas(prev => {
+      const next = new Set(prev);
+      if (yaAbierta) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+    if (yaAbierta || detalleFacturaMap[key]) return;
+
+    setDetalleFacturaLoading(key);
+    try {
+      const response = await certificadosApi.getHistorialDescargas({
+        page: 1,
+        limit: 1000,
+        idMayorista: f.idMayorista != null ? String(f.idMayorista) : undefined,
+        numeroFacturaExacto: f.bucket === 'FACTURADO' ? (f.numeroFactura ?? undefined) : undefined,
+        bucket: f.bucket !== 'FACTURADO' ? f.bucket : undefined,
+      });
+      setDetalleFacturaMap(prev => ({ ...prev, [key]: response.descargas || [] }));
+    } catch (error) {
+      console.error('Error cargando detalle de factura:', error);
+      message.error('Error al cargar el detalle de la factura');
+    } finally {
+      setDetalleFacturaLoading(null);
+    }
+  };
+
+  const etiquetaFactura = (f: ResumenFactura): string => {
+    if (f.bucket === 'PENDIENTE_FACTURAR') return 'Pendiente de Facturar';
+    if (f.bucket === 'SALDO_MIGRADO') return 'Saldo migrado (sin factura)';
+    return f.numeroFactura ?? '-';
+  };
+
+  // Validar límite de descargas (ahora función reutilizable)
   // ⭐ VALIDACIÓN CENTRALIZADA EN BACKEND - Elimina fallback defectuoso
   const validarLimiteDescargas = async () => {
     if (!user) return;
@@ -1140,6 +1213,21 @@ export default function CertificadosPage() {
               >
                 Historial
               </button>
+              {user?.rol === 1 && (
+                <button
+                  onClick={() => {
+                    setActiveTab('resumenFacturas');
+                    loadResumenFacturas(1);
+                  }}
+                  className={`${
+                    activeTab === 'resumenFacturas'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  } whitespace-nowrap py-4 px-6 border-b-2 font-medium text-sm`}
+                >
+                  Resumen por Factura
+                </button>
+              )}
               {(user?.rol === 1 || user?.rol === 2 || user?.rol === 4 || user?.rol === 5) && (
                 <button
                   onClick={() => {
@@ -1930,6 +2018,175 @@ export default function CertificadosPage() {
                       </div>
                     )}
                   </div>
+                )}
+              </div>
+            )}
+
+            {activeTab === 'resumenFacturas' && (
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-4">
+                  Resumen por Factura
+                </h3>
+                <button
+                  disabled={exportFacturasLoading || resumenFacturas.length === 0}
+                  onClick={async () => {
+                    setExportFacturasLoading(true);
+                    try {
+                      const response = await certificadosApi.getResumenFacturas({
+                        page: 1,
+                        limit: resumenFacturasTotal || 10000,
+                      });
+                      const data = response.facturas.map((f) => ({
+                        Mayorista: f.nombreMayorista ?? '-',
+                        'Nro. Factura': etiquetaFactura(f),
+                        'Cantidad de Descargas': f.cantidadDescargas,
+                        'Primera Descarga': new Date(f.primeraDescarga).toLocaleDateString(),
+                        'Última Descarga': new Date(f.ultimaDescarga).toLocaleDateString(),
+                      }));
+                      const workbook = new ExcelJS.Workbook();
+                      const sheet = workbook.addWorksheet('Resumen por Factura');
+                      if (data.length > 0) {
+                        sheet.columns = Object.keys(data[0]).map(key => ({
+                          header: key,
+                          key,
+                          width: 22,
+                        }));
+                        data.forEach(row => sheet.addRow(row));
+                      }
+                      const buffer = await workbook.xlsx.writeBuffer();
+                      const blob = new Blob([buffer], {
+                        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                      });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'resumen_por_factura.xlsx';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    } catch (error) {
+                      console.error('Error exportando resumen por factura:', error);
+                      message.error('Error al exportar a Excel');
+                    } finally {
+                      setExportFacturasLoading(false);
+                    }
+                  }}
+                  className="mb-4 bg-green-600 hover:bg-green-700 text-white font-semibold px-4 py-2 rounded shadow disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {exportFacturasLoading ? 'Exportando...' : 'Exportar a Excel'}
+                </button>
+
+                {resumenFacturasLoading ? (
+                  <div className="flex justify-center py-6">
+                    <svg className="animate-spin h-6 w-6 text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  </div>
+                ) : resumenFacturas.length > 0 ? (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full divide-y divide-gray-200">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-3 py-3 w-8"></th>
+                          {user?.rol !== 2 && (
+                            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Mayorista</th>
+                          )}
+                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Nro. Factura</th>
+                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Cantidad de Descargas</th>
+                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Primera Descarga</th>
+                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Última Descarga</th>
+                        </tr>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {resumenFacturas.map((f) => {
+                          const key = facturaKey(f);
+                          const isExpanded = expandedFacturas.has(key);
+                          const detalle = detalleFacturaMap[key];
+                          return (
+                            <>
+                              <tr
+                                key={key}
+                                className="cursor-pointer hover:bg-gray-50"
+                                onClick={() => toggleFacturaExpanded(f)}
+                              >
+                                <td className="px-3 py-3 text-gray-400">{isExpanded ? '▼' : '▶'}</td>
+                                {user?.rol !== 2 && (
+                                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{f.nombreMayorista ?? '-'}</td>
+                                )}
+                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
+                                  {f.bucket === 'FACTURADO' ? (
+                                    etiquetaFactura(f)
+                                  ) : (
+                                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">
+                                      {etiquetaFactura(f)}
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{f.cantidadDescargas}</td>
+                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{new Date(f.primeraDescarga).toLocaleDateString()}</td>
+                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{new Date(f.ultimaDescarga).toLocaleDateString()}</td>
+                              </tr>
+                              {isExpanded && (
+                                <tr key={`${key}-detalle`}>
+                                  <td colSpan={user?.rol !== 2 ? 6 : 5} className="px-3 py-3 bg-gray-50">
+                                    {detalleFacturaLoading === key ? (
+                                      <p className="text-sm text-gray-500">Cargando detalle...</p>
+                                    ) : detalle && detalle.length > 0 ? (
+                                      <table className="min-w-full divide-y divide-gray-200">
+                                        <thead>
+                                          <tr>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Controlador</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Fecha</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-200">
+                                          {detalle.map((d) => (
+                                            <tr key={d.id}>
+                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{d.controladorId || d.certificadoNombre || '-'}</td>
+                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{d.usuario?.nombre ?? '-'}</td>
+                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{new Date(d.createdAt).toLocaleDateString()}</td>
+                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{d.estadoMayorista}</td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    ) : (
+                                      <p className="text-sm text-gray-500">Sin descargas para mostrar.</p>
+                                    )}
+                                  </td>
+                                </tr>
+                              )}
+                            </>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {resumenFacturasTotalPages > 1 && (
+                      <div className="flex items-center justify-between mt-4">
+                        <button
+                          onClick={() => loadResumenFacturas(resumenFacturasPage - 1)}
+                          disabled={resumenFacturasPage <= 1 || resumenFacturasLoading}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                        >
+                          Anterior
+                        </button>
+                        <span className="text-sm text-gray-500">
+                          Página {resumenFacturasPage} de {resumenFacturasTotalPages} ({resumenFacturasTotal} facturas)
+                        </span>
+                        <button
+                          onClick={() => loadResumenFacturas(resumenFacturasPage + 1)}
+                          disabled={resumenFacturasPage >= resumenFacturasTotalPages || resumenFacturasLoading}
+                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                        >
+                          Siguiente
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">No hay facturas para mostrar.</p>
                 )}
               </div>
             )}

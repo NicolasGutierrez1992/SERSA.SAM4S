@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, EntityManager } from 'typeorm';
+import { Repository, In, EntityManager, SelectQueryBuilder } from 'typeorm';
 import { EstadoDescarga, IDescarga } from '../shared/types';
 import { User } from '../users/entities/user.entity';
 import { CompraPrepago } from '../users/entities/compra-prepago.entity';
@@ -9,6 +9,7 @@ import { AuditoriaService } from '../auditoria/auditoria.service';
 import { Certificado } from '../certificados/entities/certificado.entity';
 import { TimezoneService } from '../common/timezone.service';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BucketFactura, ResumenFacturaDto } from './dto/resumen-factura.dto';
 interface RegistrarDescargaData {
   usuarioId: number;
   controladorId?: string;
@@ -1028,7 +1029,9 @@ export class DescargasService {
               compraMayorista = await compraRepo
                 .createQueryBuilder('c')
                 .setLock('pessimistic_write')
-                .where('c.id = :id', { id: descarga.id_compra_prepago_mayorista })
+                .where('c.id = :id', {
+                  id: descarga.id_compra_prepago_mayorista,
+                })
                 .getOne();
             } else {
               const idUsuarioMayorista = await this.resolverIdUsuarioMayorista(
@@ -1092,13 +1095,16 @@ export class DescargasService {
     return this.convertToIDescarga(updatedDescarga);
   }
   /**
-   * Obtener historial de descargas con filtros
-   */ async getDescargas(
+   * Aplica al query builder los filtros de contexto compartidos entre
+   * `getDescargas` (historial) y `getResumenFacturas` (agrupado por factura).
+   * Asume que `query` ya tiene los joins `usuario`, `compraPrepago` y
+   * `compraPrepagoMayorista`.
+   */
+  private aplicarFiltrosComunes(
+    query: SelectQueryBuilder<Descarga>,
     params: any,
-  ): Promise<{ descargas: IDescarga[]; total: number }> {
+  ): void {
     const {
-      page = 1,
-      limit = 50,
       usuarioId,
       cuit,
       nombre,
@@ -1111,44 +1117,19 @@ export class DescargasService {
       estadoDistribuidor,
       estadoMayorista,
       marca,
-      numeroFactura,
-      userRole, // ⭐ NUEVO: Rol del usuario para filtrado inteligente
     } = params;
-    this.logger.log(`[getDescargas] Parámetros recibidos:`, params);
-    this.logger.log(
-      `[getDescargas] usuarioId: ${usuarioId} (tipo: ${typeof usuarioId})`,
-    );
-    this.logger.log(
-      `[getDescargas] idMayorista: ${idMayorista} (tipo: ${typeof idMayorista})`,
-    );
-    this.logger.log(`[getDescargas] userRole: ${userRole}`);
-    this.logger.log(`[getDescargas] estadoMayorista: ${estadoMayorista}`);
-    this.logger.log(`[getDescargas] estadoDistribuidor: ${estadoDistribuidor}`);
-    this.logger.log(`[getDescargas] cuit: ${cuit}`);
-
-    const query = this.descargaRepository
-      .createQueryBuilder('descarga')
-      .leftJoinAndSelect('descarga.usuario', 'usuario')
-      .leftJoinAndSelect('descarga.compraPrepago', 'compraPrepago')
-      .leftJoinAndSelect('descarga.compraPrepagoMayorista', 'compraPrepagoMayorista')
-      .where('1=1');
 
     if (usuarioId) {
       const usuarioIdNum =
         typeof usuarioId === 'string' ? parseInt(usuarioId, 10) : usuarioId;
-      this.logger.log(
-        `[getDescargas] Filtrando por usuarioId: ${usuarioIdNum}`,
-      );
       query.andWhere('descarga.id_usuario = :usuarioId', {
         usuarioId: usuarioIdNum,
       });
     }
     if (cuit) {
-      this.logger.log(`[getDescargas] Filtrando por cuit: ${cuit}`);
       query.andWhere('usuario.cuit LIKE :cuit', { cuit: `${cuit}%` });
     }
     if (nombre) {
-      this.logger.log(`[getDescargas] Filtrando por nombre: ${nombre}`);
       query.andWhere('usuario.nombre ILIKE :nombre', { nombre: `%${nombre}%` });
     }
     if (idMayorista) {
@@ -1156,9 +1137,6 @@ export class DescargasService {
         typeof idMayorista === 'string'
           ? parseInt(idMayorista, 10)
           : idMayorista;
-      this.logger.log(
-        `[getDescargas] Filtrando por idMayorista: ${idMayoristaNum}`,
-      );
       query.andWhere('usuario.id_mayorista = :idMayorista', {
         idMayorista: idMayoristaNum,
       });
@@ -1199,29 +1177,93 @@ export class DescargasService {
     // ⭐ FILTRADO DE ESTADOS - Lógica flexible
     // Ambos estados pueden filtrarse independientemente según el parámetro explícito
     if (estadoMayorista) {
-      this.logger.log(
-        `[getDescargas] Filtrando por estadoMayorista: ${estadoMayorista}`,
-      );
       query.andWhere('descarga.estadoMayorista = :estadoMayorista', {
         estadoMayorista,
       });
     }
     if (estadoDistribuidor) {
-      this.logger.log(
-        `[getDescargas] Filtrando por estadoDistribuidor: ${estadoDistribuidor}`,
-      );
       query.andWhere('descarga.estadoDistribuidor = :estadoDistribuidor', {
         estadoDistribuidor,
       });
     }
-
     if (marca) {
       query.andWhere('descarga.marca = :marca', { marca });
     }
+  }
+
+  /**
+   * Resuelve la factura efectiva "del Mayorista" de una descarga, usada para
+   * agrupar el Resumen por Factura. Ver DescargasService.getResumenFacturas.
+   * - PREPAGO: numero_factura de la compraPrepagoMayorista que cubrió la descarga.
+   *   Si no hay compra asociada (saldo migrado), bucket SALDO_MIGRADO.
+   * - CUENTA_CORRIENTE (u otro): numero_factura de la propia descarga.
+   *   Si aún no tiene número, bucket PENDIENTE_FACTURAR.
+   */
+  private resolverFacturaEfectiva(descarga: Descarga): {
+    numeroFactura: string | null;
+    bucket: BucketFactura;
+  } {
+    if (descarga.tipo_descarga === 'PREPAGO') {
+      const numeroFactura =
+        descarga.compraPrepagoMayorista?.numero_factura ?? null;
+      return numeroFactura
+        ? { numeroFactura, bucket: 'FACTURADO' }
+        : { numeroFactura: null, bucket: 'SALDO_MIGRADO' };
+    }
+    return descarga.numero_factura
+      ? { numeroFactura: descarga.numero_factura, bucket: 'FACTURADO' }
+      : { numeroFactura: null, bucket: 'PENDIENTE_FACTURAR' };
+  }
+
+  /**
+   * Obtener historial de descargas con filtros
+   */
+  async getDescargas(
+    params: any,
+  ): Promise<{ descargas: IDescarga[]; total: number }> {
+    const {
+      page = 1,
+      limit = 50,
+      numeroFactura,
+      numeroFacturaExacto,
+      bucket,
+    } = params;
+    this.logger.log(`[getDescargas] Parámetros recibidos:`, params);
+
+    const query = this.descargaRepository
+      .createQueryBuilder('descarga')
+      .leftJoinAndSelect('descarga.usuario', 'usuario')
+      .leftJoinAndSelect('descarga.compraPrepago', 'compraPrepago')
+      .leftJoinAndSelect(
+        'descarga.compraPrepagoMayorista',
+        'compraPrepagoMayorista',
+      )
+      .where('1=1');
+
+    this.aplicarFiltrosComunes(query, params);
+
     if (numeroFactura) {
       query.andWhere('descarga.numero_factura ILIKE :numeroFactura', {
         numeroFactura: `%${numeroFactura}%`,
       });
+    }
+    if (numeroFacturaExacto) {
+      query.andWhere(
+        `(
+          (descarga.tipo_descarga = 'PREPAGO' AND compraPrepagoMayorista.numero_factura = :numeroFacturaExacto)
+          OR (descarga.tipo_descarga IS DISTINCT FROM 'PREPAGO' AND descarga.numero_factura = :numeroFacturaExacto)
+        )`,
+        { numeroFacturaExacto },
+      );
+    }
+    if (bucket === 'SALDO_MIGRADO') {
+      query.andWhere(
+        `descarga.tipo_descarga = 'PREPAGO' AND compraPrepagoMayorista.numero_factura IS NULL`,
+      );
+    } else if (bucket === 'PENDIENTE_FACTURAR') {
+      query.andWhere(
+        `descarga.tipo_descarga IS DISTINCT FROM 'PREPAGO' AND descarga.numero_factura IS NULL`,
+      );
     }
 
     this.logger.log(
@@ -1237,9 +1279,6 @@ export class DescargasService {
     this.logger.log(
       `[getDescargas] Resultado: ${total} descargas encontradas, retornando ${descargas.length}`,
     );
-    if (descargas.length > 0) {
-      this.logger.log(`[getDescargas] Primera descarga:`, descargas[0]);
-    }
 
     const mayoristaMap = await this.resolverNombresMayoristaBatch(
       descargas.map((d) => d.usuario?.id_mayorista),
@@ -1250,5 +1289,100 @@ export class DescargasService {
       descargas: descargas.map((d) => this.convertToIDescarga(d, mayoristaMap)),
       total,
     };
+  }
+
+  /**
+   * Resumen de descargas agrupado por factura efectiva del Mayorista
+   * (ver resolverFacturaEfectiva). Trae todas las descargas que matchean los
+   * filtros de contexto y agrupa en memoria: no hay columna persistida para
+   * la factura efectiva, así que no se puede agrupar con GROUP BY en SQL.
+   * Si el volumen crudo crece mucho, considerar migrar a un GROUP BY con
+   * COALESCE en SQL.
+   */
+  async getResumenFacturas(
+    params: any,
+  ): Promise<{ facturas: ResumenFacturaDto[]; total: number }> {
+    const { page = 1, limit = 20 } = params;
+
+    const query = this.descargaRepository
+      .createQueryBuilder('descarga')
+      .leftJoinAndSelect('descarga.usuario', 'usuario')
+      .leftJoinAndSelect(
+        'descarga.compraPrepagoMayorista',
+        'compraPrepagoMayorista',
+      )
+      .where('1=1');
+
+    this.aplicarFiltrosComunes(query, params);
+
+    const descargas = await query.getMany();
+
+    const UMBRAL_ADVERTENCIA = 20000;
+    if (descargas.length > UMBRAL_ADVERTENCIA) {
+      this.logger.warn(
+        `[getResumenFacturas] Volumen crudo alto (${descargas.length} descargas) antes de agrupar. Considerar GROUP BY SQL si esto se vuelve frecuente.`,
+      );
+    }
+
+    const mayoristaMap = await this.resolverNombresMayoristaBatch(
+      descargas.map((d) => d.usuario?.id_mayorista),
+      this.descargaRepository.manager,
+    );
+
+    type Grupo = {
+      numeroFactura: string | null;
+      bucket: BucketFactura;
+      idMayorista: number | null;
+      cantidadDescargas: number;
+      primeraDescarga: Date;
+      ultimaDescarga: Date;
+    };
+    const grupos = new Map<string, Grupo>();
+
+    for (const descarga of descargas) {
+      const idMayorista = descarga.usuario?.id_mayorista ?? null;
+      const { numeroFactura, bucket } = this.resolverFacturaEfectiva(descarga);
+      const key = `${idMayorista}::${bucket}::${numeroFactura ?? ''}`;
+
+      const existente = grupos.get(key);
+      if (!existente) {
+        grupos.set(key, {
+          numeroFactura,
+          bucket,
+          idMayorista,
+          cantidadDescargas: 1,
+          primeraDescarga: descarga.created_at,
+          ultimaDescarga: descarga.created_at,
+        });
+      } else {
+        existente.cantidadDescargas += 1;
+        if (descarga.created_at < existente.primeraDescarga) {
+          existente.primeraDescarga = descarga.created_at;
+        }
+        if (descarga.created_at > existente.ultimaDescarga) {
+          existente.ultimaDescarga = descarga.created_at;
+        }
+      }
+    }
+
+    const todasLasFacturas: ResumenFacturaDto[] = Array.from(grupos.values())
+      .map((g) => ({
+        ...g,
+        nombreMayorista: this.resolverNombreMayoristaDeMapa(
+          g.idMayorista,
+          mayoristaMap,
+        ),
+      }))
+      .sort(
+        (a, b) =>
+          new Date(b.ultimaDescarga).getTime() -
+          new Date(a.ultimaDescarga).getTime(),
+      );
+
+    const total = todasLasFacturas.length;
+    const inicio = (page - 1) * limit;
+    const facturas = todasLasFacturas.slice(inicio, inicio + limit);
+
+    return { facturas, total };
   }
 }
