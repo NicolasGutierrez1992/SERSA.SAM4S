@@ -169,9 +169,18 @@ export class QueryDescargasDto {
   @ApiPropertyOptional({
     enum: ['PENDIENTE_FACTURAR', 'SALDO_MIGRADO'],
     description:
-      'Filtra descargas sin factura efectiva del Mayorista, según el motivo: PENDIENTE_FACTURAR (cuenta corriente aún no facturada) o SALDO_MIGRADO (prepago sin compra asociada). Usado por el drill-down del Resumen por Factura.',
+      'Filtra descargas sin factura efectiva, según el motivo: PENDIENTE_FACTURAR (cuenta corriente aún no facturada) o SALDO_MIGRADO (prepago sin compra asociada). Usado por el drill-down del Resumen por Factura.',
   })
   @IsOptional()
   @IsString()
   bucket?: 'PENDIENTE_FACTURAR' | 'SALDO_MIGRADO';
+
+  @ApiPropertyOptional({
+    enum: ['MAYORISTA', 'DISTRIBUIDOR'],
+    description:
+      'Lado de la factura efectiva a usar junto con numeroFacturaExacto/bucket: MAYORISTA (default) o DISTRIBUIDOR (solo descargas hechas por un Distribuidor). Usado por el drill-down del Resumen por Factura.',
+  })
+  @IsOptional()
+  @IsString()
+  modo?: 'MAYORISTA' | 'DISTRIBUIDOR';
 }

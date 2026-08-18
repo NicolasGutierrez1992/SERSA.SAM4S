@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto, type SaldoUsuario, type ResumenFactura } from '@/lib/api';
+import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto, type SaldoUsuario, type ResumenFactura, type ModoResumenFacturas } from '@/lib/api';
 import Image from 'next/image';
 import ExcelJS from 'exceljs';
 import { message } from 'antd';
@@ -47,6 +47,7 @@ export default function CertificadosPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   // Estado para Resumen por Factura
+  const [resumenModo, setResumenModo] = useState<ModoResumenFacturas>('MAYORISTA');
   const [resumenFacturas, setResumenFacturas] = useState<ResumenFactura[]>([]);
   const [resumenFacturasLoading, setResumenFacturasLoading] = useState(false);
   const [resumenFacturasPage, setResumenFacturasPage] = useState(1);
@@ -412,16 +413,18 @@ export default function CertificadosPage() {
     }
   };
 
-  // Carga el resumen de descargas agrupado por factura del Mayorista. El backend ya
-  // fuerza idMayorista server-side para rol Mayorista, no hace falta replicarlo acá.
-  const loadResumenFacturas = async (page = 1) => {
+  // Carga el resumen de descargas agrupado por factura. modo MAYORISTA agrupa todas
+  // las descargas por Mayorista; modo DISTRIBUIDOR agrupa solo las hechas por un
+  // Distribuidor, por su propia factura.
+  const loadResumenFacturas = async (page = 1, modo: ModoResumenFacturas = resumenModo) => {
     setResumenFacturasLoading(true);
     try {
-      const response = await certificadosApi.getResumenFacturas({ page, limit: 20 });
+      const response = await certificadosApi.getResumenFacturas({ page, limit: 20, modo });
       setResumenFacturas(response.facturas || []);
       setResumenFacturasTotal(response.total ?? 0);
       setResumenFacturasTotalPages(response.totalPages ?? 1);
       setResumenFacturasPage(page);
+      setResumenModo(modo);
       setExpandedFacturas(new Set());
       setDetalleFacturaMap({});
     } catch (error) {
@@ -432,7 +435,8 @@ export default function CertificadosPage() {
     }
   };
 
-  const facturaKey = (f: ResumenFactura) => `${f.idMayorista ?? ''}::${f.bucket}::${f.numeroFactura ?? ''}`;
+  const facturaKey = (f: ResumenFactura) =>
+    `${resumenModo}::${f.idMayorista ?? ''}::${f.idUsuario ?? ''}::${f.bucket}::${f.numeroFactura ?? ''}`;
 
   const toggleFacturaExpanded = async (f: ResumenFactura) => {
     const key = facturaKey(f);
@@ -453,7 +457,9 @@ export default function CertificadosPage() {
       const response = await certificadosApi.getHistorialDescargas({
         page: 1,
         limit: 1000,
-        idMayorista: f.idMayorista != null ? String(f.idMayorista) : undefined,
+        modo: resumenModo,
+        idMayorista: resumenModo === 'MAYORISTA' && f.idMayorista != null ? String(f.idMayorista) : undefined,
+        usuarioId: resumenModo === 'DISTRIBUIDOR' && f.idUsuario != null ? f.idUsuario : undefined,
         numeroFacturaExacto: f.bucket === 'FACTURADO' ? (f.numeroFactura ?? undefined) : undefined,
         bucket: f.bucket !== 'FACTURADO' ? f.bucket : undefined,
       });
@@ -2027,6 +2033,30 @@ export default function CertificadosPage() {
                 <h3 className="text-lg font-medium text-gray-900 mb-4">
                   Resumen por Factura
                 </h3>
+
+                <div className="flex gap-2 mb-4">
+                  <button
+                    onClick={() => loadResumenFacturas(1, 'MAYORISTA')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md ${
+                      resumenModo === 'MAYORISTA'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Mayoristas
+                  </button>
+                  <button
+                    onClick={() => loadResumenFacturas(1, 'DISTRIBUIDOR')}
+                    className={`px-3 py-1.5 text-sm font-medium rounded-md ${
+                      resumenModo === 'DISTRIBUIDOR'
+                        ? 'bg-indigo-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    Distribuidores
+                  </button>
+                </div>
+
                 <button
                   disabled={exportFacturasLoading || resumenFacturas.length === 0}
                   onClick={async () => {
@@ -2035,9 +2065,12 @@ export default function CertificadosPage() {
                       const response = await certificadosApi.getResumenFacturas({
                         page: 1,
                         limit: resumenFacturasTotal || 10000,
+                        modo: resumenModo,
                       });
                       const data = response.facturas.map((f) => ({
-                        Mayorista: f.nombreMayorista ?? '-',
+                        ...(resumenModo === 'DISTRIBUIDOR'
+                          ? { Distribuidor: f.nombreUsuario ?? '-', Mayorista: f.nombreMayorista ?? '-' }
+                          : { Mayorista: f.nombreMayorista ?? '-' }),
                         'Nro. Factura': etiquetaFactura(f),
                         'Cantidad de Descargas': f.cantidadDescargas,
                         'Primera Descarga': new Date(f.primeraDescarga).toLocaleDateString(),
@@ -2060,7 +2093,7 @@ export default function CertificadosPage() {
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = 'resumen_por_factura.xlsx';
+                      a.download = resumenModo === 'DISTRIBUIDOR' ? 'resumen_por_factura_distribuidores.xlsx' : 'resumen_por_factura_mayoristas.xlsx';
                       a.click();
                       URL.revokeObjectURL(url);
                     } catch (error) {
@@ -2088,9 +2121,10 @@ export default function CertificadosPage() {
                       <thead className="bg-gray-50">
                         <tr>
                           <th className="px-3 py-3 w-8"></th>
-                          {user?.rol !== 2 && (
-                            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Mayorista</th>
+                          {resumenModo === 'DISTRIBUIDOR' && (
+                            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Distribuidor</th>
                           )}
+                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Mayorista</th>
                           <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Nro. Factura</th>
                           <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Cantidad de Descargas</th>
                           <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Primera Descarga</th>
@@ -2102,6 +2136,7 @@ export default function CertificadosPage() {
                           const key = facturaKey(f);
                           const isExpanded = expandedFacturas.has(key);
                           const detalle = detalleFacturaMap[key];
+                          const colSpan = resumenModo === 'DISTRIBUIDOR' ? 7 : 6;
                           return (
                             <>
                               <tr
@@ -2110,9 +2145,10 @@ export default function CertificadosPage() {
                                 onClick={() => toggleFacturaExpanded(f)}
                               >
                                 <td className="px-3 py-3 text-gray-400">{isExpanded ? '▼' : '▶'}</td>
-                                {user?.rol !== 2 && (
-                                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{f.nombreMayorista ?? '-'}</td>
+                                {resumenModo === 'DISTRIBUIDOR' && (
+                                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{f.nombreUsuario ?? '-'}</td>
                                 )}
+                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{f.nombreMayorista ?? '-'}</td>
                                 <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
                                   {f.bucket === 'FACTURADO' ? (
                                     etiquetaFactura(f)
@@ -2128,7 +2164,7 @@ export default function CertificadosPage() {
                               </tr>
                               {isExpanded && (
                                 <tr key={`${key}-detalle`}>
-                                  <td colSpan={user?.rol !== 2 ? 6 : 5} className="px-3 py-3 bg-gray-50">
+                                  <td colSpan={colSpan} className="px-3 py-3 bg-gray-50">
                                     {detalleFacturaLoading === key ? (
                                       <p className="text-sm text-gray-500">Cargando detalle...</p>
                                     ) : detalle && detalle.length > 0 ? (
@@ -2138,7 +2174,9 @@ export default function CertificadosPage() {
                                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Controlador</th>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Fecha</th>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                                              {resumenModo === 'DISTRIBUIDOR' ? 'Estado Distribuidor' : 'Estado Mayorista'}
+                                            </th>
                                           </tr>
                                         </thead>
                                         <tbody className="divide-y divide-gray-200">
@@ -2147,7 +2185,7 @@ export default function CertificadosPage() {
                                               <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{d.controladorId || d.certificadoNombre || '-'}</td>
                                               <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{d.usuario?.nombre ?? '-'}</td>
                                               <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{new Date(d.createdAt).toLocaleDateString()}</td>
-                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{d.estadoMayorista}</td>
+                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{resumenModo === 'DISTRIBUIDOR' ? d.estadoDistribuidor : d.estadoMayorista}</td>
                                             </tr>
                                           ))}
                                         </tbody>

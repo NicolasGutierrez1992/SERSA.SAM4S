@@ -319,14 +319,14 @@ export class CertificadosController {
   }
 
   /**
-   * Resumen de descargas agrupado por factura efectiva del Mayorista.
-   * Solo Admin.
+   * Resumen de descargas agrupado por factura efectiva (Mayorista o
+   * Distribuidor, según el parámetro `modo`). Solo Admin.
    */
   @Get('facturas')
   @ApiOperation({
-    summary: 'Resumen de descargas agrupado por factura del Mayorista',
+    summary: 'Resumen de descargas agrupado por factura',
     description:
-      'Agrupa las descargas por número de factura efectiva del Mayorista (numero_factura en CUENTA_CORRIENTE, factura de la compra prepago en PREPAGO). Acceso exclusivo Admin.',
+      'Agrupa las descargas por número de factura efectiva. modo=MAYORISTA (default): todas las descargas por Mayorista. modo=DISTRIBUIDOR: solo descargas hechas por un Distribuidor, por su propia factura. Acceso exclusivo Admin.',
   })
   @ApiResponse({ status: 200, type: ResumenFacturasResponseDto })
   @RequireAdmin()

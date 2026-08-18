@@ -77,4 +77,13 @@ export class QueryResumenFacturasDto {
   @IsOptional()
   @IsString()
   nombre?: string;
+
+  @ApiPropertyOptional({
+    enum: ['MAYORISTA', 'DISTRIBUIDOR'],
+    description:
+      'MAYORISTA (default): agrupa todas las descargas por Mayorista y su factura. DISTRIBUIDOR: agrupa solo las descargas hechas por un Distribuidor, por su propia factura.',
+  })
+  @IsOptional()
+  @IsString()
+  modo?: 'MAYORISTA' | 'DISTRIBUIDOR';
 }

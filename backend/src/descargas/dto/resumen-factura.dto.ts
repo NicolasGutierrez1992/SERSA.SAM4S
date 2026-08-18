@@ -5,10 +5,12 @@ export type BucketFactura =
   | 'PENDIENTE_FACTURAR'
   | 'SALDO_MIGRADO';
 
+export type ModoResumenFacturas = 'MAYORISTA' | 'DISTRIBUIDOR';
+
 export class ResumenFacturaDto {
   @ApiPropertyOptional({
     description:
-      'Número de factura efectiva del Mayorista. Null cuando bucket !== FACTURADO.',
+      'Número de factura efectiva (Mayorista o Distribuidor según el modo). Null cuando bucket !== FACTURADO.',
     example: '2025-001',
   })
   numeroFactura: string | null;
@@ -25,6 +27,18 @@ export class ResumenFacturaDto {
 
   @ApiPropertyOptional({ description: 'Nombre del Mayorista dueño del grupo' })
   nombreMayorista: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Modo DISTRIBUIDOR: ID del usuario Distribuidor dueño del grupo. Null en modo MAYORISTA.',
+  })
+  idUsuario: number | null;
+
+  @ApiPropertyOptional({
+    description:
+      'Modo DISTRIBUIDOR: nombre del Distribuidor dueño del grupo. Null en modo MAYORISTA.',
+  })
+  nombreUsuario: string | null;
 
   @ApiProperty({ description: 'Cantidad de descargas agrupadas' })
   cantidadDescargas: number;

@@ -121,11 +121,15 @@ export interface DescargaHistorial {
   };
 }
 
+export type ModoResumenFacturas = 'MAYORISTA' | 'DISTRIBUIDOR';
+
 export interface ResumenFactura {
   numeroFactura: string | null;
   bucket: 'FACTURADO' | 'PENDIENTE_FACTURAR' | 'SALDO_MIGRADO';
   idMayorista: number | null;
   nombreMayorista: string | null;
+  idUsuario: number | null;
+  nombreUsuario: string | null;
   cantidadDescargas: number;
   primeraDescarga: string;
   ultimaDescarga: string;
@@ -364,11 +368,13 @@ export const certificadosApi = {
     marca?: string;
     cuit?: string;
     idMayorista?: string;
+    usuarioId?: number;
     mes?: number;
     anio?: number;
     userRole?: number;
     numeroFacturaExacto?: string;
     bucket?: 'PENDIENTE_FACTURAR' | 'SALDO_MIGRADO';
+    modo?: ModoResumenFacturas;
   }): Promise<{ descargas: DescargaHistorial[]; total: number; totalPages?: number }> => {
     const filteredParams: Record<string, unknown> = {};
     if (params) {
@@ -394,6 +400,7 @@ export const certificadosApi = {
     estadoMayorista?: string;
     cuit?: string;
     nombre?: string;
+    modo?: ModoResumenFacturas;
   }): Promise<{ facturas: ResumenFactura[]; total: number; totalPages: number }> => {
     const filteredParams: Record<string, unknown> = {};
     if (params) {
