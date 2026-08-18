@@ -194,6 +194,24 @@ npm run migration:revert -- -d src/data-source.ts
 
 **Tablas principales:** `usuarios`, `mayoristas`, `descargas`, `auditoria`, `afip_files`
 
+### Modelo de facturación de `descargas`
+
+Cada fila de `descargas` es un evento de descarga individual, pero registra **dos relaciones de facturación independientes** entre sí — SERSA↔Mayorista y Mayorista↔Distribuidor — que conviven en la misma fila y pueden tener estados distintos (una puede ser PREPAGO mientras la otra está en cuenta corriente). Hay varias columnas con nombres parecidos que corresponden a lados distintos; confundirlas ya causó bugs reales (ver caso de estudio abajo). Regla de referencia:
+
+| Columna | Lado / relación | Qué significa |
+|---|---|---|
+| `tipo_descarga` (`CUENTA_CORRIENTE \| PREPAGO \| null`) | **Distribuidor** (el actor que descargó, con su propio proveedor — su Mayorista, o SERSA si el actor es el Mayorista) | Referencia histórica de cómo se le cobró al actor. Determina qué campo mirar del lado Distribuidor. |
+| `estadoMayorista` (`Pendiente de Facturar \| Facturado \| Cobrado \| PREPAGO`) | **SERSA → Mayorista** | Estado real de esa relación, **independiente** de `tipo_descarga`. Determina qué factura corresponde al Mayorista. |
+| `estadoDistribuidor` (además `Garantia \| Bonificado`) | **Mayorista → Distribuidor** | Estado de esa relación. |
+| `numero_factura` | Mayorista, cuenta corriente | Solo tiene sentido cuando `estadoMayorista !== 'PREPAGO'`. |
+| `numero_factura_distribuidor` | Distribuidor, cuenta corriente | Solo tiene sentido cuando `tipo_descarga !== 'PREPAGO'`. |
+| `id_compra_prepago` / `compraPrepago` | Compra prepago **propia** del actor | Consume el saldo propio del actor — cubre su propia relación (con SERSA si el actor es el Mayorista, con su Mayorista si es Distribuidor). |
+| `id_compra_prepago_mayorista` / `compraPrepagoMayorista` | Compra prepago **del Mayorista** | Cubre el lado `estadoMayorista` cuando el actor es un Distribuidor de un Mayorista no-SERSA sin prepago propio. |
+
+**Caso de estudio real** (el bug que motivó esta tabla): descarga de FARIAS Adrián, Distribuidor de ELITRONIC ELITE ARGENTINA S.A. — `tipo_descarga = 'CUENTA_CORRIENTE'` (así se factura FARIAS con ELITRONIC) pero `estadoMayorista = 'PREPAGO'` con `id_compra_prepago_mayorista` apuntando a la compra prepago de ELITRONIC (así le cobra SERSA a ELITRONIC). Un código que decida "¿es PREPAGO?" mirando `tipo_descarga` en vez de `estadoMayorista` calcula mal la factura del lado Mayorista.
+
+La regla canónica de qué factura corresponde a cada lado vive en `DescargasService.resolverFacturaEfectivaMayorista` / `resolverFacturaEfectivaDistribuidor` (`backend/src/descargas/descargas.service.ts`), usada por el "Resumen por Factura" (`/certificados`, tab solo Admin). Debe coincidir exactamente con la lógica que ya usa el frontend en `certificados/page.tsx` para pintar "Factura Prepago" en la tab Historial (busca `estadoMayorista === 'PREPAGO'` para el lado Mayorista y `tipoDescarga === 'PREPAGO'` para el lado Distribuidor) — **si se toca una, revisar la otra**.
+
 ---
 
 ## Seguridad por capa

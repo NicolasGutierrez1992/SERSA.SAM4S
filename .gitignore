@@ -116,3 +116,4 @@ docker-compose.override.yml
 _docs_historicos/
 POS-GestionCloud.code-workspace
 backend/scripts/actualizar-mayoristas.ts
+frontend/tsconfig.tsbuildinfo

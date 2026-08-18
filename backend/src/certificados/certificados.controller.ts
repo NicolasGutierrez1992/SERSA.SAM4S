@@ -333,17 +333,11 @@ export class CertificadosController {
   async getResumenFacturas(
     @Query() queryDto: QueryResumenFacturasDto,
   ): Promise<ResumenFacturasResponseDto> {
-    const page = queryDto.page || 1;
-    const limit = queryDto.limit || 20;
-
-    const params = { ...queryDto, page, limit };
-
-    const result = await this.descargasService.getResumenFacturas(params);
+    const result = await this.descargasService.getResumenFacturas(queryDto);
 
     return {
       facturas: result.facturas,
       total: result.total,
-      totalPages: Math.ceil(result.total / limit),
     };
   }
 

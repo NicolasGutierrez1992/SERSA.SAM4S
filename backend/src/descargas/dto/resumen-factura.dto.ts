@@ -54,9 +54,6 @@ export class ResumenFacturasResponseDto {
   @ApiProperty({ type: [ResumenFacturaDto] })
   facturas: ResumenFacturaDto[];
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Cantidad total de facturas (sin paginar)' })
   total: number;
-
-  @ApiProperty()
-  totalPages: number;
 }

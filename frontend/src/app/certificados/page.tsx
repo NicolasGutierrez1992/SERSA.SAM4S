@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
 import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto, type SaldoUsuario, type ResumenFactura, type ModoResumenFacturas } from '@/lib/api';
 import Image from 'next/image';
@@ -50,10 +50,10 @@ export default function CertificadosPage() {
   const [resumenModo, setResumenModo] = useState<ModoResumenFacturas>('MAYORISTA');
   const [resumenFacturas, setResumenFacturas] = useState<ResumenFactura[]>([]);
   const [resumenFacturasLoading, setResumenFacturasLoading] = useState(false);
-  const [resumenFacturasPage, setResumenFacturasPage] = useState(1);
   const [resumenFacturasTotal, setResumenFacturasTotal] = useState(0);
-  const [resumenFacturasTotalPages, setResumenFacturasTotalPages] = useState(1);
   const [expandedFacturas, setExpandedFacturas] = useState<Set<string>>(new Set());
+  // Secciones (Mayorista, o Mayorista+Distribuidor) colapsadas manualmente. Vacío = todo expandido.
+  const [seccionesColapsadas, setSeccionesColapsadas] = useState<Set<string>>(new Set());
   const [detalleFacturaMap, setDetalleFacturaMap] = useState<Record<string, DescargaHistorial[]>>({});
   const [detalleFacturaLoading, setDetalleFacturaLoading] = useState<string | null>(null);
   const [exportFacturasLoading, setExportFacturasLoading] = useState(false);
@@ -415,18 +415,18 @@ export default function CertificadosPage() {
 
   // Carga el resumen de descargas agrupado por factura. modo MAYORISTA agrupa todas
   // las descargas por Mayorista; modo DISTRIBUIDOR agrupa solo las hechas por un
-  // Distribuidor, por su propia factura.
-  const loadResumenFacturas = async (page = 1, modo: ModoResumenFacturas = resumenModo) => {
+  // Distribuidor, por su propia factura. Sin paginación: se trae todo y se secciona
+  // por Mayorista (y por Distribuidor dentro, en modo DISTRIBUIDOR) en el cliente.
+  const loadResumenFacturas = async (modo: ModoResumenFacturas = resumenModo) => {
     setResumenFacturasLoading(true);
     try {
-      const response = await certificadosApi.getResumenFacturas({ page, limit: 20, modo });
+      const response = await certificadosApi.getResumenFacturas({ modo });
       setResumenFacturas(response.facturas || []);
       setResumenFacturasTotal(response.total ?? 0);
-      setResumenFacturasTotalPages(response.totalPages ?? 1);
-      setResumenFacturasPage(page);
       setResumenModo(modo);
       setExpandedFacturas(new Set());
       setDetalleFacturaMap({});
+      setSeccionesColapsadas(new Set());
     } catch (error) {
       console.error('Error cargando resumen por factura:', error);
       message.error('Error al cargar el resumen por factura');
@@ -434,6 +434,59 @@ export default function CertificadosPage() {
       setResumenFacturasLoading(false);
     }
   };
+
+  const toggleSeccion = (key: string) => {
+    setSeccionesColapsadas(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  // Agrupa la lista plana de facturas en secciones por Mayorista y, en modo
+  // DISTRIBUIDOR, un nivel extra por Distribuidor dentro de cada Mayorista.
+  type SeccionMayorista = {
+    key: string;
+    nombre: string;
+    facturas: ResumenFactura[];
+    distribuidores: { key: string; nombre: string; facturas: ResumenFactura[] }[];
+  };
+  const seccionesMayorista: SeccionMayorista[] = (() => {
+    const porMayorista = new Map<string, SeccionMayorista>();
+    for (const f of resumenFacturas) {
+      const keyMayorista = `${f.idMayorista ?? 'sin-mayorista'}`;
+      let seccion = porMayorista.get(keyMayorista);
+      if (!seccion) {
+        seccion = {
+          key: keyMayorista,
+          nombre: f.nombreMayorista ?? 'Sin Mayorista',
+          facturas: [],
+          distribuidores: [],
+        };
+        porMayorista.set(keyMayorista, seccion);
+      }
+      if (resumenModo === 'DISTRIBUIDOR') {
+        const keyDistribuidor = `${keyMayorista}::${f.idUsuario ?? 'sin-distribuidor'}`;
+        let distribuidor = seccion.distribuidores.find(d => d.key === keyDistribuidor);
+        if (!distribuidor) {
+          distribuidor = {
+            key: keyDistribuidor,
+            nombre: f.nombreUsuario ?? 'Sin Distribuidor',
+            facturas: [],
+          };
+          seccion.distribuidores.push(distribuidor);
+        }
+        distribuidor.facturas.push(f);
+      } else {
+        seccion.facturas.push(f);
+      }
+    }
+    return Array.from(porMayorista.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+  })();
 
   const facturaKey = (f: ResumenFactura) =>
     `${resumenModo}::${f.idMayorista ?? ''}::${f.idUsuario ?? ''}::${f.bucket}::${f.numeroFactura ?? ''}`;
@@ -477,6 +530,83 @@ export default function CertificadosPage() {
     if (f.bucket === 'SALDO_MIGRADO') return 'Saldo migrado (sin factura)';
     return f.numeroFactura ?? '-';
   };
+
+  // Tabla de facturas (con drill-down a certificados), reusada tanto en modo
+  // Mayoristas (una tabla por sección de Mayorista) como Distribuidores (una
+  // tabla por sub-sección de Distribuidor).
+  const renderTablaFacturas = (facturas: ResumenFactura[]) => (
+    <table className="min-w-full divide-y divide-gray-200">
+      <thead className="bg-gray-50">
+        <tr>
+          <th className="px-3 py-2 w-8"></th>
+          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Nro. Factura</th>
+          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Cantidad de Descargas</th>
+          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Primera Descarga</th>
+          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Última Descarga</th>
+        </tr>
+      </thead>
+      <tbody className="bg-white divide-y divide-gray-200">
+        {facturas.map((f) => {
+          const key = facturaKey(f);
+          const isExpanded = expandedFacturas.has(key);
+          const detalle = detalleFacturaMap[key];
+          return (
+            <Fragment key={key}>
+              <tr className="cursor-pointer hover:bg-gray-50" onClick={() => toggleFacturaExpanded(f)}>
+                <td className="px-3 py-2 text-gray-400">{isExpanded ? '▼' : '▶'}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">
+                  {f.bucket === 'FACTURADO' ? (
+                    etiquetaFactura(f)
+                  ) : (
+                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">
+                      {etiquetaFactura(f)}
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{f.cantidadDescargas}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{new Date(f.primeraDescarga).toLocaleDateString()}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{new Date(f.ultimaDescarga).toLocaleDateString()}</td>
+              </tr>
+              {isExpanded && (
+                <tr>
+                  <td colSpan={5} className="px-3 py-3 bg-gray-50">
+                    {detalleFacturaLoading === key ? (
+                      <p className="text-sm text-gray-500">Cargando detalle...</p>
+                    ) : detalle && detalle.length > 0 ? (
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead>
+                          <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Controlador</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Fecha</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                              {resumenModo === 'DISTRIBUIDOR' ? 'Estado Distribuidor' : 'Estado Mayorista'}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {detalle.map((d) => (
+                            <tr key={d.id}>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{d.controladorId || d.certificadoNombre || '-'}</td>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{d.usuario?.nombre ?? '-'}</td>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{new Date(d.createdAt).toLocaleDateString()}</td>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{resumenModo === 'DISTRIBUIDOR' ? d.estadoDistribuidor : d.estadoMayorista}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="text-sm text-gray-500">Sin descargas para mostrar.</p>
+                    )}
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          );
+        })}
+      </tbody>
+    </table>
+  );
 
   // Validar límite de descargas (ahora función reutilizable)
   // ⭐ VALIDACIÓN CENTRALIZADA EN BACKEND - Elimina fallback defectuoso
@@ -1223,7 +1353,7 @@ export default function CertificadosPage() {
                 <button
                   onClick={() => {
                     setActiveTab('resumenFacturas');
-                    loadResumenFacturas(1);
+                    loadResumenFacturas();
                   }}
                   className={`${
                     activeTab === 'resumenFacturas'
@@ -2036,7 +2166,7 @@ export default function CertificadosPage() {
 
                 <div className="flex gap-2 mb-4">
                   <button
-                    onClick={() => loadResumenFacturas(1, 'MAYORISTA')}
+                    onClick={() => loadResumenFacturas('MAYORISTA')}
                     className={`px-3 py-1.5 text-sm font-medium rounded-md ${
                       resumenModo === 'MAYORISTA'
                         ? 'bg-indigo-600 text-white'
@@ -2046,7 +2176,7 @@ export default function CertificadosPage() {
                     Mayoristas
                   </button>
                   <button
-                    onClick={() => loadResumenFacturas(1, 'DISTRIBUIDOR')}
+                    onClick={() => loadResumenFacturas('DISTRIBUIDOR')}
                     className={`px-3 py-1.5 text-sm font-medium rounded-md ${
                       resumenModo === 'DISTRIBUIDOR'
                         ? 'bg-indigo-600 text-white'
@@ -2063,8 +2193,6 @@ export default function CertificadosPage() {
                     setExportFacturasLoading(true);
                     try {
                       const response = await certificadosApi.getResumenFacturas({
-                        page: 1,
-                        limit: resumenFacturasTotal || 10000,
                         modo: resumenModo,
                       });
                       const data = response.facturas.map((f) => ({
@@ -2115,113 +2243,57 @@ export default function CertificadosPage() {
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                   </div>
-                ) : resumenFacturas.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full divide-y divide-gray-200">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-3 py-3 w-8"></th>
-                          {resumenModo === 'DISTRIBUIDOR' && (
-                            <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Distribuidor</th>
-                          )}
-                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Mayorista</th>
-                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Nro. Factura</th>
-                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Cantidad de Descargas</th>
-                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Primera Descarga</th>
-                          <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Última Descarga</th>
-                        </tr>
-                      </thead>
-                      <tbody className="bg-white divide-y divide-gray-200">
-                        {resumenFacturas.map((f) => {
-                          const key = facturaKey(f);
-                          const isExpanded = expandedFacturas.has(key);
-                          const detalle = detalleFacturaMap[key];
-                          const colSpan = resumenModo === 'DISTRIBUIDOR' ? 7 : 6;
-                          return (
-                            <>
-                              <tr
-                                key={key}
-                                className="cursor-pointer hover:bg-gray-50"
-                                onClick={() => toggleFacturaExpanded(f)}
-                              >
-                                <td className="px-3 py-3 text-gray-400">{isExpanded ? '▼' : '▶'}</td>
-                                {resumenModo === 'DISTRIBUIDOR' && (
-                                  <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{f.nombreUsuario ?? '-'}</td>
-                                )}
-                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{f.nombreMayorista ?? '-'}</td>
-                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-900">
-                                  {f.bucket === 'FACTURADO' ? (
-                                    etiquetaFactura(f)
-                                  ) : (
-                                    <span className="text-xs font-medium px-2 py-0.5 rounded bg-yellow-100 text-yellow-800">
-                                      {etiquetaFactura(f)}
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{f.cantidadDescargas}</td>
-                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{new Date(f.primeraDescarga).toLocaleDateString()}</td>
-                                <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">{new Date(f.ultimaDescarga).toLocaleDateString()}</td>
-                              </tr>
-                              {isExpanded && (
-                                <tr key={`${key}-detalle`}>
-                                  <td colSpan={colSpan} className="px-3 py-3 bg-gray-50">
-                                    {detalleFacturaLoading === key ? (
-                                      <p className="text-sm text-gray-500">Cargando detalle...</p>
-                                    ) : detalle && detalle.length > 0 ? (
-                                      <table className="min-w-full divide-y divide-gray-200">
-                                        <thead>
-                                          <tr>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Controlador</th>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Fecha</th>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                                              {resumenModo === 'DISTRIBUIDOR' ? 'Estado Distribuidor' : 'Estado Mayorista'}
-                                            </th>
-                                          </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-gray-200">
-                                          {detalle.map((d) => (
-                                            <tr key={d.id}>
-                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{d.controladorId || d.certificadoNombre || '-'}</td>
-                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{d.usuario?.nombre ?? '-'}</td>
-                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{new Date(d.createdAt).toLocaleDateString()}</td>
-                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{resumenModo === 'DISTRIBUIDOR' ? d.estadoDistribuidor : d.estadoMayorista}</td>
-                                            </tr>
-                                          ))}
-                                        </tbody>
-                                      </table>
-                                    ) : (
-                                      <p className="text-sm text-gray-500">Sin descargas para mostrar.</p>
-                                    )}
-                                  </td>
-                                </tr>
+                ) : seccionesMayorista.length > 0 ? (
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-500">{resumenFacturasTotal} factura{resumenFacturasTotal !== 1 ? 's' : ''} en total.</p>
+                    {seccionesMayorista.map((seccion) => {
+                      const seccionColapsada = seccionesColapsadas.has(seccion.key);
+                      return (
+                        <div key={seccion.key} className="border border-gray-200 rounded-lg overflow-hidden">
+                          <button
+                            onClick={() => toggleSeccion(seccion.key)}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-gray-100 hover:bg-gray-200 text-left"
+                          >
+                            <span className="font-semibold text-gray-900">{seccion.nombre}</span>
+                            <span className="text-sm text-gray-500">
+                              {seccionColapsada ? '▶' : '▼'}{' '}
+                              {resumenModo === 'DISTRIBUIDOR'
+                                ? `${seccion.distribuidores.length} distribuidor${seccion.distribuidores.length !== 1 ? 'es' : ''}`
+                                : `${seccion.facturas.length} factura${seccion.facturas.length !== 1 ? 's' : ''}`}
+                            </span>
+                          </button>
+                          {!seccionColapsada && (
+                            <div className="p-3 overflow-x-auto">
+                              {resumenModo === 'DISTRIBUIDOR' ? (
+                                <div className="space-y-3">
+                                  {seccion.distribuidores.map((distribuidor) => {
+                                    const distribuidorColapsado = seccionesColapsadas.has(distribuidor.key);
+                                    return (
+                                      <div key={distribuidor.key} className="border border-gray-100 rounded-md overflow-hidden">
+                                        <button
+                                          onClick={() => toggleSeccion(distribuidor.key)}
+                                          className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left"
+                                        >
+                                          <span className="text-sm font-medium text-gray-800">{distribuidor.nombre}</span>
+                                          <span className="text-xs text-gray-500">
+                                            {distribuidorColapsado ? '▶' : '▼'} {distribuidor.facturas.length} factura{distribuidor.facturas.length !== 1 ? 's' : ''}
+                                          </span>
+                                        </button>
+                                        {!distribuidorColapsado && (
+                                          <div className="overflow-x-auto">{renderTablaFacturas(distribuidor.facturas)}</div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                renderTablaFacturas(seccion.facturas)
                               )}
-                            </>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                    {resumenFacturasTotalPages > 1 && (
-                      <div className="flex items-center justify-between mt-4">
-                        <button
-                          onClick={() => loadResumenFacturas(resumenFacturasPage - 1)}
-                          disabled={resumenFacturasPage <= 1 || resumenFacturasLoading}
-                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                        >
-                          Anterior
-                        </button>
-                        <span className="text-sm text-gray-500">
-                          Página {resumenFacturasPage} de {resumenFacturasTotalPages} ({resumenFacturasTotal} facturas)
-                        </span>
-                        <button
-                          onClick={() => loadResumenFacturas(resumenFacturasPage + 1)}
-                          disabled={resumenFacturasPage >= resumenFacturasTotalPages || resumenFacturasLoading}
-                          className="px-3 py-1.5 text-sm border border-gray-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
-                        >
-                          Siguiente
-                        </button>
-                      </div>
-                    )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <p className="text-sm text-gray-500">No hay facturas para mostrar.</p>

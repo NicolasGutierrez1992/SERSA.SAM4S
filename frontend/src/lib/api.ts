@@ -392,8 +392,6 @@ export const certificadosApi = {
   },
 
   getResumenFacturas: async (params?: {
-    page?: number;
-    limit?: number;
     idMayorista?: string;
     fechaDesde?: string;
     fechaHasta?: string;
@@ -401,7 +399,7 @@ export const certificadosApi = {
     cuit?: string;
     nombre?: string;
     modo?: ModoResumenFacturas;
-  }): Promise<{ facturas: ResumenFactura[]; total: number; totalPages: number }> => {
+  }): Promise<{ facturas: ResumenFactura[]; total: number }> => {
     const filteredParams: Record<string, unknown> = {};
     if (params) {
       Object.entries(params).forEach(([key, value]) => {

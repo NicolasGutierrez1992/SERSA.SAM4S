@@ -1,31 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import {
-  IsString,
-  IsOptional,
-  IsNumber,
-  IsDateString,
-  Min,
-} from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class QueryResumenFacturasDto {
-  @ApiPropertyOptional({ description: 'Página', example: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  page?: number;
-
-  @ApiPropertyOptional({
-    description: 'Límite de facturas por página',
-    example: 20,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsNumber()
-  @Min(1)
-  limit?: number;
-
   @ApiPropertyOptional({ description: 'ID del mayorista', example: 1 })
   @IsOptional()
   @Type(() => Number)

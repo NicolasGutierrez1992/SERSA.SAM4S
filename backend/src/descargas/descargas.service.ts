@@ -1206,17 +1206,24 @@ export class DescargasService {
   /**
    * Resuelve la factura efectiva del lado Mayorista de una descarga, usada
    * para agrupar el Resumen por Factura en modo MAYORISTA.
-   * - PREPAGO: compraPrepago propia si el actor es el Mayorista o SERSA;
-   *   compraPrepagoMayorista si es un Distribuidor de otro Mayorista.
-   *   Sin compra asociada -> bucket SALDO_MIGRADO.
-   * - CUENTA_CORRIENTE (u otro): numero_factura de la propia descarga.
+   * - estadoMayorista === 'PREPAGO': compraPrepago propia si el actor es el
+   *   Mayorista o SERSA; compraPrepagoMayorista si es un Distribuidor de otro
+   *   Mayorista. Sin compra asociada -> bucket SALDO_MIGRADO.
+   * - estadoMayorista !== 'PREPAGO': numero_factura de la propia descarga.
    *   Sin número aún -> bucket PENDIENTE_FACTURAR.
+   * OJO: se mira estadoMayorista, NO tipo_descarga — tipo_descarga es solo la
+   * referencia histórica de cómo se cobró al actor con SU propio proveedor
+   * (relevante para el lado Distribuidor), no si SERSA le cobró al Mayorista
+   * vía prepago. Un Distribuidor puede estar en CUENTA_CORRIENTE con su
+   * Mayorista mientras ese Mayorista está en PREPAGO con SERSA en la misma
+   * descarga. Ver ARCHITECTURE.md, sección "Modelo de facturación de
+   * `descargas`", para el caso real que expuso este bug.
    */
   private resolverFacturaEfectivaMayorista(descarga: Descarga): {
     numeroFactura: string | null;
     bucket: BucketFactura;
   } {
-    if (descarga.tipo_descarga === 'PREPAGO') {
+    if (descarga.estadoMayorista === 'PREPAGO') {
       const numeroFactura = this.esMayoristaOSersa(descarga)
         ? (descarga.compraPrepago?.numero_factura ?? null)
         : (descarga.compraPrepagoMayorista?.numero_factura ?? null);
@@ -1303,11 +1310,11 @@ export class DescargasService {
               OR (descarga.tipo_descarga IS DISTINCT FROM 'PREPAGO' AND descarga.numero_factura_distribuidor = :numeroFacturaExacto)
             )`
           : `(
-              (descarga.tipo_descarga = 'PREPAGO' AND (
+              (descarga.estadoMayorista = 'PREPAGO' AND (
                 ((usuario.id_mayorista = 1 OR usuario.rol = 2) AND compraPrepago.numero_factura = :numeroFacturaExacto)
                 OR (NOT (usuario.id_mayorista = 1 OR usuario.rol = 2) AND compraPrepagoMayorista.numero_factura = :numeroFacturaExacto)
               ))
-              OR (descarga.tipo_descarga IS DISTINCT FROM 'PREPAGO' AND descarga.numero_factura = :numeroFacturaExacto)
+              OR (descarga.estadoMayorista IS DISTINCT FROM 'PREPAGO' AND descarga.numero_factura = :numeroFacturaExacto)
             )`;
       query.andWhere(condicion, { numeroFacturaExacto });
     }
@@ -1315,7 +1322,7 @@ export class DescargasService {
       const condicion =
         modo === 'DISTRIBUIDOR'
           ? `descarga.tipo_descarga = 'PREPAGO' AND compraPrepago.numero_factura IS NULL`
-          : `descarga.tipo_descarga = 'PREPAGO' AND (
+          : `descarga.estadoMayorista = 'PREPAGO' AND (
               ((usuario.id_mayorista = 1 OR usuario.rol = 2) AND compraPrepago.numero_factura IS NULL)
               OR (NOT (usuario.id_mayorista = 1 OR usuario.rol = 2) AND compraPrepagoMayorista.numero_factura IS NULL)
             )`;
@@ -1324,7 +1331,7 @@ export class DescargasService {
       const condicion =
         modo === 'DISTRIBUIDOR'
           ? `descarga.tipo_descarga IS DISTINCT FROM 'PREPAGO' AND descarga.numero_factura_distribuidor IS NULL`
-          : `descarga.tipo_descarga IS DISTINCT FROM 'PREPAGO' AND descarga.numero_factura IS NULL`;
+          : `descarga.estadoMayorista IS DISTINCT FROM 'PREPAGO' AND descarga.numero_factura IS NULL`;
       query.andWhere(condicion);
     }
 
@@ -1362,12 +1369,13 @@ export class DescargasService {
    * Trae todas las descargas que matchean los filtros de contexto y agrupa en
    * memoria: no hay columna persistida para la factura efectiva, así que no
    * se puede agrupar con GROUP BY en SQL. Si el volumen crudo crece mucho,
-   * considerar migrar a un GROUP BY con COALESCE en SQL.
+   * considerar migrar a un GROUP BY con COALESCE en SQL. No pagina: el
+   * frontend arma la vista seccionada por Mayorista con el listado completo.
    */
   async getResumenFacturas(
     params: any,
   ): Promise<{ facturas: ResumenFacturaDto[]; total: number }> {
-    const { page = 1, limit = 20, modo = 'MAYORISTA' } = params;
+    const { modo = 'MAYORISTA' } = params;
 
     const query = this.descargaRepository
       .createQueryBuilder('descarga')
@@ -1464,10 +1472,6 @@ export class DescargasService {
           new Date(a.ultimaDescarga).getTime(),
       );
 
-    const total = todasLasFacturas.length;
-    const inicio = (page - 1) * limit;
-    const facturas = todasLasFacturas.slice(inicio, inicio + limit);
-
-    return { facturas, total };
+    return { facturas: todasLasFacturas, total: todasLasFacturas.length };
   }
 }
