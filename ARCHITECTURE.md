@@ -126,6 +126,8 @@ src/
 ├── afip/                Cliente SOAP para WSAA y WSCert
 │   └── afip.service.ts  validateConfiguration() verifica archivos y env vars
 ├── auditoria/           Registro de acciones
+├── backup/              Backup diario de la BD a Google Drive (cron + manual)
+│   └── backup.service.ts  pg_dump -> Drive (service account) -> retención -> mail si falla
 └── common/
     ├── timezone.service.ts    Fechas en zona horaria Argentina
     └── interceptors/

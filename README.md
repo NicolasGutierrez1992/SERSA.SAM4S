@@ -251,7 +251,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 1. Conectar el repositorio a Railway y seleccionar la carpeta `backend/`
 2. Configurar todas las variables de entorno secretas en el panel de Railway
 3. Railway ejecuta automaticamente `npm run build && npm run start:prod`
-4. Las migraciones se aplican manualmente: conectarse a la DB de Railway y ejecutar el SQL de cada migracion en `backend/src/database/migrations/`
+4. Las migraciones pendientes en `backend/src/database/migrations/` se aplican automaticamente al arrancar (`migrationsRun: true` cuando `NODE_ENV=production`) — no hace falta correrlas a mano
 
 ### Frontend (Vercel)
 
@@ -260,6 +260,31 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 3. Vercel ejecuta automaticamente `npm run build`
 
 > **Nota cross-domain**: Las cookies usan `SameSite=None; Secure` en produccion para funcionar entre dominios distintos (Vercel frontend <-> Railway backend). Requiere HTTPS en ambos extremos.
+
+---
+
+## Backup automatico de la base de datos
+
+Todos los dias a las 3:00 AM (hora del servidor, configurable) el backend genera un dump completo de PostgreSQL y lo sube a una carpeta de Google Drive.
+
+**Flujo** (`backend/src/backup/backup.service.ts`):
+1. `pg_dump` genera el dump en formato custom (`-F c`) en un archivo temporal, con permisos restringidos al proceso (`chmod 600`)
+2. Se autentica contra Google Drive con una **service account** (server-to-server, sin depender de un usuario ni de un refresh token que pueda vencer)
+3. Sube el archivo a la carpeta configurada en `GDRIVE_BACKUP_FOLDER_ID`
+4. Aplica retencion: borra de Drive los backups mas viejos que `BACKUP_RETENTION_DAYS` (default 14 dias)
+5. Registra el resultado (`EXITOSO`/`FALLIDO`, tamano, duracion, id del archivo en Drive) en la tabla `backup_logs`
+6. Si algo falla, envia un mail de alerta al admin via Gmail API (mismo mecanismo OAuth2 que usa el sistema de notificaciones de descargas pendientes) y igual registra el intento fallido — el dump temporal se borra siempre al final, haya salido bien o mal
+
+**Endpoints** (`/api/backup`, ambos solo Admin):
+
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| `POST` | `/backup/run` | Dispara un backup manual (limitado a 3 por minuto) |
+| `GET` | `/backup/status?limit=` | Historial de los ultimos backups (default 20) |
+
+**Variables de entorno** (ver `backend/.env.example` para el detalle completo): `GOOGLE_SERVICE_ACCOUNT_KEY` (JSON de la service account de Drive, en base64), `GDRIVE_BACKUP_FOLDER_ID`, `BACKUP_RETENTION_DAYS`, `BACKUP_CRON`, mas las mismas `GMAIL_CLIENT_ID`/`GMAIL_CLIENT_SECRET`/`GMAIL_REFRESH_TOKEN` que ya usa el sistema de notificaciones.
+
+> **Limitacion conocida**: `BACKUP_CRON` se lee al importar el modulo, antes de que se cargue `.env` — en Railway y en Docker Compose funciona bien (las variables ya estan inyectadas al proceso antes de arrancar Node), pero en desarrollo local sin Docker (`npm run start:dev`) un `BACKUP_CRON` puesto solo en `.env` no tiene efecto y cae al default (`0 3 * * *`).
 
 ---
 
