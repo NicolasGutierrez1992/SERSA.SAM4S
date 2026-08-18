@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Fragment } from 'react';
 import { useRouter } from 'next/navigation';
-import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto, type SaldoUsuario, type ResumenFactura, type ModoResumenFacturas } from '@/lib/api';
+import {authApi, certificadosApi, type CreateDescargaRequest, type DescargaHistorial, type MetricasPersonales, type ValidacionDescargaDto, type SaldoUsuario, type ResumenFactura } from '@/lib/api';
 import Image from 'next/image';
 import ExcelJS from 'exceljs';
 import { message } from 'antd';
@@ -47,7 +47,6 @@ export default function CertificadosPage() {
   const [totalPages, setTotalPages] = useState(1);
 
   // Estado para Resumen por Factura
-  const [resumenModo, setResumenModo] = useState<ModoResumenFacturas>('MAYORISTA');
   const [resumenFacturas, setResumenFacturas] = useState<ResumenFactura[]>([]);
   const [resumenFacturasLoading, setResumenFacturasLoading] = useState(false);
   const [resumenFacturasTotal, setResumenFacturasTotal] = useState(0);
@@ -413,17 +412,14 @@ export default function CertificadosPage() {
     }
   };
 
-  // Carga el resumen de descargas agrupado por factura. modo MAYORISTA agrupa todas
-  // las descargas por Mayorista; modo DISTRIBUIDOR agrupa solo las hechas por un
-  // Distribuidor, por su propia factura. Sin paginación: se trae todo y se secciona
-  // por Mayorista (y por Distribuidor dentro, en modo DISTRIBUIDOR) en el cliente.
-  const loadResumenFacturas = async (modo: ModoResumenFacturas = resumenModo) => {
+  // Carga el resumen de descargas agrupado por factura del Mayorista. Sin
+  // paginación: se trae todo y se secciona por Mayorista en el cliente.
+  const loadResumenFacturas = async () => {
     setResumenFacturasLoading(true);
     try {
-      const response = await certificadosApi.getResumenFacturas({ modo });
+      const response = await certificadosApi.getResumenFacturas({ modo: 'MAYORISTA' });
       setResumenFacturas(response.facturas || []);
       setResumenFacturasTotal(response.total ?? 0);
-      setResumenModo(modo);
       setExpandedFacturas(new Set());
       setDetalleFacturaMap({});
       setSeccionesColapsadas(new Set());
@@ -447,13 +443,11 @@ export default function CertificadosPage() {
     });
   };
 
-  // Agrupa la lista plana de facturas en secciones por Mayorista y, en modo
-  // DISTRIBUIDOR, un nivel extra por Distribuidor dentro de cada Mayorista.
+  // Agrupa la lista plana de facturas en secciones por Mayorista.
   type SeccionMayorista = {
     key: string;
     nombre: string;
     facturas: ResumenFactura[];
-    distribuidores: { key: string; nombre: string; facturas: ResumenFactura[] }[];
   };
   const seccionesMayorista: SeccionMayorista[] = (() => {
     const porMayorista = new Map<string, SeccionMayorista>();
@@ -465,31 +459,16 @@ export default function CertificadosPage() {
           key: keyMayorista,
           nombre: f.nombreMayorista ?? 'Sin Mayorista',
           facturas: [],
-          distribuidores: [],
         };
         porMayorista.set(keyMayorista, seccion);
       }
-      if (resumenModo === 'DISTRIBUIDOR') {
-        const keyDistribuidor = `${keyMayorista}::${f.idUsuario ?? 'sin-distribuidor'}`;
-        let distribuidor = seccion.distribuidores.find(d => d.key === keyDistribuidor);
-        if (!distribuidor) {
-          distribuidor = {
-            key: keyDistribuidor,
-            nombre: f.nombreUsuario ?? 'Sin Distribuidor',
-            facturas: [],
-          };
-          seccion.distribuidores.push(distribuidor);
-        }
-        distribuidor.facturas.push(f);
-      } else {
-        seccion.facturas.push(f);
-      }
+      seccion.facturas.push(f);
     }
     return Array.from(porMayorista.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
   })();
 
   const facturaKey = (f: ResumenFactura) =>
-    `${resumenModo}::${f.idMayorista ?? ''}::${f.idUsuario ?? ''}::${f.bucket}::${f.numeroFactura ?? ''}`;
+    `${f.idMayorista ?? ''}::${f.bucket}::${f.numeroFactura ?? ''}`;
 
   const toggleFacturaExpanded = async (f: ResumenFactura) => {
     const key = facturaKey(f);
@@ -510,9 +489,8 @@ export default function CertificadosPage() {
       const response = await certificadosApi.getHistorialDescargas({
         page: 1,
         limit: 1000,
-        modo: resumenModo,
-        idMayorista: resumenModo === 'MAYORISTA' && f.idMayorista != null ? String(f.idMayorista) : undefined,
-        usuarioId: resumenModo === 'DISTRIBUIDOR' && f.idUsuario != null ? f.idUsuario : undefined,
+        modo: 'MAYORISTA',
+        idMayorista: f.idMayorista != null ? String(f.idMayorista) : undefined,
         numeroFacturaExacto: f.bucket === 'FACTURADO' ? (f.numeroFactura ?? undefined) : undefined,
         bucket: f.bucket !== 'FACTURADO' ? f.bucket : undefined,
       });
@@ -579,9 +557,7 @@ export default function CertificadosPage() {
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Controlador</th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Usuario</th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Fecha</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                              {resumenModo === 'DISTRIBUIDOR' ? 'Estado Distribuidor' : 'Estado Mayorista'}
-                            </th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Estado Mayorista</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -590,7 +566,7 @@ export default function CertificadosPage() {
                               <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-900">{d.controladorId || d.certificadoNombre || '-'}</td>
                               <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{d.usuario?.nombre ?? '-'}</td>
                               <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{new Date(d.createdAt).toLocaleDateString()}</td>
-                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{resumenModo === 'DISTRIBUIDOR' ? d.estadoDistribuidor : d.estadoMayorista}</td>
+                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{d.estadoMayorista}</td>
                             </tr>
                           ))}
                         </tbody>
@@ -2164,41 +2140,14 @@ export default function CertificadosPage() {
                   Resumen por Factura
                 </h3>
 
-                <div className="flex gap-2 mb-4">
-                  <button
-                    onClick={() => loadResumenFacturas('MAYORISTA')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md ${
-                      resumenModo === 'MAYORISTA'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Mayoristas
-                  </button>
-                  <button
-                    onClick={() => loadResumenFacturas('DISTRIBUIDOR')}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-md ${
-                      resumenModo === 'DISTRIBUIDOR'
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    Distribuidores
-                  </button>
-                </div>
-
                 <button
                   disabled={exportFacturasLoading || resumenFacturas.length === 0}
                   onClick={async () => {
                     setExportFacturasLoading(true);
                     try {
-                      const response = await certificadosApi.getResumenFacturas({
-                        modo: resumenModo,
-                      });
+                      const response = await certificadosApi.getResumenFacturas({ modo: 'MAYORISTA' });
                       const data = response.facturas.map((f) => ({
-                        ...(resumenModo === 'DISTRIBUIDOR'
-                          ? { Distribuidor: f.nombreUsuario ?? '-', Mayorista: f.nombreMayorista ?? '-' }
-                          : { Mayorista: f.nombreMayorista ?? '-' }),
+                        Mayorista: f.nombreMayorista ?? '-',
                         'Nro. Factura': etiquetaFactura(f),
                         'Cantidad de Descargas': f.cantidadDescargas,
                         'Primera Descarga': new Date(f.primeraDescarga).toLocaleDateString(),
@@ -2221,7 +2170,7 @@ export default function CertificadosPage() {
                       const url = URL.createObjectURL(blob);
                       const a = document.createElement('a');
                       a.href = url;
-                      a.download = resumenModo === 'DISTRIBUIDOR' ? 'resumen_por_factura_distribuidores.xlsx' : 'resumen_por_factura_mayoristas.xlsx';
+                      a.download = 'resumen_por_factura_mayoristas.xlsx';
                       a.click();
                       URL.revokeObjectURL(url);
                     } catch (error) {
@@ -2256,39 +2205,12 @@ export default function CertificadosPage() {
                           >
                             <span className="font-semibold text-gray-900">{seccion.nombre}</span>
                             <span className="text-sm text-gray-500">
-                              {seccionColapsada ? '▶' : '▼'}{' '}
-                              {resumenModo === 'DISTRIBUIDOR'
-                                ? `${seccion.distribuidores.length} distribuidor${seccion.distribuidores.length !== 1 ? 'es' : ''}`
-                                : `${seccion.facturas.length} factura${seccion.facturas.length !== 1 ? 's' : ''}`}
+                              {seccionColapsada ? '▶' : '▼'} {seccion.facturas.length} factura{seccion.facturas.length !== 1 ? 's' : ''}
                             </span>
                           </button>
                           {!seccionColapsada && (
                             <div className="p-3 overflow-x-auto">
-                              {resumenModo === 'DISTRIBUIDOR' ? (
-                                <div className="space-y-3">
-                                  {seccion.distribuidores.map((distribuidor) => {
-                                    const distribuidorColapsado = seccionesColapsadas.has(distribuidor.key);
-                                    return (
-                                      <div key={distribuidor.key} className="border border-gray-100 rounded-md overflow-hidden">
-                                        <button
-                                          onClick={() => toggleSeccion(distribuidor.key)}
-                                          className="w-full flex items-center justify-between px-3 py-2 bg-gray-50 hover:bg-gray-100 text-left"
-                                        >
-                                          <span className="text-sm font-medium text-gray-800">{distribuidor.nombre}</span>
-                                          <span className="text-xs text-gray-500">
-                                            {distribuidorColapsado ? '▶' : '▼'} {distribuidor.facturas.length} factura{distribuidor.facturas.length !== 1 ? 's' : ''}
-                                          </span>
-                                        </button>
-                                        {!distribuidorColapsado && (
-                                          <div className="overflow-x-auto">{renderTablaFacturas(distribuidor.facturas)}</div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : (
-                                renderTablaFacturas(seccion.facturas)
-                              )}
+                              {renderTablaFacturas(seccion.facturas)}
                             </div>
                           )}
                         </div>
