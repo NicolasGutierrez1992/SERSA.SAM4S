@@ -9,9 +9,9 @@ services:
     container_name: sersa_db
     restart: unless-stopped
     environment:
-      POSTGRES_DB: db_sersa
+      POSTGRES_DB: ${POSTGRES_DB:-db_sersa}
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: sersa_local_dev
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sersa_local_dev}
     ports:
       - '5433:5432'     # Puerto local 5433 para no conflictar con Postgres local
     volumes:
