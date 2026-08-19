@@ -131,8 +131,8 @@ jobs:
 
       - name: Sembrar usuarios de prueba (admin + distribuidor, efímeros en esta base descartable)
         run: |
-          ADMIN_HASH=$(docker compose exec -T backend node -e "console.log(require('bcrypt').hashSync(process.env.E2E_ADMIN_PASSWORD, 12))")
-          DISTRI_HASH=$(docker compose exec -T backend node -e "console.log(require('bcrypt').hashSync(process.env.E2E_DISTRIBUIDOR_PASSWORD, 12))")
+          ADMIN_HASH=$(docker compose exec -T -e E2E_ADMIN_PASSWORD backend node -e "console.log(require('bcrypt').hashSync(process.env.E2E_ADMIN_PASSWORD, 12))")
+          DISTRI_HASH=$(docker compose exec -T -e E2E_DISTRIBUIDOR_PASSWORD backend node -e "console.log(require('bcrypt').hashSync(process.env.E2E_DISTRIBUIDOR_PASSWORD, 12))")
           docker compose exec -T db psql -U postgres -d db_sersa -v ON_ERROR_STOP=1 <<SQL
           INSERT INTO mayoristas (id_mayorista, nombre) OVERRIDING SYSTEM VALUE VALUES (1, 'SERSA') ON CONFLICT DO NOTHING;
           INSERT INTO users (nombre, cuit, mail, password, id_rol, id_mayorista, status, must_change_password, limite_descargas, tipo_descarga)
