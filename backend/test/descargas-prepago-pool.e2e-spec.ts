@@ -6,6 +6,7 @@ import { AppModule } from '../src/app.module';
 import { User } from '../src/users/entities/user.entity';
 import { Descarga } from '../src/descargas/entities/descarga.entity';
 import { CompraPrepago } from '../src/users/entities/compra-prepago.entity';
+import { Auditoria } from '../src/auditoria/entities/auditoria.entity';
 import { DescargasService } from '../src/descargas/descargas.service';
 import { EstadoDescarga } from '../src/shared/types';
 
@@ -19,6 +20,7 @@ describe('DescargasService — pool prepago Distribuidor/Mayorista (e2e)', () =>
   let userRepository: Repository<User>;
   let descargaRepository: Repository<Descarga>;
   let compraRepository: Repository<CompraPrepago>;
+  let auditoriaRepository: Repository<Auditoria>;
   let descargasService: DescargasService;
 
   const ID_MAYORISTA = 987654321;
@@ -36,6 +38,7 @@ describe('DescargasService — pool prepago Distribuidor/Mayorista (e2e)', () =>
     userRepository = moduleFixture.get(getRepositoryToken(User));
     descargaRepository = moduleFixture.get(getRepositoryToken(Descarga));
     compraRepository = moduleFixture.get(getRepositoryToken(CompraPrepago));
+    auditoriaRepository = moduleFixture.get(getRepositoryToken(Auditoria));
     descargasService = moduleFixture.get(DescargasService);
 
     const mayorista = await userRepository.save(
@@ -72,6 +75,12 @@ describe('DescargasService — pool prepago Distribuidor/Mayorista (e2e)', () =>
   });
 
   afterAll(async () => {
+    // updateEstadoDescarga audita cada cambio de estado con actor_id = el
+    // usuario que lo hizo — hay que limpiar esos registros antes de poder
+    // borrar los usuarios, por la FK auditoria.actor_id -> users.id_usuario
+    // (mismo gotcha que descargas.e2e-spec.ts, ver CLAUDE.md).
+    await auditoriaRepository.delete({ actor_id: distribuidorUserId });
+    await auditoriaRepository.delete({ actor_id: mayoristaUserId });
     await descargaRepository.delete({ id_usuario: distribuidorUserId });
     await descargaRepository.delete({ id_usuario: mayoristaUserId });
     await compraRepository.delete({ id_usuario: distribuidorUserId });
