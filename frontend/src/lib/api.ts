@@ -125,12 +125,18 @@ export type ModoResumenFacturas = 'MAYORISTA' | 'DISTRIBUIDOR';
 
 export interface ResumenFactura {
   numeroFactura: string | null;
-  bucket: 'FACTURADO' | 'PENDIENTE_FACTURAR' | 'SALDO_MIGRADO';
+  // 'FACTURADO' y 'SALDO_MIGRADO' son sentinels fijos; cualquier otro valor es
+  // el texto literal de estadoMayorista/estadoDistribuidor sin número de
+  // factura (Pendiente de Facturar, Garantia, Bonificado, etc.).
+  bucket: 'FACTURADO' | 'SALDO_MIGRADO' | string;
   idMayorista: number | null;
   nombreMayorista: string | null;
   idUsuario: number | null;
   nombreUsuario: string | null;
   cantidadDescargas: number;
+  // Solo facturas PREPAGO (bucket FACTURADO originado en una compra prepago); null en cuenta corriente.
+  cantidadComprada: number | null;
+  cantidadUtilizada: number | null;
   primeraDescarga: string;
   ultimaDescarga: string;
 }
@@ -373,7 +379,7 @@ export const certificadosApi = {
     anio?: number;
     userRole?: number;
     numeroFacturaExacto?: string;
-    bucket?: 'PENDIENTE_FACTURAR' | 'SALDO_MIGRADO';
+    bucket?: string;
     modo?: ModoResumenFacturas;
   }): Promise<{ descargas: DescargaHistorial[]; total: number; totalPages?: number }> => {
     const filteredParams: Record<string, unknown> = {};

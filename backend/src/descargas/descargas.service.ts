@@ -1208,9 +1208,13 @@ export class DescargasService {
    * para agrupar el Resumen por Factura en modo MAYORISTA.
    * - estadoMayorista === 'PREPAGO': compraPrepago propia si el actor es el
    *   Mayorista o SERSA; compraPrepagoMayorista si es un Distribuidor de otro
-   *   Mayorista. Sin compra asociada -> bucket SALDO_MIGRADO.
+   *   Mayorista. Sin compra asociada -> bucket SALDO_MIGRADO. Con compra,
+   *   además de la factura se devuelve cantidadComprada/cantidadUtilizada
+   *   (`compra.cantidad`/`compra.cantidad_usada`) para mostrar el saldo.
    * - estadoMayorista !== 'PREPAGO': numero_factura de la propia descarga.
-   *   Sin número aún -> bucket PENDIENTE_FACTURAR.
+   *   Sin número aún -> bucket = el propio `estadoMayorista` (Pendiente de
+   *   Facturar, Garantia, Bonificado, etc.), NO un literal genérico — así cada
+   *   estado real queda en su propio grupo en vez de mezclarse.
    * OJO: se mira estadoMayorista, NO tipo_descarga — tipo_descarga es solo la
    * referencia histórica de cómo se cobró al actor con SU propio proveedor
    * (relevante para el lado Distribuidor), no si SERSA le cobró al Mayorista
@@ -1222,18 +1226,40 @@ export class DescargasService {
   private resolverFacturaEfectivaMayorista(descarga: Descarga): {
     numeroFactura: string | null;
     bucket: BucketFactura;
+    cantidadComprada: number | null;
+    cantidadUtilizada: number | null;
   } {
     if (descarga.estadoMayorista === 'PREPAGO') {
-      const numeroFactura = this.esMayoristaOSersa(descarga)
-        ? (descarga.compraPrepago?.numero_factura ?? null)
-        : (descarga.compraPrepagoMayorista?.numero_factura ?? null);
-      return numeroFactura
-        ? { numeroFactura, bucket: 'FACTURADO' }
-        : { numeroFactura: null, bucket: 'SALDO_MIGRADO' };
+      const compra = this.esMayoristaOSersa(descarga)
+        ? descarga.compraPrepago
+        : descarga.compraPrepagoMayorista;
+      return compra?.numero_factura
+        ? {
+            numeroFactura: compra.numero_factura,
+            bucket: 'FACTURADO',
+            cantidadComprada: compra.cantidad,
+            cantidadUtilizada: compra.cantidad_usada,
+          }
+        : {
+            numeroFactura: null,
+            bucket: 'SALDO_MIGRADO',
+            cantidadComprada: null,
+            cantidadUtilizada: null,
+          };
     }
     return descarga.numero_factura
-      ? { numeroFactura: descarga.numero_factura, bucket: 'FACTURADO' }
-      : { numeroFactura: null, bucket: 'PENDIENTE_FACTURAR' };
+      ? {
+          numeroFactura: descarga.numero_factura,
+          bucket: 'FACTURADO',
+          cantidadComprada: null,
+          cantidadUtilizada: null,
+        }
+      : {
+          numeroFactura: null,
+          bucket: descarga.estadoMayorista || 'Pendiente de Facturar',
+          cantidadComprada: null,
+          cantidadUtilizada: null,
+        };
   }
 
   /**
@@ -1242,24 +1268,45 @@ export class DescargasService {
    * sentido de negocio para descargas hechas por un Distribuidor (rol=3) — el
    * caller (getDescargas/getResumenFacturas) filtra eso explícitamente.
    * - PREPAGO: siempre la compraPrepago propia del Distribuidor.
-   * - CUENTA_CORRIENTE (u otro): numero_factura_distribuidor de la descarga.
+   * - CUENTA_CORRIENTE (u otro): numero_factura_distribuidor de la descarga;
+   *   sin número, bucket = el propio `estadoDistribuidor` (mismo criterio que
+   *   el lado Mayorista, ver resolverFacturaEfectivaMayorista).
    */
   private resolverFacturaEfectivaDistribuidor(descarga: Descarga): {
     numeroFactura: string | null;
     bucket: BucketFactura;
+    cantidadComprada: number | null;
+    cantidadUtilizada: number | null;
   } {
     if (descarga.tipo_descarga === 'PREPAGO') {
-      const numeroFactura = descarga.compraPrepago?.numero_factura ?? null;
-      return numeroFactura
-        ? { numeroFactura, bucket: 'FACTURADO' }
-        : { numeroFactura: null, bucket: 'SALDO_MIGRADO' };
+      const compra = descarga.compraPrepago;
+      return compra?.numero_factura
+        ? {
+            numeroFactura: compra.numero_factura,
+            bucket: 'FACTURADO',
+            cantidadComprada: compra.cantidad,
+            cantidadUtilizada: compra.cantidad_usada,
+          }
+        : {
+            numeroFactura: null,
+            bucket: 'SALDO_MIGRADO',
+            cantidadComprada: null,
+            cantidadUtilizada: null,
+          };
     }
     return descarga.numero_factura_distribuidor
       ? {
           numeroFactura: descarga.numero_factura_distribuidor,
           bucket: 'FACTURADO',
+          cantidadComprada: null,
+          cantidadUtilizada: null,
         }
-      : { numeroFactura: null, bucket: 'PENDIENTE_FACTURAR' };
+      : {
+          numeroFactura: null,
+          bucket: descarga.estadoDistribuidor || 'Pendiente de Facturar',
+          cantidadComprada: null,
+          cantidadUtilizada: null,
+        };
   }
 
   /**
@@ -1327,12 +1374,16 @@ export class DescargasService {
               OR (NOT (usuario.id_mayorista = 1 OR usuario.rol = 2) AND compraPrepagoMayorista.numero_factura IS NULL)
             )`;
       query.andWhere(condicion);
-    } else if (bucket === 'PENDIENTE_FACTURAR') {
+    } else if (bucket) {
+      // Cualquier otro valor de bucket es el texto literal de
+      // estadoMayorista/estadoDistribuidor sin número de factura (Pendiente
+      // de Facturar, Garantia, Bonificado, etc.) — ver
+      // resolverFacturaEfectivaMayorista/Distribuidor.
       const condicion =
         modo === 'DISTRIBUIDOR'
-          ? `descarga.tipo_descarga IS DISTINCT FROM 'PREPAGO' AND descarga.numero_factura_distribuidor IS NULL`
-          : `descarga.estadoMayorista IS DISTINCT FROM 'PREPAGO' AND descarga.numero_factura IS NULL`;
-      query.andWhere(condicion);
+          ? `descarga.estadoDistribuidor = :bucket AND descarga.numero_factura_distribuidor IS NULL`
+          : `descarga.estadoMayorista = :bucket AND descarga.numero_factura IS NULL`;
+      query.andWhere(condicion, { bucket });
     }
 
     this.logger.log(
@@ -1414,6 +1465,8 @@ export class DescargasService {
       idUsuario: number | null;
       nombreUsuario: string | null;
       cantidadDescargas: number;
+      cantidadComprada: number | null;
+      cantidadUtilizada: number | null;
       primeraDescarga: Date;
       ultimaDescarga: Date;
     };
@@ -1421,7 +1474,7 @@ export class DescargasService {
 
     for (const descarga of descargas) {
       const idMayorista = descarga.usuario?.id_mayorista ?? null;
-      const { numeroFactura, bucket } =
+      const { numeroFactura, bucket, cantidadComprada, cantidadUtilizada } =
         modo === 'DISTRIBUIDOR'
           ? this.resolverFacturaEfectivaDistribuidor(descarga)
           : this.resolverFacturaEfectivaMayorista(descarga);
@@ -1444,6 +1497,11 @@ export class DescargasService {
           idUsuario,
           nombreUsuario,
           cantidadDescargas: 1,
+          // Todas las descargas de un mismo grupo FACTURADO-PREPAGO comparten
+          // la misma CompraPrepago, así que no hace falta recalcular en cada
+          // iteración (a diferencia de cantidadDescargas/fechas).
+          cantidadComprada,
+          cantidadUtilizada,
           primeraDescarga: descarga.created_at,
           ultimaDescarga: descarga.created_at,
         });

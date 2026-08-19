@@ -504,9 +504,9 @@ export default function CertificadosPage() {
   };
 
   const etiquetaFactura = (f: ResumenFactura): string => {
-    if (f.bucket === 'PENDIENTE_FACTURAR') return 'Pendiente de Facturar';
+    if (f.bucket === 'FACTURADO') return f.numeroFactura ?? '-';
     if (f.bucket === 'SALDO_MIGRADO') return 'Saldo migrado (sin factura)';
-    return f.numeroFactura ?? '-';
+    return f.bucket; // texto real del estado: Pendiente de Facturar, Garantia, Bonificado, etc.
   };
 
   // Tabla de facturas (con drill-down a certificados), reusada tanto en modo
@@ -519,6 +519,8 @@ export default function CertificadosPage() {
           <th className="px-3 py-2 w-8"></th>
           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Nro. Factura</th>
           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Cantidad de Descargas</th>
+          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Cantidad Comprada</th>
+          <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Cantidad Utilizada</th>
           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Primera Descarga</th>
           <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Última Descarga</th>
         </tr>
@@ -542,12 +544,14 @@ export default function CertificadosPage() {
                   )}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{f.cantidadDescargas}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{f.cantidadComprada ?? '-'}</td>
+                <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{f.cantidadUtilizada ?? '-'}</td>
                 <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{new Date(f.primeraDescarga).toLocaleDateString()}</td>
                 <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-500">{new Date(f.ultimaDescarga).toLocaleDateString()}</td>
               </tr>
               {isExpanded && (
                 <tr>
-                  <td colSpan={5} className="px-3 py-3 bg-gray-50">
+                  <td colSpan={7} className="px-3 py-3 bg-gray-50">
                     {detalleFacturaLoading === key ? (
                       <p className="text-sm text-gray-500">Cargando detalle...</p>
                     ) : detalle && detalle.length > 0 ? (
@@ -2150,6 +2154,8 @@ export default function CertificadosPage() {
                         Mayorista: f.nombreMayorista ?? '-',
                         'Nro. Factura': etiquetaFactura(f),
                         'Cantidad de Descargas': f.cantidadDescargas,
+                        'Cantidad Comprada': f.cantidadComprada ?? '-',
+                        'Cantidad Utilizada': f.cantidadUtilizada ?? '-',
                         'Primera Descarga': new Date(f.primeraDescarga).toLocaleDateString(),
                         'Última Descarga': new Date(f.ultimaDescarga).toLocaleDateString(),
                       }));
