@@ -136,11 +136,9 @@ jobs:
           docker compose exec -T db psql -U postgres -d db_sersa -v ON_ERROR_STOP=1 <<SQL
           INSERT INTO mayoristas (id_mayorista, nombre) OVERRIDING SYSTEM VALUE VALUES (1, 'SERSA') ON CONFLICT DO NOTHING;
           INSERT INTO users (nombre, cuit, mail, password, id_rol, id_mayorista, status, must_change_password, limite_descargas, tipo_descarga)
-          VALUES ('E2E Admin', '${E2E_ADMIN_CUIT}', 'e2e-admin@example.com', '${ADMIN_HASH}', 1, 1, 1, false, 0, 'CUENTA_CORRIENTE')
-          ON CONFLICT (cuit) DO NOTHING;
+          VALUES ('E2E Admin', '${E2E_ADMIN_CUIT}', 'e2e-admin@example.com', '${ADMIN_HASH}', 1, 1, 1, false, 0, 'CUENTA_CORRIENTE');
           INSERT INTO users (nombre, cuit, mail, password, id_rol, id_mayorista, status, must_change_password, limite_descargas, tipo_descarga)
-          VALUES ('E2E Distribuidor', '${E2E_DISTRIBUIDOR_CUIT}', 'e2e-distri@example.com', '${DISTRI_HASH}', 3, 1, 1, false, 5, 'CUENTA_CORRIENTE')
-          ON CONFLICT (cuit) DO NOTHING;
+          VALUES ('E2E Distribuidor', '${E2E_DISTRIBUIDOR_CUIT}', 'e2e-distri@example.com', '${DISTRI_HASH}', 3, 1, 1, false, 5, 'CUENTA_CORRIENTE');
           SQL
         env:
           E2E_ADMIN_CUIT: '00000000000'
