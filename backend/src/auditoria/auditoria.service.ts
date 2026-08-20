@@ -5,6 +5,7 @@ import { Auditoria } from './entities/auditoria.entity';
 import { Descarga } from '../descargas/entities/descarga.entity';
 import { CreateAuditoriaDto } from './dto/create-auditoria.dto';
 import { AppSettingsService } from '../common/services/app-settings.service';
+import { MailService } from '../common/services/mail.service';
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -48,6 +49,7 @@ export class AuditoriaService {
     @InjectRepository(Descarga)
     private readonly descargaRepository: Repository<Descarga>,
     private readonly appSettingsService: AppSettingsService,
+    private readonly mailService: MailService,
   ) {}
 
   /**
@@ -58,7 +60,9 @@ export class AuditoriaService {
   private async resolverReferenciasLegibles(
     logs: Auditoria[],
   ): Promise<
-    Array<Auditoria & { objetivo_referencia: string | null; descripcion: string }>
+    Array<
+      Auditoria & { objetivo_referencia: string | null; descripcion: string }
+    >
   > {
     const idsDescarga = Array.from(
       new Set(
@@ -104,10 +108,12 @@ export class AuditoriaService {
     const d = despues || {};
 
     if (objetivo_tipo === 'USER') {
-      if (accion === 'CREAR') return `Usuario creado: ${d.nombre} (CUIT ${d.cuit})`;
+      if (accion === 'CREAR')
+        return `Usuario creado: ${d.nombre} (CUIT ${d.cuit})`;
       if (accion === 'ELIMINAR') return `Usuario eliminado: ${a.nombre}`;
       if (accion === 'ACTUALIZAR') {
-        if (d.accion === 'reset_password') return 'Restablecimiento de contraseña';
+        if (d.accion === 'reset_password')
+          return 'Restablecimiento de contraseña';
         return `Usuario actualizado: ${d.nombre || a.nombre}`;
       }
       if (accion === 'LOGIN') return 'Inicio de sesión';
@@ -137,17 +143,22 @@ export class AuditoriaService {
     }
 
     if (objetivo_tipo === 'CERTIFICADO') {
-      if (accion === 'DOWNLOAD') return `Descarga de certificado ${d.certificado} (${d.tipo_descarga})`;
+      if (accion === 'DOWNLOAD')
+        return `Descarga de certificado ${d.certificado} (${d.tipo_descarga})`;
       if (accion === 'ERROR') return `Error al generar certificado: ${d.error}`;
     }
 
     if (objetivo_tipo === 'DESCARGA' && accion === 'UPDATE') {
       const cambios: string[] = [];
       if (a.estadoMayorista !== d.estadoMayorista) {
-        cambios.push(`Estado Mayorista: ${a.estadoMayorista} → ${d.estadoMayorista}`);
+        cambios.push(
+          `Estado Mayorista: ${a.estadoMayorista} → ${d.estadoMayorista}`,
+        );
       }
       if (a.estadoDistribuidor !== d.estadoDistribuidor) {
-        cambios.push(`Estado Distribuidor: ${a.estadoDistribuidor} → ${d.estadoDistribuidor}`);
+        cambios.push(
+          `Estado Distribuidor: ${a.estadoDistribuidor} → ${d.estadoDistribuidor}`,
+        );
       }
       if (cambios.length > 0) return cambios.join(' | ');
     }
@@ -406,50 +417,13 @@ export class AuditoriaService {
     );
 
     try {
-      const adminMailUser = process.env.ADMIN_MAIL_USER;
       const adminMailTo =
         await this.appSettingsService.obtenerSetting('ADMIN_MAIL_TO');
-      const clientId = process.env.GMAIL_CLIENT_ID;
-      const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-      const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
-
-      if (
-        !adminMailUser ||
-        !adminMailTo ||
-        !clientId ||
-        !clientSecret ||
-        !refreshToken
-      ) {
-        console.error(
-          'Faltan variables de configuración de Gmail OAuth2 para enviar notificación',
-        );
+      if (!adminMailTo) {
+        console.error('Falta ADMIN_MAIL_TO en app_settings');
         return;
       }
 
-      // Obtener access token via HTTPS (no SMTP — Railway no bloquea esto)
-      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({
-          client_id: clientId,
-          client_secret: clientSecret,
-          refresh_token: refreshToken,
-          grant_type: 'refresh_token',
-        }),
-      });
-      const tokenData = (await tokenRes.json()) as {
-        access_token?: string;
-        error?: string;
-      };
-      if (!tokenData.access_token) {
-        console.error(
-          'No se pudo obtener access token de Gmail:',
-          tokenData.error,
-        );
-        return;
-      }
-
-      // Construir email en formato RFC 2822 y enviarlo via Gmail REST API (HTTPS)
       const htmlBody = `
         <div style="font-family: Arial, sans-serif; color: #222;">
           <h2 style="color: #b91c1c;">⚠️ Alerta de Descargas Pendientes</h2>
@@ -462,41 +436,67 @@ export class AuditoriaService {
           <p style="font-size:0.95em; color:#555;">Saludos,<br/>Sistema SERSA</p>
         </div>`;
 
-      const rfc2822 = [
-        `From: SERSA Notificaciones <${adminMailUser}>`,
-        `To: ${adminMailTo}`,
-        `Subject: =?UTF-8?B?${Buffer.from('⚠️ Alerta: Exceso de descargas pendientes').toString('base64')}?=`,
-        `MIME-Version: 1.0`,
-        `Content-Type: text/html; charset=UTF-8`,
-        ``,
+      await this.mailService.sendMail(
+        adminMailTo,
+        '⚠️ Alerta: Exceso de descargas pendientes',
         htmlBody,
-      ].join('\r\n');
-
-      const encodedEmail = Buffer.from(rfc2822).toString('base64url');
-
-      const sendRes = await fetch(
-        'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${tokenData.access_token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ raw: encodedEmail }),
-        },
       );
-
-      if (!sendRes.ok) {
-        const err = await sendRes.json();
-        console.error('Error enviando email via Gmail API:', err);
-        return;
-      }
 
       console.log(
         'Correo de notificación enviado al administrador via Gmail API.',
       );
     } catch (error) {
       console.error('Error enviando correo de notificación:', error);
+    }
+  }
+
+  /**
+   * Avisa a facturación/administración que el saldo prepago de un Mayorista
+   * cayó por debajo de su umbral configurado (User.notification_limit_prepago).
+   * Mismo destinatario y mecanismo que notificarExcesoDescargas.
+   */
+  async notificarSaldoPrepagoBajo(
+    mayoristaId: number,
+    nombreMayorista: string,
+    saldoActual: number,
+    umbral: number,
+  ): Promise<void> {
+    console.log(
+      `Notificación: El mayorista ${nombreMayorista} (${mayoristaId}) tiene saldo prepago bajo: ${saldoActual} (umbral: ${umbral}).`,
+    );
+
+    try {
+      const adminMailTo =
+        await this.appSettingsService.obtenerSetting('ADMIN_MAIL_TO');
+      if (!adminMailTo) {
+        console.error('Falta ADMIN_MAIL_TO en app_settings');
+        return;
+      }
+
+      const htmlBody = `
+        <div style="font-family: Arial, sans-serif; color: #222;">
+          <h2 style="color: #b91c1c;">⚠️ Alerta de Saldo Prepago Bajo</h2>
+          <p>Estimado administrador,</p>
+          <p>El <b>mayorista</b> <span style="color:#2563eb; font-weight:bold;">${nombreMayorista}</span> tiene un saldo prepago por debajo del umbral configurado.</p>
+          <p><b>Saldo actual:</b> <span style="color:#b91c1c; font-size:1.2em;">${saldoActual}</span></p>
+          <p><b>Umbral configurado:</b> ${umbral}</p>
+          <p style="margin-top:20px;">Se recomienda gestionar la recompra de créditos prepago con este mayorista.</p>
+          <p style="margin-top:20px;"><a href="https://sersa-certs-frontend.vercel.app/">Ir al sistema</a></p>
+          <hr style="margin:24px 0;"/>
+          <p style="font-size:0.95em; color:#555;">Saludos,<br/>Sistema SERSA</p>
+        </div>`;
+
+      await this.mailService.sendMail(
+        adminMailTo,
+        `⚠️ Saldo prepago bajo: ${nombreMayorista}`,
+        htmlBody,
+      );
+
+      console.log(
+        'Correo de alerta de saldo prepago bajo enviado via Gmail API.',
+      );
+    } catch (error) {
+      console.error('Error enviando correo de saldo prepago bajo:', error);
     }
   }
 }

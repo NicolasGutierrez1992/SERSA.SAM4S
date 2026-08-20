@@ -221,6 +221,7 @@ export class UsersService {
         'celular',
         'tipo_descarga',
         'notification_limit',
+        'notification_limit_prepago',
       ],
       skip: (page - 1) * limit,
       take: limit,
@@ -282,6 +283,7 @@ export class UsersService {
         celular: true,
         tipo_descarga: true,
         notification_limit: true,
+        notification_limit_prepago: true,
       },
     });
 
@@ -438,6 +440,25 @@ export class UsersService {
       }
 
       updateData.notification_limit = updateUserDto.notification_limit;
+    }
+
+    // Umbral de saldo prepago bajo: misma regla que notification_limit (solo
+    // admin, solo mayoristas).
+    if (updateUserDto.notification_limit_prepago !== undefined) {
+      if (!currentUser || currentUser.rol !== 1) {
+        throw new BadRequestException(
+          'Solo administradores pueden editar el umbral de saldo prepago',
+        );
+      }
+
+      if (user.rol !== 2) {
+        throw new BadRequestException(
+          'El umbral de saldo prepago solo se puede asignar a usuarios mayoristas (rol=2)',
+        );
+      }
+
+      updateData.notification_limit_prepago =
+        updateUserDto.notification_limit_prepago;
     }
 
     console.log('[UsersService][update] updateData:', updateData);
@@ -847,35 +868,41 @@ export class UsersService {
         .map((r) => Number(r.id_mayorista)),
     );
 
-    return rows.map((r) => {
-      const rol = Number(r.rol);
-      const idUsuario = Number(r.id_usuario);
-      const limiteCuentaCorriente =
-        rol === 3 ? Number(r.limite_descargas) : null;
-      const saldoCuentaCorriente =
-        rol === 3
-          ? Number(r.limite_descargas) - (pendientesPorUsuario.get(idUsuario) || 0)
-          : null;
+    return rows
+      .map((r) => {
+        const rol = Number(r.rol);
+        const idUsuario = Number(r.id_usuario);
+        const limiteCuentaCorriente =
+          rol === 3 ? Number(r.limite_descargas) : null;
+        const saldoCuentaCorriente =
+          rol === 3
+            ? Number(r.limite_descargas) -
+              (pendientesPorUsuario.get(idUsuario) || 0)
+            : null;
 
-      return {
-        id_usuario: idUsuario,
-        nombre: r.nombre,
-        cuit: r.cuit,
-        rol,
-        saldoPrepago: Number(r.saldo),
-        saldoCuentaCorriente,
-        limiteCuentaCorriente,
-        nombreMayorista:
-          rol === 3 ? (mayoristaMap.get(Number(r.id_mayorista)) ?? null) : null,
-      };
-    }).sort((a, b) => {
-      // 1) Más saldo prepago primero. 2) En empate (incluye a todos con 0),
-      // más saldo cuenta corriente primero; null (Mayorista, sin cuenta corriente) al final.
-      if (b.saldoPrepago !== a.saldoPrepago) return b.saldoPrepago - a.saldoPrepago;
-      const ccA = a.saldoCuentaCorriente ?? -Infinity;
-      const ccB = b.saldoCuentaCorriente ?? -Infinity;
-      return ccB - ccA;
-    });
+        return {
+          id_usuario: idUsuario,
+          nombre: r.nombre,
+          cuit: r.cuit,
+          rol,
+          saldoPrepago: Number(r.saldo),
+          saldoCuentaCorriente,
+          limiteCuentaCorriente,
+          nombreMayorista:
+            rol === 3
+              ? (mayoristaMap.get(Number(r.id_mayorista)) ?? null)
+              : null,
+        };
+      })
+      .sort((a, b) => {
+        // 1) Más saldo prepago primero. 2) En empate (incluye a todos con 0),
+        // más saldo cuenta corriente primero; null (Mayorista, sin cuenta corriente) al final.
+        if (b.saldoPrepago !== a.saldoPrepago)
+          return b.saldoPrepago - a.saldoPrepago;
+        const ccA = a.saldoCuentaCorriente ?? -Infinity;
+        const ccB = b.saldoCuentaCorriente ?? -Infinity;
+        return ccB - ccA;
+      });
   }
 
   private getRolText(rol: number): string {

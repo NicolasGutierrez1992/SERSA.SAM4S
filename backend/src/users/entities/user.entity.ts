@@ -83,6 +83,15 @@ export class User {
   @Column({ type: 'integer', nullable: true, default: 100 })
   notification_limit: number;
 
+  @ApiPropertyOptional({
+    description:
+      'Umbral de saldo prepago para notificación (solo para mayoristas, rol=2): cuando el saldo cae por debajo de este valor se avisa a facturación/administración. Default: 10',
+    example: 10,
+    nullable: true,
+  })
+  @Column({ type: 'integer', nullable: true, default: 10 })
+  notification_limit_prepago: number;
+
   @OneToMany(() => Descarga, (descarga) => descarga.usuario)
   descargas: Descarga[];
 }

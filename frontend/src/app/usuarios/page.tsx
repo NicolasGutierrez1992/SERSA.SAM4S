@@ -186,6 +186,7 @@ export default function UsuariosPage() {
     id_mayorista: user.id_mayorista,
     celular: user.celular,
     notification_limit: user.notification_limit !== null && user.notification_limit !== undefined ? user.notification_limit : 100,
+    notification_limit_prepago: user.notification_limit_prepago !== null && user.notification_limit_prepago !== undefined ? user.notification_limit_prepago : 10,
   });
   const openEditUser = async (user: any) => {
     try {
@@ -259,10 +260,10 @@ export default function UsuariosPage() {
           dataToSend = {};
           console.log('[Mayorista Edit] Sin campos editables desde este formulario');
         } else if (currentUser?.rol === 5) {
-          // Técnico editando: puede editar todo EXCEPTO rol y notification_limit
-          const { rol, notification_limit, ...dataSinRol } = values;
+          // Técnico editando: puede editar todo EXCEPTO rol, notification_limit y notification_limit_prepago
+          const { rol, notification_limit, notification_limit_prepago, ...dataSinRol } = values;
           dataToSend = dataSinRol;
-          console.log('[Técnico Edit] Campos filtrados (sin rol/notification_limit):', dataToSend);
+          console.log('[Técnico Edit] Campos filtrados (sin rol/notification_limit/notification_limit_prepago):', dataToSend);
         } else if (!isMayorista && editingUser.rol === 2) {
           // Admin editando Mayorista
           dataToSend = {
@@ -270,6 +271,7 @@ export default function UsuariosPage() {
             email: values.email,
             celular: values.celular,
             notification_limit: values.notification_limit,
+            notification_limit_prepago: values.notification_limit_prepago,
             status: values.status,
           };
           console.log('[Admin Edit Mayorista] Campos permitidos:', dataToSend);
@@ -415,6 +417,18 @@ export default function UsuariosPage() {
         if (record.rol !== 2) return '-';
         // Si no hay valor, mostrar 100 (default)
         const displayValue = limit !== null && limit !== undefined ? limit : 100;
+        return <span style={{ fontWeight: 500, color: '#0ea5e9' }}>{displayValue}</span>;
+      }
+    }] : []),
+    ...(currentUser?.rol === 1 ? [{
+      title: 'Alerta Saldo Prepago',
+      dataIndex: 'notification_limit_prepago',
+      key: 'notification_limit_prepago',
+      render: (limit: number, record: any) => {
+        // Solo mostrar para mayoristas (rol=2)
+        if (record.rol !== 2) return '-';
+        // Si no hay valor, mostrar 10 (default)
+        const displayValue = limit !== null && limit !== undefined ? limit : 10;
         return <span style={{ fontWeight: 500, color: '#0ea5e9' }}>{displayValue}</span>;
       }
     }] : []),
@@ -631,7 +645,7 @@ export default function UsuariosPage() {
                   )}<Form
                     form={form}
                     layout="vertical"
-                    initialValues={editingUser || { status: 1, id_rol: 3, notification_limit: 100 }}
+                    initialValues={editingUser || { status: 1, id_rol: 3, notification_limit: 100, notification_limit_prepago: 10 }}
                   >
                     <Form.Item name="cuit" label="CUIT" rules={[{ required: true, message: 'Ingrese el CUIT' }]}>
                       <Input disabled={isMayorista} />
@@ -718,11 +732,34 @@ export default function UsuariosPage() {
                           }
                         ]}
                       >
-                        <Input 
-                          type="number" 
-                          min={1} 
-                          max={10000} 
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10000}
                           placeholder="Ej: 100, 150, 200"
+                        />
+                      </Form.Item>
+                    )}
+
+                    {/* ⭐ Campo notification_limit_prepago: Solo Admin puede verlo y editarlo, solo para Mayoristas */}
+                    {!isMayorista && (editingUser?.rol === 2 || form.getFieldValue('rol') === 2) && (
+                      <Form.Item
+                        name="notification_limit_prepago"
+                        label="Alerta de saldo prepago bajo"
+                        tooltip="Cuando el saldo prepago del mayorista cae por debajo de este valor, se envía un email a facturación/administración"
+                        rules={[
+                          { required: true, message: 'Ingrese el umbral de saldo prepago' },
+                          {
+                            pattern: /^\d+$/,
+                            message: 'Debe ser un número entero'
+                          }
+                        ]}
+                      >
+                        <Input
+                          type="number"
+                          min={0}
+                          max={10000}
+                          placeholder="Ej: 10, 20, 50"
                         />
                       </Form.Item>
                     )}

@@ -168,6 +168,96 @@ export class DescargasService {
       totalPendientes,
     );
   }
+
+  /**
+   * Obtener el notification_limit_prepago del mayorista (umbral de saldo
+   * prepago bajo). Busca al usuario con rol=2 e id_mayorista = mayoristaId.
+   */
+  async obtenerNotificationLimitPrepagoMayorista(
+    mayoristaId: number,
+  ): Promise<number> {
+    const mayorista = await this.descargaRepository.manager
+      .getRepository(User)
+      .findOne({
+        where: {
+          rol: 2, // rol MAYORISTA
+          id_mayorista: mayoristaId,
+        },
+        select: ['notification_limit_prepago'],
+      });
+
+    if (
+      !mayorista ||
+      mayorista.notification_limit_prepago === null ||
+      mayorista.notification_limit_prepago === undefined
+    ) {
+      this.logger.warn(
+        `No se encontró notification_limit_prepago para mayorista ${mayoristaId}, usando default 10`,
+      );
+      return 10;
+    }
+
+    return mayorista.notification_limit_prepago;
+  }
+
+  /**
+   * Saldo prepago total del Mayorista (rol=2, dueño de mayoristaId), sumando
+   * todas sus compras_prepago. Envoltorio público de obtenerSaldoPrepago para
+   * uso fuera de este servicio (ej. el chequeo de saldo bajo).
+   */
+  async obtenerSaldoPrepagoMayorista(mayoristaId: number): Promise<number> {
+    const idUsuarioMayorista =
+      await this.resolverIdUsuarioMayorista(mayoristaId);
+    if (!idUsuarioMayorista) {
+      this.logger.warn(
+        `No se encontró usuario Mayorista para id_mayorista ${mayoristaId} al calcular saldo prepago`,
+      );
+      return 0;
+    }
+    return this.obtenerSaldoPrepago(
+      idUsuarioMayorista,
+      this.descargaRepository.manager,
+    );
+  }
+
+  /**
+   * Si el saldo prepago del Mayorista quedó por debajo de su umbral
+   * configurado (notification_limit_prepago), dispara el mail de aviso a
+   * facturación/administración. Sin cooldown: se llama una vez por cada
+   * descarga que consumió saldo de este mayorista (ver registrarDescarga) —
+   * mismo criterio "sin filtro" que notificarExcesoDescargasMayorista.
+   */
+  private async chequearYNotificarSaldoPrepagoBajo(
+    mayoristaId: number,
+  ): Promise<void> {
+    const [saldo, umbral] = await Promise.all([
+      this.obtenerSaldoPrepagoMayorista(mayoristaId),
+      this.obtenerNotificationLimitPrepagoMayorista(mayoristaId),
+    ]);
+
+    if (saldo >= umbral) {
+      return;
+    }
+
+    this.logger.warn(
+      `Saldo prepago del mayorista ${mayoristaId} por debajo del umbral: saldo=${saldo}, umbral=${umbral}`,
+    );
+
+    const mayoristaMap = await this.resolverNombresMayoristaBatch(
+      [mayoristaId],
+      this.descargaRepository.manager,
+    );
+    const nombreMayorista =
+      this.resolverNombreMayoristaDeMapa(mayoristaId, mayoristaMap) ??
+      `Mayorista ${mayoristaId}`;
+
+    await this.auditoriaService.notificarSaldoPrepagoBajo(
+      mayoristaId,
+      nombreMayorista,
+      saldo,
+      umbral,
+    );
+  }
   /**
    * Verificar si este usuario ya descargó este certificado antes.
    * Chequeo por usuario+certificado (no global): que otro usuario haya
@@ -379,6 +469,9 @@ export class DescargasService {
       // corriente. La determinación de qué fuente se usó ocurre DENTRO de la transacción,
       // porque depende de si efectivamente se consiguió consumir una compra.
       let usoPrepagoFinal = false;
+      // Si esta descarga consumió saldo prepago de un Mayorista real (no SERSA),
+      // acá queda su id_mayorista para chequear/avisar saldo bajo después del commit.
+      let idMayoristaPoolConsumido: number | null = null;
       const savedDescarga = await this.descargaRepository.manager.transaction(
         async (manager) => {
           const descargaRepo = manager.getRepository(Descarga);
@@ -453,6 +546,8 @@ export class DescargasService {
                 await compraRepo.save(compraMayorista);
                 mayoristaUsoPrepago = true;
                 idCompraMayoristaConsumida = compraMayorista.id;
+                // esDistribuidorDeMayorista ya garantiza id_mayorista !== 1 (no SERSA).
+                idMayoristaPoolConsumido = user.id_mayorista;
               }
             }
 
@@ -485,6 +580,11 @@ export class DescargasService {
               compra.cantidad_usada += 1;
               await compraRepo.save(compra);
               idCompraConsumida = compra.id;
+              // El propio Mayorista (no SERSA) consumiendo su propia compra:
+              // es su pool el que bajó, chequear saldo bajo después del commit.
+              if (user.rol === 2 && user.id_mayorista !== 1) {
+                idMayoristaPoolConsumido = user.id_mayorista;
+              }
             }
 
             usoPrepago = idCompraConsumida !== null;
@@ -553,6 +653,18 @@ export class DescargasService {
           return await descargaRepo.save(descarga);
         },
       );
+
+      // Fire-and-forget: si esta descarga consumió saldo de un Mayorista real,
+      // chequear si quedó por debajo de su umbral y avisar por mail. No debe
+      // bloquear ni arriesgar la respuesta de la descarga ya confirmada.
+      if (idMayoristaPoolConsumido !== null) {
+        this.chequearYNotificarSaldoPrepagoBajo(idMayoristaPoolConsumido).catch(
+          (err) =>
+            this.logger.error(
+              `Error chequeando saldo prepago bajo: ${err.message}`,
+            ),
+        );
+      }
 
       // Registrar en auditoría
       await this.auditoriaService.log(

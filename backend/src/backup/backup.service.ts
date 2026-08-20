@@ -9,6 +9,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { BackupLog, EstadoBackup } from './entities/backup-log.entity';
 import { AppSettingsService } from '../common/services/app-settings.service';
+import { MailService } from '../common/services/mail.service';
 
 interface DriveFile {
   id: string;
@@ -24,6 +25,7 @@ export class BackupService {
     @InjectRepository(BackupLog)
     private readonly backupLogRepository: Repository<BackupLog>,
     private readonly appSettingsService: AppSettingsService,
+    private readonly mailService: MailService,
   ) {}
 
   // OJO: este decorador evalúa process.env.BACKUP_CRON al importar la clase,
@@ -289,27 +291,12 @@ export class BackupService {
 
   private async notificarFallo(mensaje: string): Promise<void> {
     try {
-      const adminMailUser = process.env.ADMIN_MAIL_USER;
       const adminMailTo =
         await this.appSettingsService.obtenerSetting('ADMIN_MAIL_TO');
-      const clientId = process.env.GMAIL_CLIENT_ID;
-      const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-      const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
-
-      if (
-        !adminMailUser ||
-        !adminMailTo ||
-        !clientId ||
-        !clientSecret ||
-        !refreshToken
-      ) {
-        this.logger.warn(
-          'Faltan variables de Gmail OAuth2 para notificar fallo de backup por mail',
-        );
+      if (!adminMailTo) {
+        this.logger.warn('Falta ADMIN_MAIL_TO en app_settings');
         return;
       }
-
-      const accessToken = await this.getGoogleAccessToken();
 
       const htmlBody = `
         <div style="font-family: Arial, sans-serif; color: #222;">
@@ -321,35 +308,11 @@ export class BackupService {
           <p style="font-size:0.95em; color:#555;">Saludos,<br/>Sistema SERSA</p>
         </div>`;
 
-      const rfc2822 = [
-        `From: SERSA Notificaciones <${adminMailUser}>`,
-        `To: ${adminMailTo}`,
-        `Subject: =?UTF-8?B?${Buffer.from('⚠️ Falló el backup automático de la base de datos').toString('base64')}?=`,
-        `MIME-Version: 1.0`,
-        `Content-Type: text/html; charset=UTF-8`,
-        ``,
+      await this.mailService.sendMail(
+        adminMailTo,
+        '⚠️ Falló el backup automático de la base de datos',
         htmlBody,
-      ].join('\r\n');
-
-      const encodedEmail = Buffer.from(rfc2822).toString('base64url');
-
-      const sendRes = await fetch(
-        'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ raw: encodedEmail }),
-        },
       );
-
-      if (!sendRes.ok) {
-        this.logger.error(
-          `Error enviando mail de alerta de backup: ${await sendRes.text()}`,
-        );
-      }
     } catch (error) {
       this.logger.error(
         'Error notificando fallo de backup por mail',

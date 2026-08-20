@@ -152,6 +152,18 @@ export class CreateUserDto {
   @Max(10000, { message: 'El límite de notificación máximo es 10000' })
   @Type(() => Number)
   notification_limit?: number;
+
+  @ApiPropertyOptional({
+    example: 20,
+    description:
+      'Umbral de saldo prepago para notificación (solo para mayoristas, rol=2). Default: 10',
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'El umbral de saldo prepago debe ser un número' })
+  @Min(0, { message: 'El umbral de saldo prepago mínimo es 0' })
+  @Max(10000, { message: 'El umbral de saldo prepago máximo es 10000' })
+  @Type(() => Number)
+  notification_limit_prepago?: number;
 }
 
 export class UpdateUserDto extends PartialType(CreateUserDto) {
@@ -258,6 +270,18 @@ export class UpdateUserDto extends PartialType(CreateUserDto) {
   @Max(10000, { message: 'El límite de notificación máximo es 10000' })
   @Type(() => Number)
   notification_limit?: number;
+
+  @ApiPropertyOptional({
+    example: 20,
+    description:
+      'Umbral de saldo prepago para notificación (solo para mayoristas, rol=2). Default: 10',
+  })
+  @IsOptional()
+  @IsNumber({}, { message: 'El umbral de saldo prepago debe ser un número' })
+  @Min(0, { message: 'El umbral de saldo prepago mínimo es 0' })
+  @Max(10000, { message: 'El umbral de saldo prepago máximo es 10000' })
+  @Type(() => Number)
+  notification_limit_prepago?: number;
 }
 
 export class QueryUsersDto {
