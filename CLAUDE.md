@@ -1,10 +1,12 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 Guía rápida para trabajar en este repo. Para contexto de negocio, arquitectura y flujo de certificados ver [`README.md`](./README.md) y [`ARCHITECTURE.md`](./ARCHITECTURE.md).
 
 ## Qué es esto
 
-Monorepo (npm workspaces) con `backend/` (NestJS + TypeORM + PostgreSQL) y `frontend/` (Next.js 15 App Router). Sistema de gestión de certificados CRS para controladores fiscales SAM4S, con integración SOAP a AFIP.
+Monorepo (npm workspaces) con `backend/` (NestJS 10 + TypeORM + PostgreSQL) y `frontend/` (Next.js 15 App Router). Sistema de gestión de certificados CRS para controladores fiscales SAM4S, con integración SOAP a AFIP. Autenticación por JWT en cookie httpOnly (no localStorage).
 
 ## ⚠️ Antes de tocar la base de datos
 
@@ -17,6 +19,49 @@ cp backend/.env.example backend/.env.docker   # completar valores
 docker compose up -d --build
 ```
 Frontend `:3010`, backend `:3011/api`, Postgres `:5433`. Ver `README.md` para la configuración inicial (subir certificado PFX + Root_RTI desde el panel de Admin).
+
+Alternativa sin Docker (usa lo que tenga `backend/.env` — cuidado con lo de arriba): `npm run setup` (una vez) y luego `npm run dev` desde la raíz, que levanta frontend y backend en paralelo (`dev-start.js` / `dev:simple`).
+
+## Comandos
+
+Desde la raíz (orquestan ambos workspaces):
+```bash
+npm run build          # build:frontend + build:backend
+npm run lint           # lint:frontend + lint:backend
+npm run test           # test:frontend (Playwright e2e) + test:backend (Jest unit)
+```
+
+Backend (`cd backend`):
+```bash
+npm run start:dev              # nest start --watch
+npm run lint                   # eslint --fix
+npm test                       # Jest, unit tests (*.spec.ts, colocados junto al código en src/)
+npx jest users.service.spec.ts # correr un solo archivo de test unitario
+npx jest -t "nombre del test"  # correr por nombre de test (unitario)
+npm run test:e2e                                   # Jest + Supertest, backend/test/*.e2e-spec.ts
+npx jest --config ./test/jest-e2e.json auth.e2e-spec.ts   # un solo archivo e2e
+npm run migration:generate -- src/database/migrations/NombreMigracion -d src/data-source.ts
+npm run migration:run -- -d src/data-source.ts
+```
+
+Frontend (`cd frontend`):
+```bash
+npm run dev              # next dev
+npm run lint             # next lint
+npm run test:e2e         # Playwright, requiere el stack corriendo (ver PLAYWRIGHT_BASE_URL más abajo)
+npx playwright test e2e/login.spec.ts   # un solo archivo
+npx playwright test -g "nombre del test"  # por nombre
+npm run test:e2e:ui      # modo UI interactivo de Playwright
+```
+No hay tests unitarios de frontend (ni Jest ni RTL configurados) — solo Playwright e2e.
+
+## Arquitectura de alto nivel
+
+Diagramas completos y flujo de autenticación/certificados en `ARCHITECTURE.md`. Resumen de dónde vive cada cosa:
+
+**Backend** (`backend/src/`): módulos NestJS por dominio — `auth/` (JWT + cookies httpOnly, guards, decoradores de rol), `users/` (usuarios y mayoristas), `certificados/` (generación/descarga de CRS, upload de PFX y Root_RTI), `afip/` (cliente SOAP WSAA + WSCert), `descargas/` (historial y estados de facturación — ver convención `tipo_descarga` vs `estadoMayorista` más abajo), `auditoria/` (log de acciones administrativas), `backup/` (dump diario a Google Drive), `notificaciones/` y `reportes/` (alertas y reportes agregados), `common/` (guards globales como CSRF, interceptor de auditoría, timezone), `config/` y `database/migrations/` (config tipada y migraciones TypeORM). `main.ts` es el bootstrap (Helmet, cookie-parser, CORS, ValidationPipe, validación de secretos al arrancar).
+
+**Frontend** (`frontend/src/`): App Router de Next.js 15. `app/` tiene una carpeta por ruta (`login/`, `dashboard/`, `usuarios/`, `certificados/`, `change-password/`). `middleware.ts` protege rutas verificando la cookie `user_info` (no httpOnly). `lib/api.ts` es el único cliente Axios permitido (`withCredentials: true`, interceptor de CSRF y de 401 → logout) — `services/api.ts` es un facade sobre él para `AuthContext`.
 
 ## Convenciones que importa conocer
 
@@ -32,7 +77,7 @@ Frontend `:3010`, backend `:3011/api`, Postgres `:5433`. Ver `README.md` para la
 
 - `backend/test/*.e2e-spec.ts` — Jest + Supertest, bootstrapea la app completa vía `@nestjs/testing` (sin Docker) y siembra/limpia sus propios datos. Requiere una BD Postgres real por env vars `DB_*` — **nunca apuntarlos a producción**. Si un spec crea usuarios de prueba y también genera eventos de auditoría (ej. llamando a `/auth/login`), el `afterAll` tiene que borrar `auditoria` antes que `users` (hay FK `auditoria.actor_id -> users.id_usuario`).
 - `frontend/e2e/*.spec.ts` — Playwright, corre contra un stack real (`http://localhost:3010` por defecto, o `PLAYWRIGHT_BASE_URL`). Los tests que necesitan login leen credenciales de `E2E_ADMIN_CUIT`/`E2E_ADMIN_PASSWORD` (y `E2E_DISTRIBUIDOR_*`) por variable de entorno — **nunca hardcodear contraseñas reales en specs**; si las variables no están seteadas, el test se saltea solo (ver `frontend/e2e/helpers.ts`).
-- CI (`.github/workflows/ci.yml`) corre todo esto automáticamente contra bases de datos efímeras — ver ese archivo para cómo se siembran los usuarios de prueba en el job de E2E de Playwright.
+- CI (`.github/workflows/ci.yml`) corre todo esto automáticamente contra bases de datos efímeras: job `backend` (lint + build + `test:e2e` contra Postgres del job), job `frontend` (lint + build), job `e2e` (levanta el stack completo con `docker compose`, siembra un usuario admin y uno distribuidor, y corre Playwright contra `localhost:3010`) — ver ese archivo para el detalle de cómo se siembran los usuarios de prueba.
 
 ## Gotchas ya encontrados (para no repetir)
 
